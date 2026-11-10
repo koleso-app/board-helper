@@ -1,0 +1,818 @@
+/* Помощник настолок — screens and navigation.
+   Routes (hash): #/  #/new  #/s/<id>/setup|first|play|rules|done  #/games  #/games/<id>  #/players  #/stats  #/settings */
+(function () {
+  "use strict";
+  const BH = window.BH, esc = BH.esc, I = BH.ICON;
+  const main = document.getElementById("main");
+  const overlayRoot = document.getElementById("overlay-root");
+  const S = () => BH.state;
+
+  /* ---------- theme ---------- */
+  function applyTheme() {
+    const t = S().settings.theme;
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    else delete document.documentElement.dataset.theme;
+    const dark = t === "dark" || (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = dark ? "#15130F" : "#F4EFE6";
+  }
+
+  /* ---------- routing ---------- */
+  const go = h => { if (location.hash === h) render(); else location.hash = h; };
+  function route() {
+    const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    return { a: parts[0] || "", b: parts[1] || "", c: parts[2] || "" };
+  }
+
+  let draft = null;           // new-game wizard in progress
+  let sheet = null;           // round entry sheet
+  let dialog = null;          // confirm dialog
+  let rulesQuery = "";
+  let spinToken = 0;          // a wheel spin applies its result only if nothing changed meanwhile
+  let showAllDone = false;    // home: show every finished game, not only the latest
+
+  function confirmDelete(s) {
+    openDialog({ title: "Удалить партию?", text: "Она пропадёт из истории и статистики. Это нельзя отменить.", buttons: [
+      { label: "Удалить", danger: true, run: () => { S().sessions = S().sessions.filter(x => x !== s); BH.saveNow(); dialog = null; go("#/"); } },
+      { label: "Отмена", run: closeDialog }] });
+  }
+
+  function render() {
+    const r = route();
+    let html = "", nav = "home", inGame = false, after = null;
+    try {
+      if (r.a === "" ) html = viewHome();
+      else if (r.a === "new") { html = viewNew(); nav = "home"; inGame = true; }
+      else if (r.a === "s") {
+        const s = BH.session(r.b);
+        if (!s) html = notFound("Партия не найдена. Возможно, её удалили.");
+        else {
+          inGame = r.c !== "done";
+          const res = viewSession(s, r.c);
+          html = res.html; after = res.after;
+        }
+      }
+      else if (r.a === "games" && r.b) { const g = BH.game(r.b); nav = "games"; if (g) { html = viewGame(g); after = () => BH.rulesUI.bind(main, g); } else html = notFound("Такой игры нет в каталоге."); }
+      else if (r.a === "games") { html = viewGames(); nav = "games"; }
+      else if (r.a === "players") { html = viewPlayers(); nav = "players"; }
+      else if (r.a === "stats") { html = viewStats(); nav = "stats"; }
+      else if (r.a === "settings") { html = viewSettings(); nav = ""; }
+      else html = notFound("Такой страницы нет.");
+    } catch (e) {
+      console.error(e);
+      html = `<div class="note">Что-то пошло не так: ${esc(e.message)}. <a href="#/">На главную</a></div>`;
+    }
+    main.innerHTML = html;
+    document.body.classList.toggle("in-game", inGame);
+    BH.$$("[data-nav]").forEach(a => { if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+    if (after) after();
+    renderOverlay();
+  }
+  const notFound = text => `<div class="empty"><p>${esc(text)}</p><p style="margin-top:12px"><a class="btn" href="#/">На главную</a></p></div>`;
+  const backLink = (href, text) => `<a class="back" href="${href}">${I.back}<span>${esc(text)}</span></a>`;
+
+  /* ---------- home ---------- */
+  function sessionLine(s) {
+    const g = BH.game(s.gameId), pl = s.players.map(BH.player).filter(Boolean);
+    const place = BH.place(s.placeId);
+    let status = "";
+    if (s.status === "setup") status = '<span class="badge warn">подготовка</span>';
+    else if (s.status === "first") status = '<span class="badge warn">выбор первого</span>';
+    else if (s.status === "playing") status = `<span class="badge accent">раунд ${s.rounds.length + 1}</span>`;
+    else {
+      const w = s.winners.map(BH.player).filter(Boolean).map(p => p.name);
+      status = w.length ? `<span class="badge good">${w.length > 1 ? "ничья: " : "победа: "}${esc(w.join(", "))}</span>` : "";
+    }
+    return `<a class="item" href="#/s/${s.id}">
+      <div class="faces">${pl.slice(0, 4).map(p => BH.avatar(p, "sm")).join("")}</div>
+      <div class="t"><b>${esc(g ? g.name : s.gameId)}</b><span>${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""} · ${pl.length} ${BH.plural(pl.length, "игрок", "игрока", "игроков")}</span></div>
+      ${status}
+    </a>`;
+  }
+
+  function viewHome() {
+    const live = S().sessions.filter(s => s.status !== "finished");
+    const done = S().sessions.filter(s => s.status === "finished").sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+    const deco = `<svg class="deco" viewBox="0 0 100 100" aria-hidden="true"><rect x="8" y="20" width="44" height="62" rx="7" transform="rotate(-14 30 51)" fill="currentColor"/><rect x="46" y="16" width="44" height="62" rx="7" transform="rotate(12 68 47)" fill="currentColor"/></svg>`;
+    return `<div class="stack">
+      <section class="hero">
+        ${deco}
+        <h1>Во что играем?</h1>
+        <p>Выберите игру, игроков и место. Приложение покажет, что разложить, выберет первого игрока и будет вести раунды и очки.</p>
+        <a class="btn big" href="#/new">${I.plus}Новая партия</a>
+      </section>
+      ${live.length ? `<section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Идут сейчас</h2></div><div class="list">${live.map(sessionLine).join("")}</div></section>` : ""}
+      <section class="panel">
+        <div class="spread" style="margin-bottom:4px"><h2>Сыгранные партии</h2>${done.length ? `<a class="small" href="#/stats">Статистика</a>` : ""}</div>
+        ${done.length ? `<div class="list">${done.slice(0, showAllDone ? done.length : 12).map(sessionLine).join("")}</div>
+          ${!showAllDone && done.length > 12 ? `<button class="btn ghost sm" data-act="show-all">Показать все ${done.length}</button>` : ""}` : `<p class="muted small" style="padding:8px 0">Пока пусто. Первая сыгранная партия появится здесь.</p>`}
+      </section>
+      <div class="row" style="justify-content:flex-end"><a class="btn ghost sm" href="#/settings">${I.gear}Настройки и копия данных</a></div>
+    </div>`;
+  }
+
+  /* ---------- new game wizard ---------- */
+  function startDraft(gameId) {
+    const last = S().sessions[0];
+    const lastSame = gameId ? S().sessions.find(s => s.gameId === gameId) : null;
+    const src = lastSame || last;
+    draft = {
+      step: gameId ? 1 : 0,
+      gameId: gameId || (BH.games.length === 1 ? BH.games[0].id : null),
+      exp: lastSame ? lastSame.exp.slice() : [],
+      placeId: (src && BH.place(src.placeId) ? src.placeId : (S().places[0] || {}).id) || null,
+      players: src ? src.players.filter(id => { const p = BH.player(id); return p && !p.hidden; }) : [],
+    };
+    if (draft.gameId && !gameId) draft.step = 0;
+  }
+  const WIZ = ["Игра", "Дополнения", "Место", "Игроки"];
+  function wizSteps() {
+    const g = BH.game(draft.gameId);
+    return [0, 1, 2, 3].filter(i => i !== 1 || (g && g.expansions.length));
+  }
+
+  function viewNew() {
+    if (!draft) startDraft();
+    const g = BH.game(draft.gameId);
+    const steps = wizSteps();
+    if (!steps.includes(draft.step)) draft.step = steps.find(i => i > draft.step) ?? 3;
+    const pos = steps.indexOf(draft.step);
+    const bar = `<div class="steps-bar" aria-hidden="true">${steps.map((_, i) => `<i class="${i <= pos ? "on" : ""}"></i>`).join("")}</div>`;
+    let body = "", canNext = true, nextLabel = "Дальше";
+
+    if (draft.step === 0) {
+      body = `<div class="games">${BH.games.map(x => `<button class="game" data-act="pick-game" data-id="${x.id}" aria-pressed="${x.id === draft.gameId}">
+          <span class="cover">${x.cover || ""}</span><span><b>${esc(x.name)}</b><span>от ${esc(x.players.recommendedMin || x.players.min)} игроков · ${esc(x.time || "")}</span></span></button>`).join("")}</div>
+        <p class="muted small" style="margin-top:12px">Следующей добавим «Ики» с дополнением — там пригодится выбор дополнений.</p>`;
+      canNext = !!g;
+    } else if (draft.step === 1) {
+      body = `<p class="muted">Отметьте, с чем играете. От этого зависят подготовка и правила.</p>
+        <div class="chips">${g.expansions.map(e => `<button class="chip" data-act="toggle-exp" data-id="${e.id}" aria-pressed="${draft.exp.includes(e.id)}">${esc(e.name)}</button>`).join("")}</div>
+        <p class="muted small">Без отметок — базовая игра.</p>`;
+    } else if (draft.step === 2) {
+      body = `<p class="muted">Где играете? Это нужно для статистики.</p>
+        <div class="chips">${S().places.map(p => `<button class="chip" data-act="pick-place" data-id="${p.id}" aria-pressed="${p.id === draft.placeId}">${esc(p.name)}</button>`).join("")}
+          <button class="chip" data-act="pick-place" data-id="" aria-pressed="${!draft.placeId}">Не указывать</button></div>
+        <form class="row" data-form="add-place" style="max-width:420px"><input class="input" name="name" placeholder="Новое место: у Саши, в клубе…" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>`;
+    } else {
+      const pmin = g.players.min, pmax = g.players.max, n = draft.players.length;
+      const pool = S().players.filter(p => !p.hidden);
+      body = `<p class="muted">Отметьте, кто играет. Порядок ниже — как сидите за столом, по часовой стрелке.</p>
+        <div class="chips">${pool.map(p => `<button class="chip" data-act="toggle-player" data-id="${p.id}" aria-pressed="${draft.players.includes(p.id)}"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</button>`).join("")}</div>
+        <form class="row" data-form="add-player" style="max-width:420px"><input class="input" name="name" placeholder="Имя нового игрока" maxlength="40" aria-label="Имя нового игрока" ${pool.length ? "" : "autofocus"}><button class="btn" type="submit">Добавить</button></form>
+        ${n ? `<section class="panel"><div class="label" style="margin-bottom:4px">За столом</div>${draft.players.map((id, i) => { const p = BH.player(id); return `<div class="seat"><span class="n">${i + 1}</span>${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
+            <span class="mv"><button class="icon-btn" data-act="seat-up" data-i="${i}" aria-label="Выше" ${i ? "" : "disabled"}>${I.up}</button><button class="icon-btn" data-act="seat-down" data-i="${i}" aria-label="Ниже" ${i < n - 1 ? "" : "disabled"}>${I.down}</button><button class="icon-btn" data-act="toggle-player" data-id="${id}" aria-label="Убрать">${I.x}</button></span></div>`; }).join("")}</section>` : ""}
+        ${n && n < pmin ? `<div class="note">Для ${esc(g.name)} нужно минимум ${pmin} ${BH.plural(pmin, "игрок", "игрока", "игроков")}.</div>` : ""}
+        ${n >= pmin && g.players.recommendedMin && n < g.players.recommendedMin ? `<div class="note">По правилам ${esc(g.name)} рассчитан на ${g.players.recommendedMin} и больше игроков, но вдвоём тоже можно попробовать.</div>` : ""}
+        ${n > pmax ? `<div class="note">Для ${esc(g.name)} не больше ${pmax} игроков.</div>` : ""}`;
+      canNext = n >= pmin && n <= pmax;
+      nextLabel = "Создать партию";
+    }
+
+    return `<div class="stack">
+      <div>${draft.step === steps[0] ? backLink("#/", "Отмена") : `<button class="back" data-act="wiz-back">${I.back}<span>Назад</span></button>`}
+        <div class="page-head"><div><span class="label">Новая партия · ${pos + 1} из ${steps.length}</span><h1>${WIZ[draft.step]}${g && draft.step ? ": " + esc(g.name) : ""}</h1></div></div>${bar}</div>
+      ${body}
+      <div class="sticky-foot"><button class="btn primary big block" data-act="wiz-next" ${canNext ? "" : "disabled"}>${nextLabel}</button></div>
+    </div>`;
+  }
+
+  function createSession() {
+    const g = BH.game(draft.gameId);
+    const s = {
+      id: BH.uid(), gameId: g.id, exp: draft.exp.slice(), placeId: draft.placeId || null, players: draft.players.slice(),
+      created: Date.now(), status: "setup", setupDone: {}, first: null, rounds: [], winners: [],
+    };
+    if (!BH.setupSteps(s).length) s.status = "first";
+    S().sessions.unshift(s);
+    BH.saveNow();
+    draft = null;
+    go("#/s/" + s.id + "/" + (s.status === "setup" ? "setup" : "first"));
+  }
+
+  /* ---------- session screens ---------- */
+  function viewSession(s, sub) {
+    const g = BH.game(s.gameId);
+    if (!g) return { html: notFound("Игра этой партии больше не в каталоге.") };
+    if (!sub) sub = s.status === "setup" ? "setup" : s.status === "first" ? "first" : s.status === "playing" ? "play" : "done";
+    if (sub === "setup") return { html: viewSetup(s, g) };
+    if (sub === "first") return { html: viewFirst(s, g) };
+    if (sub === "play") return { html: viewPlay(s, g), after: () => BH.rulesUI.bind(main, g, { compact: true }) };
+    if (sub === "rules") return { html: viewSessionRules(s, g), after: () => BH.rulesUI.bind(main, g) };
+    if (sub === "done") return { html: viewDone(s, g) };
+    return { html: notFound("Такого экрана нет.") };
+  }
+  const sessionTitle = (s, g) => {
+    const place = BH.place(s.placeId);
+    const exp = s.exp.map(id => (g.expansions.find(e => e.id === id) || {}).name).filter(Boolean);
+    return `<span class="label">${esc(g.name)}${exp.length ? " + " + esc(exp.join(", ")) : ""}${place ? " · " + esc(place.name) : ""}</span>`;
+  };
+
+  function viewSetup(s, g) {
+    const steps = BH.setupSteps(s);
+    const done = steps.filter(st => s.setupDone[st.id]).length;
+    const speakAll = BH.speech.supported ? `<button class="btn sm" data-act="say-setup">${BH.speech.speaking ? I.stop + "Стоп" : I.speak + "Прочитать по порядку"}</button>` : "";
+    return `<div class="stack">
+      <div>${backLink("#/", "Партии")}
+        <div class="page-head"><div>${sessionTitle(s, g)}<h1>Подготовка</h1><p class="sub">${done} из ${steps.length} готово</p></div><div class="row">${speakAll}<button class="icon-btn" data-act="delete-session" aria-label="Удалить партию" title="Удалить партию">${I.trash}</button></div></div></div>
+      <div class="progress" aria-hidden="true"><i style="width:${steps.length ? 100 * done / steps.length : 100}%"></i></div>
+      ${steps.map((st, i) => `<section class="panel setup-step ${s.setupDone[st.id] ? "done" : ""}" id="step-${esc(st.id)}">
+          <div class="art">${st.art || ""}</div>
+          <div class="body">
+            <span class="label">Шаг ${i + 1}</span>
+            <h2>${esc(st.title)}</h2>
+            <p>${esc(st.text)}</p>
+            <div class="row wrap">
+              <label class="check"><input type="checkbox" data-act="setup-check" data-id="${esc(st.id)}" ${s.setupDone[st.id] ? "checked" : ""}> Готово</label>
+              ${BH.speech.supported ? `<button class="btn ghost sm" data-act="say-step" data-id="${esc(st.id)}">${I.speak}Прочитать</button>` : ""}
+            </div>
+          </div>
+        </section>`).join("")}
+      <div class="sticky-foot"><button class="btn primary big block" data-act="setup-next">${I.wheel}${esc(g.first ? "Дальше: " + g.first.label.toLowerCase() : "Начать игру")}</button></div>
+    </div>`;
+  }
+
+  function viewFirst(s, g) {
+    const pl = s.players.map(BH.player).filter(Boolean);
+    const chosen = s.first ? BH.player(s.first) : null;
+    const label = (g.first && g.first.label) || "Первый игрок";
+    return `<div class="stack">
+      <div>${s.status === "playing" ? backLink("#/s/" + s.id + "/play", "К игре") : backLink("#/s/" + s.id + "/setup", "Подготовка")}
+        <div class="page-head"><div>${sessionTitle(s, g)}<h1>${esc(label)}</h1>${g.first && g.first.hint ? `<p class="sub">${esc(g.first.hint)}</p>` : ""}</div></div></div>
+      <section class="panel wheel-box">
+        ${BH.wheel.html(pl)}
+        <div class="wheel-result" id="wheel-result" aria-live="polite">${chosen ? esc(chosen.name) : ""}</div>
+        <div class="actions" style="justify-content:center">
+          <button class="btn ${chosen ? "" : "primary"} big" data-act="spin">${I.wheel}${chosen ? "Крутить ещё раз" : "Крутить"}</button>
+          ${chosen ? `<button class="btn primary big" data-act="start-play">${s.status === "playing" ? "Готово" : "Начать игру"}</button>` : ""}
+        </div>
+      </section>
+      <details class="panel"><summary class="small" style="cursor:pointer;font-weight:600">Выбрать вручную</summary>
+        <div class="chips" style="margin-top:12px">${pl.map(p => `<button class="chip" data-act="set-first" data-id="${p.id}" aria-pressed="${s.first === p.id}"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</button>`).join("")}</div>
+      </details>
+    </div>`;
+  }
+
+  function viewPlay(s, g) {
+    const r = s.rounds.length, leaderId = BH.leaderAt(s, r), leader = BH.player(leaderId);
+    const tot = BH.totals(s), st = BH.standings(s), target = g.scoring && g.scoring.target;
+    const top = st.length && st[0].total > 0 ? st[0].total : null;
+    const last = s.rounds[r - 1];
+    const board = s.players.map(id => {
+      const p = BH.player(id) || { name: "?", color: "#888" };
+      const t = tot[id], pct = target ? BH.clamp(100 * t / target, 0, 100) : 0;
+      const lr = last ? last.scores[id] : null, lf = last && last.flags ? last.flags[id] || {} : {};
+      return `<div class="pl ${t === top ? "lead" : ""}">
+        ${BH.avatar(p)}
+        <div style="min-width:0"><div class="nm"><span>${esc(p.name)}</span>${id === leaderId ? `<span class="badge accent">${esc(g.rounds.leaderLabel || "ходит")}</span>` : ""}</div>
+          ${target ? `<div class="bar"><i style="width:${pct}%;background:${p.color}"></i></div>` : ""}</div>
+        <div><div class="tot num">${t}</div><div class="last">${last ? (lf.bust ? "перебор" : (lf.flip7 ? "Flip 7! " : "") + "+" + lr) : target ? "из " + target : ""}</div></div>
+      </div>`;
+    }).join("");
+
+    const hist = s.rounds.length ? `<section class="panel"><div class="spread" style="margin-bottom:6px"><h2>Раунды</h2><span class="small muted">нажмите на раунд, чтобы исправить</span></div>
+      <div class="scroll-x"><table class="hist"><thead><tr><th>№</th>${s.players.map(id => `<th>${esc((BH.player(id) || {}).name || "?")}</th>`).join("")}</tr></thead>
+      <tbody>${s.rounds.map((rd, i) => `<tr class="click" data-act="edit-round" data-i="${i}" tabindex="0"><td>${i + 1}</td>${s.players.map(id => { const f = (rd.flags || {})[id] || {}; return `<td class="${f.bust ? "bust" : f.flip7 ? "f7" : ""}">${f.bust ? "✕" : rd.scores[id]}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div></section>` : "";
+
+    return `<div class="stack">
+      <div>${backLink("#/", "Партии")}
+        <div class="spread">${sessionTitle(s, g)}<div class="row">${s.rounds.length ? "" : `<a class="btn ghost sm" href="#/s/${esc(s.id)}/first">${I.wheel}Первый</a>`}<button class="btn ghost sm" data-act="finish-menu">${I.flag}Завершить</button></div></div>
+        <div class="round-head" style="margin-top:6px">
+          <div><span class="label">Раунд</span><div class="round-no">${r + 1}</div></div>
+          ${leader ? `<div class="leader">${BH.avatar(leader, "sm")}<div><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><div style="font-weight:600">${esc(leader.name)}</div></div></div>` : ""}
+        </div>
+      </div>
+      <div class="play">
+        <div class="stack">
+          <div class="board">${board}</div>
+          ${g.rounds.reminder ? `<details class="panel" ${r === 0 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как идёт раунд</summary><ul class="reminder" style="margin:10px 0 0;padding-left:20px">${g.rounds.reminder.map(t => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
+          ${hist}
+        </div>
+        <div class="stack">
+          <section class="panel"><div class="spread" style="margin-bottom:10px"><h2>Правила</h2><a class="btn ghost sm" href="#/s/${s.id}/rules">${I.book}Все правила</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
+        </div>
+      </div>
+      <div class="game-bar">
+        <button class="btn primary big" data-act="new-round">${I.plus}Записать раунд ${r + 1}</button>
+        ${s.rounds.length ? `<button class="btn big" data-act="undo-round" aria-label="Отменить последний раунд" title="Отменить последний раунд">${I.undo}</button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  function viewSessionRules(s, g) {
+    return `<div class="stack">
+      <div>${backLink("#/s/" + s.id + "/play", "К игре")}<div class="page-head"><div>${sessionTitle(s, g)}<h1>Правила</h1></div></div></div>
+      ${BH.rulesUI.panel(g, rulesQuery)}
+    </div>`;
+  }
+
+  function viewDone(s, g) {
+    const st = BH.standings(s), w = s.winners.map(BH.player).filter(Boolean);
+    const dur = s.finishedAt && s.startedAt ? BH.fmtDuration(s.finishedAt - s.startedAt) : null;
+    const place = BH.place(s.placeId);
+    const crown = `<svg class="crown" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 46 L12 18 L24 32 L32 12 L40 32 L52 18 L56 46 Z" style="fill:#E3A72F;stroke:#B57E14;stroke-width:2.5;stroke-linejoin:round"/><rect x="8" y="46" width="48" height="8" rx="2" style="fill:#B57E14"/></svg>`;
+    return `<div class="stack">
+      <div>${backLink("#/", "Партии")}</div>
+      <section class="panel podium">
+        ${crown}
+        ${sessionTitle(s, g)}
+        <h1>${w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена"}</h1>
+        <p class="muted">${s.rounds.length} ${BH.plural(s.rounds.length, "раунд", "раунда", "раундов")}${dur ? " · " + dur : ""} · ${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""}</p>
+      </section>
+      <section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
+        <div class="list">${st.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<div class="item"><span class="place-n">${x.place}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div><span class="num" style="font-size:20px;font-weight:700">${x.total}</span></div>`; }).join("")}</div>
+      </section>
+      <div class="actions">
+        <button class="btn primary big" data-act="rematch">${I.plus}Ещё партию теми же</button>
+        <button class="btn big" data-act="reopen">Вернуться к партии</button>
+        <button class="btn ghost big" data-act="delete-session">${I.trash}Удалить</button>
+      </div>
+    </div>`;
+  }
+
+  /* ---------- games catalogue ---------- */
+  function viewGames() {
+    return `<div class="stack">
+      <div class="page-head"><div><h1>Игры</h1><p class="sub">Подготовка, правила и подсчёт очков для каждой игры.</p></div></div>
+      <div class="games">${BH.games.map(g => {
+        const n = S().sessions.filter(s => s.gameId === g.id && s.status === "finished").length;
+        return `<a class="game" href="#/games/${g.id}"><span class="cover">${g.cover || ""}</span><span><b>${esc(g.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли"} · ${esc(g.time || "")}</span></span></a>`;
+      }).join("")}</div>
+      <div class="note info">Каталог будет расти: следующая на очереди — «Ики» с дополнением. Для новой игры понадобятся её правила, чтобы составить подготовку и шпаргалку.</div>
+    </div>`;
+  }
+  function viewGame(g) {
+    return `<div class="stack">
+      <div>${backLink("#/games", "Игры")}
+        <div class="game" style="cursor:default;border:none;padding:0;background:none"><span class="cover" style="width:80px;height:80px">${g.cover || ""}</span>
+          <span><h1>${esc(g.name)}</h1><span>${esc(g.publisher || "")}${g.year ? ", " + g.year : ""} · от ${g.players.recommendedMin || g.players.min} игроков · ${esc(g.time || "")} · ${esc(g.age || "")}</span></span></div></div>
+      ${g.tagline ? `<p>${esc(g.tagline)}</p>` : ""}
+      <div><button class="btn primary big" data-act="new-with" data-id="${g.id}">${I.plus}Новая партия</button></div>
+      ${BH.rulesUI.panel(g, "")}
+    </div>`;
+  }
+
+  /* ---------- players & places ---------- */
+  let editPlayer = null;
+  function viewPlayers() {
+    const fin = S().sessions.filter(s => s.status === "finished");
+    const all = S().players;
+    const row = p => {
+      const played = fin.filter(s => s.players.includes(p.id)).length, wins = fin.filter(s => s.winners.includes(p.id)).length;
+      if (editPlayer === p.id) {
+        return `<form class="panel stack" data-form="edit-player" data-id="${p.id}" style="margin:8px 0">
+          <label class="field">Имя<input class="input" name="name" value="${esc(p.name)}" maxlength="40" required></label>
+          <div class="field">Цвет<div class="swatches">${BH.COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-act="pick-color" data-id="${p.id}" data-c="${c}" aria-pressed="${p.color === c}" aria-label="Цвет ${c}"></button>`).join("")}</div></div>
+          <div class="actions"><button class="btn primary" type="submit">Сохранить</button><button class="btn" type="button" data-act="edit-player" data-id="">Отмена</button>
+            <button class="btn ghost" type="button" data-act="hide-player" data-id="${p.id}">${p.hidden ? "Вернуть в список" : played ? "Скрыть из выбора" : "Удалить"}</button></div>
+        </form>`;
+      }
+      return `<div class="item" style="${p.hidden ? "opacity:.55" : ""}">${BH.avatar(p)}<div class="t"><b>${esc(p.name)}</b><span>${played ? `${played} ${BH.plural(played, "партия", "партии", "партий")} · ${wins} ${BH.plural(wins, "победа", "победы", "побед")}` : "ещё не играл(а)"}${p.hidden ? " · скрыт" : ""}</span></div>
+        <button class="icon-btn" data-act="edit-player" data-id="${p.id}" aria-label="Изменить ${esc(p.name)}">${I.edit}</button></div>`;
+    };
+    return `<div class="stack">
+      <div class="page-head"><div><h1>Игроки</h1><p class="sub">Друзья и семья, с кем вы играете.</p></div></div>
+      <section class="panel">
+        <form class="row" data-form="add-player-page" style="margin-bottom:6px"><input class="input" name="name" placeholder="Имя игрока" maxlength="40" aria-label="Имя игрока"><button class="btn primary" type="submit">Добавить</button></form>
+        <div class="list">${all.length ? all.map(row).join("") : `<p class="muted small" style="padding:8px 0">Пока никого. Игроков можно добавить и при создании партии.</p>`}</div>
+      </section>
+      <section class="panel">
+        <h2 style="margin-bottom:6px">Места</h2>
+        <div class="list">${S().places.map(p => { const n = fin.filter(s => s.placeId === p.id).length; return `<div class="item"><div class="t"><b>${esc(p.name)}</b><span>${n} ${BH.plural(n, "партия", "партии", "партий")}</span></div>${n ? "" : `<button class="icon-btn" data-act="del-place" data-id="${p.id}" aria-label="Удалить место ${esc(p.name)}">${I.trash}</button>`}</div>`; }).join("")}</div>
+        <form class="row" data-form="add-place" style="margin-top:8px"><input class="input" name="name" placeholder="Новое место" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>
+      </section>
+    </div>`;
+  }
+
+  /* ---------- stats ---------- */
+  let statsGame = "";
+  function viewStats() {
+    const fin = S().sessions.filter(s => s.status === "finished" && (!statsGame || s.gameId === statsGame));
+    const hours = fin.reduce((a, s) => a + (s.finishedAt && s.startedAt ? s.finishedAt - s.startedAt : 0), 0);
+    const games = new Set(fin.map(s => s.gameId));
+    const ppl = S().players.map(p => {
+      const mine = fin.filter(s => s.players.includes(p.id));
+      const wins = mine.filter(s => s.winners.includes(p.id)).length;
+      const best = mine.reduce((m, s) => Math.max(m, BH.totals(s)[p.id] || 0), 0);
+      return { p, played: mine.length, wins, rate: mine.length ? wins / mine.length : 0, best };
+    }).filter(x => x.played).sort((a, b) => b.wins - a.wins || b.rate - a.rate || b.played - a.played);
+    const byGame = BH.games.map(g => ({ g, n: fin.filter(s => s.gameId === g.id).length, last: fin.filter(s => s.gameId === g.id).reduce((m, s) => Math.max(m, s.finishedAt || 0), 0) })).filter(x => x.n);
+    const byPlace = [...S().places, { id: null, name: "Не указано" }].map(p => ({ p, n: fin.filter(s => (s.placeId || null) === p.id).length })).filter(x => x.n);
+    const opts = `<option value="">Все игры</option>${BH.games.map(g => `<option value="${g.id}" ${g.id === statsGame ? "selected" : ""}>${esc(g.name)}</option>`).join("")}`;
+    return `<div class="stack">
+      <div class="page-head"><div><h1>Статистика</h1><p class="sub">По завершённым партиям.</p></div>
+        <select class="input" style="width:auto" data-act="stats-game" aria-label="Игра">${opts}</select></div>
+      <div class="kpis">
+        <div class="kpi"><b>${fin.length}</b><span>${BH.plural(fin.length, "партия", "партии", "партий")}</span></div>
+        <div class="kpi"><b>${games.size}</b><span>${BH.plural(games.size, "игра", "игры", "игр")}</span></div>
+        <div class="kpi"><b>${(hours / 3600000).toFixed(1).replace(".", ",")}</b><span>часов за столом</span></div>
+        <div class="kpi"><b>${fin.reduce((a, s) => a + s.rounds.length, 0)}</b><span>раундов</span></div>
+      </div>
+      ${fin.length ? `
+      <section class="panel"><h2 style="margin-bottom:6px">Игроки</h2><div class="scroll-x"><table class="tbl">
+        <thead><tr><th>Игрок</th><th>Партий</th><th>Побед</th><th>% побед</th>${statsGame ? "<th>Лучший счёт</th>" : ""}</tr></thead>
+        <tbody>${ppl.map(x => `<tr><td><span class="row">${BH.avatar(x.p, "sm")}${esc(x.p.name)}</span></td><td>${x.played}</td><td>${x.wins}</td><td>${Math.round(100 * x.rate)}%<span class="meter"><i style="width:${Math.round(100 * x.rate)}%"></i></span></td>${statsGame ? `<td>${x.best}</td>` : ""}</tr>`).join("")}</tbody></table></div></section>
+      <div class="cols">
+        <section class="panel"><h2 style="margin-bottom:6px">Игры</h2><table class="tbl"><thead><tr><th>Игра</th><th>Партий</th><th>Последняя</th></tr></thead>
+          <tbody>${byGame.map(x => `<tr><td>${esc(x.g.name)}</td><td>${x.n}</td><td>${x.last ? BH.fmtDate(x.last) : ""}</td></tr>`).join("")}</tbody></table></section>
+        <section class="panel"><h2 style="margin-bottom:6px">Места</h2><table class="tbl"><thead><tr><th>Место</th><th>Партий</th></tr></thead>
+          <tbody>${byPlace.map(x => `<tr><td>${esc(x.p.name)}</td><td>${x.n}</td></tr>`).join("")}</tbody></table></section>
+      </div>` : `<div class="empty">Здесь появятся победы, любимые игры и места, когда вы доиграете первую партию.</div>`}
+    </div>`;
+  }
+
+  /* ---------- settings ---------- */
+  function viewSettings() {
+    const st = S().settings;
+    const seg = (key, val, label) => `<button type="button" data-act="set" data-k="${key}" data-v="${val}" aria-pressed="${String(st[key]) === String(val)}">${label}</button>`;
+    return `<div class="stack">
+      <div>${backLink("#/", "Партии")}<div class="page-head"><div><h1>Настройки</h1></div></div></div>
+      <section class="panel stack">
+        <div class="spread"><span>Тема</span><div class="seg">${seg("theme", "auto", "Как в системе")}${seg("theme", "light", "Светлая")}${seg("theme", "dark", "Тёмная")}</div></div>
+        <div class="spread"><span>Скорость чтения вслух</span><div class="seg">${seg("voiceRate", 0.85, "Медленно")}${seg("voiceRate", 1, "Обычно")}${seg("voiceRate", 1.2, "Быстро")}</div></div>
+        ${BH.speech.supported ? `<div class="spread"><span class="small muted">${BH.speech.hasRussian ? "Русский голос найден." : "Русский голос в системе не найден: текст прочитается голосом по умолчанию."}</span><button class="btn sm" data-act="say-test">${I.speak}Проверить голос</button></div>` : `<p class="small muted">Этот браузер не умеет читать вслух.</p>`}
+      </section>
+      <section class="panel stack">
+        <h2>Копия данных</h2>
+        <p class="small muted">Всё хранится только на этом устройстве. Сохраните копию в файл, чтобы перенести партии на другое устройство или не потерять их. Синхронизация ПК и телефона появится позже.</p>
+        <div class="actions"><button class="btn" data-act="export">Сохранить копию</button>
+          <label class="btn">Загрузить из копии<input type="file" accept="application/json,.json" data-act="import" hidden></label></div>
+      </section>
+      <p class="tiny muted">Помощник настолок ${esc(BH.version || "")} · правила в приложении пересказаны своими словами, полные правила — в книге правил игры.</p>
+    </div>`;
+  }
+
+  /* ---------- overlays: round sheet and dialogs ---------- */
+  function renderOverlay() {
+    if (dialog) {
+      overlayRoot.innerHTML = `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dlg-h" style="max-width:460px">
+        <div class="sheet-head"><h2 id="dlg-h">${esc(dialog.title)}</h2></div>
+        <div class="sheet-body"><p>${esc(dialog.text)}</p></div>
+        <div class="sheet-foot" style="flex-direction:column">${dialog.buttons.map((b, i) => `<button class="btn ${b.primary ? "primary" : b.danger ? "danger" : ""} big block" data-act="dlg" data-i="${i}">${esc(b.label)}</button>`).join("")}</div>
+      </div></div>`;
+      const f = overlayRoot.querySelector(".btn.primary") || overlayRoot.querySelector(".btn"); if (f) f.focus();
+      return;
+    }
+    if (!sheet) { overlayRoot.innerHTML = ""; return; }
+    const scroll = overlayRoot.querySelector(".sheet-body");
+    const top = scroll ? scroll.scrollTop : 0;
+    overlayRoot.innerHTML = sheetHTML();
+    const body = overlayRoot.querySelector(".sheet-body"); if (body) body.scrollTop = top;
+  }
+  const openDialog = d => { dialog = d; BH.clearToast(); renderOverlay(); };
+  const closeDialog = () => { dialog = null; renderOverlay(); };
+
+  function openSheet(s, index) {
+    const g = BH.game(s.gameId);
+    const editing = index !== null && index !== undefined && s.rounds[index];
+    const entries = {};
+    for (const id of s.players) {
+      const d = editing && s.rounds[index].detail && s.rounds[index].detail[id];
+      entries[id] = d ? JSON.parse(JSON.stringify(d)) : { sel: { picks: {}, flags: {} }, manual: g.calc ? null : 0 };
+      if (editing && !d) entries[id].manual = s.rounds[index].scores[id] || 0;
+    }
+    sheet = { sid: s.id, index: editing ? index : null, entries, open: g.calc ? s.players[0] : null };
+    BH.clearToast();
+    renderOverlay();
+    const first = overlayRoot.querySelector(".sheet-body button, .sheet-body input"); if (first) first.focus({ preventScroll: true });
+  }
+
+  function entryResult(g, s, e) {
+    const ctx = BH.ctxOf(s);
+    const calc = BH.calcScore(g, e.sel, ctx);
+    if (e.sel.flags && e.sel.flags.bust) return Object.assign({}, calc, { score: 0, bust: true });   // a bust is 0 whatever was typed
+    if (e.manual !== null && e.manual !== undefined && e.manual !== "") return { score: Math.round(Number(e.manual)) || 0, manual: true, notes: ["введено вручную"] };
+    return calc;
+  }
+
+  function sheetHTML() {
+    const s = BH.session(sheet.sid), g = BH.game(s.gameId), ctx = BH.ctxOf(s);
+    const idx = sheet.index !== null ? sheet.index : s.rounds.length;
+    const results = s.players.map(id => entryResult(g, s, sheet.entries[id]));
+    const warns = g.calc && g.calc.roundWarnings ? g.calc.roundWarnings(results, s.players.map(id => sheet.entries[id].sel), ctx) : [];
+    const leader = BH.player(BH.leaderAt(s, idx));
+    const body = s.players.map((id, i) => {
+      const p = BH.player(id) || { name: "?", color: "#888" }, e = sheet.entries[id], res = results[i];
+      const open = sheet.open === id && g.calc;
+      const bust = e.sel.flags && e.sel.flags.bust;
+      let picker = "";
+      if (open) {
+        picker = `<div class="picker" ${bust ? 'style="opacity:.45"' : ""}>${g.calc.groups.map(grp => {
+          const mine = e.sel.picks[grp.id] || [];
+          const uniq = grp.uniqueAcross && grp.uniqueAcross(ctx);
+          const taken = uniq ? new Set(s.players.filter(o => o !== id).flatMap(o => (sheet.entries[o].sel.picks[grp.id] || []))) : new Set();
+          return `<div class="grp"><span class="label">${esc(grp.label)}${grp.max ? ` · ${mine.length} из ${grp.max}` : ""}</span><div class="cards">${grp.items.map(v => {
+            const on = mine.includes(v);
+            const dis = !on && ((grp.max && mine.length >= grp.max) || taken.has(v));
+            return `<button type="button" class="card-t ${grp.style === "mod" ? "mod" : ""}" data-act="pick" data-p="${id}" data-g="${grp.id}" data-v="${esc(JSON.stringify(v))}" aria-pressed="${on}" ${dis ? "disabled" : ""} title="${taken.has(v) ? "Эта карта уже у другого игрока" : ""}">${esc(grp.show ? grp.show(v) : v)}</button>`;
+          }).join("")}</div></div>`;
+        }).join("")}</div>`;
+      }
+      const flags = g.calc && g.calc.flags ? g.calc.flags.map(f => `<button type="button" class="flag" data-act="flag" data-p="${id}" data-f="${f.id}" aria-pressed="${!!(e.sel.flags && e.sel.flags[f.id])}">${esc(f.label)}</button>`).join("") : "";
+      return `<div class="entry ${open ? "open" : ""}" data-entry="${id}">
+        <div class="entry-head">${BH.avatar(p, "sm")}
+          <button type="button" class="nm" data-act="open-entry" data-p="${id}" style="background:none;border:none;padding:0;text-align:left;cursor:${g.calc ? "pointer" : "default"}">${esc(p.name)}${res.flip7 ? ' <span class="badge good">Flip 7</span>' : ""}${res.bust ? ' <span class="badge bad">перебор</span>' : ""}</button>
+          <input class="input score-in" type="number" inputmode="numeric" step="1" data-act="manual" data-p="${id}" value="${res.manual ? esc(e.manual) : ""}" placeholder="${res.score}" aria-label="Очки: ${esc(p.name)}">
+        </div>
+        ${g.calc ? `<div class="spread"><div class="flagrow">${flags}${open ? "" : `<button type="button" class="flag" data-act="open-entry" data-p="${id}">Карты</button>`}</div><span class="notes" data-notes="${id}">${esc((res.notes || []).join("; "))}</span></div>` : ""}
+        ${picker}
+        ${open ? `<div class="row" style="justify-content:flex-end">${i < s.players.length - 1 ? `<button type="button" class="btn sm" data-act="open-entry" data-p="${s.players[i + 1]}">Дальше: ${esc((BH.player(s.players[i + 1]) || {}).name || "")}</button>` : `<button type="button" class="btn sm" data-act="open-entry" data-p="">Свернуть</button>`}</div>` : ""}
+      </div>`;
+    }).join("");
+    return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+      <div class="sheet-head"><div><span class="label">${leader ? esc((g.rounds.leaderLabel || "Начинал") + ": " + leader.name) : ""}</span><h2 id="sheet-h">${sheet.index !== null ? "Исправить раунд " + (idx + 1) : "Раунд " + (idx + 1)}</h2></div>
+        <button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div>
+      <div class="sheet-body">
+        ${g.calc ? `<p class="small muted">Отметьте карты каждого игрока, и приложение посчитает очки. Можно и просто вписать число справа.</p>` : `<p class="small muted">Впишите очки каждого игрока за раунд.</p>`}
+        ${body}
+        ${warns.map(w => `<div class="note">${esc(w)}</div>`).join("")}
+      </div>
+      <div class="sheet-foot">
+        ${sheet.index !== null ? `<button class="btn danger" data-act="delete-round">${I.trash}Удалить</button>` : ""}
+        <button class="btn primary big" data-act="save-round">${I.check}Сохранить раунд</button>
+      </div>
+    </div></div>`;
+  }
+
+  function saveRound() {
+    const s = BH.session(sheet.sid), g = BH.game(s.gameId);
+    const idx = sheet.index !== null ? sheet.index : s.rounds.length;
+    const round = { at: Date.now(), leader: BH.leaderAt(s, idx), scores: {}, detail: {}, flags: {} };
+    for (const id of s.players) {
+      const e = sheet.entries[id], res = entryResult(g, s, e);
+      round.scores[id] = res.score;
+      round.detail[id] = e;
+      round.flags[id] = { bust: !!res.bust, flip7: !!res.flip7 };
+    }
+    const isNew = sheet.index === null;
+    if (isNew) s.rounds.push(round); else { round.at = s.rounds[idx].at; s.rounds[idx] = round; }
+    sheet = null;
+    BH.saveNow();
+    afterRoundChange(s, isNew);
+  }
+
+  // Called after any change to the rounds (new, edited, deleted, undone).
+  // A single leader at the target always ends the game. A tie asks once per round count:
+  // after "play another round" the question comes back only when a later round is still tied.
+  function afterRoundChange(s, isNew) {
+    const g = BH.game(s.gameId), end = BH.checkEnd(s);
+    if (s.continueTie && (!end.over || s.rounds.length < s.continueTie)) delete s.continueTie;
+    if (end.over && !end.tie) { finish(s, end.winners); return; }
+    if (end.over && end.tie && !(s.continueTie && s.rounds.length <= s.continueTie)) {
+      render();
+      openDialog({
+        title: "Ничья", text: ((g.scoring && g.scoring.tieNote) || "Сразу несколько игроков с лучшим счётом.") + " Сейчас поровну у: " + end.winners.map(id => (BH.player(id) || {}).name).join(", ") + ".",
+        buttons: [
+          { label: "Сыграть ещё раунд", primary: true, run: () => { s.continueTie = s.rounds.length; BH.saveNow(); closeDialog(); render(); } },
+          { label: "Записать ничью", run: () => { closeDialog(); finish(s, end.winners); } },
+        ],
+      });
+      return;
+    }
+    render();
+    if (isNew) {
+      const next = BH.player(BH.leaderAt(s, s.rounds.length));
+      const count = s.rounds.length;
+      BH.toast(`Раунд ${count} записан${next ? ". " + (g.rounds.leaderLabel || "Начинает") + ": " + next.name : ""}`, { label: "Отменить", run: () => {
+        // only while that round is still the last one and nothing else is open
+        if (s.status !== "playing" || sheet || dialog || s.rounds.length !== count) return;
+        s.rounds.pop(); BH.saveNow(); afterRoundChange(s, false);
+      } });
+    }
+  }
+
+  function finish(s, winners) {
+    s.status = "finished";
+    s.finishedAt = Date.now();
+    s.winners = winners;
+    delete s.continueTie;
+    BH.clearToast();
+    BH.saveNow();
+    go("#/s/" + s.id + "/done");
+  }
+
+  /* ---------- events ---------- */
+  document.addEventListener("click", e => {
+    const el = e.target.closest("[data-act]");
+    if (!el) return;
+    const act = el.dataset.act, r = route(), s = r.a === "s" ? BH.session(r.b) : null;
+    if (el.tagName === "INPUT" && el.type !== "checkbox" && el.type !== "button") return;
+
+    switch (act) {
+      /* wizard */
+      case "pick-game": draft.gameId = el.dataset.id; draft.exp = []; render(); break;
+      case "toggle-exp": { const i = draft.exp.indexOf(el.dataset.id); i >= 0 ? draft.exp.splice(i, 1) : draft.exp.push(el.dataset.id); render(); break; }
+      case "pick-place": draft.placeId = el.dataset.id || null; render(); break;
+      case "toggle-player": { const i = draft.players.indexOf(el.dataset.id); i >= 0 ? draft.players.splice(i, 1) : draft.players.push(el.dataset.id); render(); break; }
+      case "seat-up": case "seat-down": { const i = +el.dataset.i, j = act === "seat-up" ? i - 1 : i + 1; const a = draft.players; [a[i], a[j]] = [a[j], a[i]]; render(); break; }
+      case "wiz-back": { const st = wizSteps(), pos = st.indexOf(draft.step); draft.step = st[Math.max(0, pos - 1)]; render(); break; }
+      case "wiz-next": { const st = wizSteps(), pos = st.indexOf(draft.step); if (pos === st.length - 1) createSession(); else { draft.step = st[pos + 1]; render(); main.focus({ preventScroll: true }); window.scrollTo(0, 0); } break; }
+      case "new-with": startDraft(el.dataset.id); go("#/new"); break;
+
+      /* setup */
+      case "setup-check": break; // handled on change
+      case "say-step": { const st = BH.setupSteps(s).find(x => x.id === el.dataset.id); if (st) BH.speech.speak(st.title + ". " + st.text); break; }
+      case "say-setup": {
+        if (BH.speech.speaking) { BH.speech.stop(); render(); break; }
+        const st = BH.setupSteps(s).filter(x => !s.setupDone[x.id]);
+        const list = st.length ? st : BH.setupSteps(s);
+        BH.speech.speak(list.map((x, i) => "Шаг " + (i + 1) + ". " + x.title + ". " + x.text).join(" "), () => render());
+        render();
+        break;
+      }
+      case "setup-next": BH.speech.stop(); s.status = s.status === "setup" ? "first" : s.status; BH.saveNow(); go("#/s/" + s.id + "/first"); break;
+
+      /* first player */
+      case "spin": {
+        const pl = s.players;
+        el.disabled = true;
+        const res = BH.$("#wheel-result"); if (res) res.textContent = "Крутится…";
+        const my = ++spinToken;
+        BH.$$('[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = true; });
+        BH.wheel.spin(main, pl.length, i => {
+          if (my !== spinToken) return;            // the user picked someone else or left the screen meanwhile
+          BH.$$('[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = false; });
+          s.first = pl[i]; BH.saveNow();
+          const p = BH.player(pl[i]);
+          // re-render only the controls, keep the disc where it stopped
+          if (res) res.textContent = p ? p.name : "";
+          el.disabled = false;
+          el.classList.remove("primary");
+          el.innerHTML = I.wheel + "Крутить ещё раз";
+          if (!BH.$('[data-act="start-play"]')) el.insertAdjacentHTML("afterend", `<button class="btn primary big" data-act="start-play">${s.status === "playing" ? "Готово" : "Начать игру"}</button>`);
+          BH.$$('[data-act="set-first"]').forEach(b => b.setAttribute("aria-pressed", String(b.dataset.id === s.first)));
+        });
+        break;
+      }
+      case "set-first": spinToken++; s.first = el.dataset.id; BH.saveNow(); BH.wheel.reset(); render(); break;
+      case "start-play":
+        spinToken++;
+        if (!s.first) s.first = s.players[0];
+        if (s.status !== "playing") { s.status = "playing"; s.startedAt = Date.now(); }
+        BH.saveNow(); BH.wheel.reset(); go("#/s/" + s.id + "/play"); break;
+
+      /* play */
+      case "new-round": openSheet(s, null); break;
+      case "edit-round": openSheet(s, +el.dataset.i); break;
+      case "undo-round": openDialog({ title: "Отменить раунд " + s.rounds.length + "?", text: "Очки этого раунда удалятся.", buttons: [
+        { label: "Отменить раунд", danger: true, run: () => { s.rounds.pop(); BH.saveNow(); dialog = null; afterRoundChange(s, false); } }, { label: "Оставить", run: closeDialog }] }); break;
+      case "finish-menu": {
+        const st = BH.standings(s), best = st.length ? st[0].total : 0, w = st.filter(x => x.total === best).map(x => x.id);
+        openDialog({ title: "Завершить партию?", text: s.rounds.length ? "Победителем запишется тот, у кого сейчас больше всех очков: " + w.map(id => (BH.player(id) || {}).name).join(", ") + "." : "Ещё не записано ни одного раунда.",
+          buttons: [
+            ...(s.rounds.length ? [{ label: "Завершить и записать", primary: true, run: () => { closeDialog(); finish(s, w); } }] : []),
+            { label: "Удалить партию", danger: true, run: () => confirmDelete(s) },
+            { label: "Продолжить игру", run: closeDialog }] });
+        break;
+      }
+      case "close-sheet": sheet = null; renderOverlay(); break;
+      case "overlay-bg": if (e.target === el) { if (dialog) closeDialog(); else { sheet = null; renderOverlay(); } } break;
+      case "open-entry": sheet.open = el.dataset.p || null; renderOverlay(); { const n = overlayRoot.querySelector(`[data-entry="${el.dataset.p}"]`); if (n) n.scrollIntoView({ block: "nearest" }); } break;
+      case "pick": {
+        const en = sheet.entries[el.dataset.p], gid = el.dataset.g, v = JSON.parse(el.dataset.v);
+        const arr = en.sel.picks[gid] = en.sel.picks[gid] || [];
+        const i = arr.indexOf(v); i >= 0 ? arr.splice(i, 1) : arr.push(v);
+        arr.sort((a, b) => (typeof a === "number" && typeof b === "number" ? a - b : 0));
+        en.manual = null;
+        renderOverlay();
+        break;
+      }
+      case "flag": { const en = sheet.entries[el.dataset.p]; en.sel.flags[el.dataset.f] = !en.sel.flags[el.dataset.f]; if (en.sel.flags.bust) en.manual = null; renderOverlay(); break; }
+      case "save-round": saveRound(); break;
+      case "delete-round": { const i = sheet.index; openDialog({ title: "Удалить раунд " + (i + 1) + "?", text: "Остальные раунды сохранятся, сдающие сдвинутся.", buttons: [
+        { label: "Удалить", danger: true, run: () => { s.rounds.splice(i, 1); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(s, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
+      case "dlg": { const b = dialog && dialog.buttons[+el.dataset.i]; if (b) b.run(); break; }
+
+      /* done */
+      case "rematch": { startDraft(s.gameId); draft.exp = s.exp.slice(); draft.placeId = s.placeId; draft.players = s.players.slice(); createSession(); break; }
+      case "reopen": s.status = "playing"; s.winners = []; delete s.finishedAt; BH.saveNow(); go("#/s/" + s.id + "/play"); break;
+      case "delete-session": confirmDelete(s); break;
+      case "show-all": showAllDone = true; render(); break;
+
+      /* rules */
+      case "say-rule": { const g = BH.game(s ? s.gameId : r.b); if (g) BH.rulesUI.say(g, el.dataset.id); break; }
+      case "goto-rule": { const g = BH.game(s ? s.gameId : r.b); const inp = BH.$("#rules-q"); if (inp) { inp.value = ""; } const out = BH.$("#rules-out"); if (out && g) { out.innerHTML = BH.rulesUI.full(g, {}); const n = BH.$("#rule-" + el.dataset.id); if (n) { n.classList.add("hit"); n.scrollIntoView({ block: "center", behavior: "smooth" }); } } break; }
+
+      /* players */
+      case "edit-player": editPlayer = el.dataset.id || null; render(); break;
+      case "pick-color": { const p = BH.player(el.dataset.id); if (p) { p.color = el.dataset.c; BH.save(); render(); } break; }
+      case "hide-player": {
+        const p = BH.player(el.dataset.id); if (!p) break;
+        const used = S().sessions.some(x => x.players.includes(p.id));
+        if (used) p.hidden = !p.hidden; else S().players = S().players.filter(x => x !== p);
+        editPlayer = null; BH.saveNow(); render(); break;
+      }
+      case "del-place": S().places = S().places.filter(x => x.id !== el.dataset.id); BH.saveNow(); render(); break;
+
+      /* settings */
+      case "set": { const k = el.dataset.k; let v = el.dataset.v; if (k === "voiceRate") v = Number(v); S().settings[k] = v; BH.saveNow(); applyTheme(); render(); break; }
+      case "say-test": BH.speech.speak("Привет! Я буду читать подготовку к игре и правила."); break;
+      case "export": BH.exportData(); break;
+    }
+  });
+
+  document.addEventListener("change", e => {
+    const el = e.target;
+    const r = route(), s = r.a === "s" ? BH.session(r.b) : null;
+    if (el.dataset.act === "setup-check" && s) {
+      s.setupDone[el.dataset.id] = el.checked; BH.saveNow();
+      const card = el.closest(".setup-step"); if (card) card.classList.toggle("done", el.checked);
+      const steps = BH.setupSteps(s), done = steps.filter(x => s.setupDone[x.id]).length;
+      const bar = BH.$(".progress > i"); if (bar) bar.style.width = (100 * done / steps.length) + "%";
+      const sub = BH.$(".page-head .sub"); if (sub) sub.textContent = `${done} из ${steps.length} готово`;
+      if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
+    }
+    if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
+    if (el.dataset.act === "import" && el.files && el.files[0]) {
+      const file = el.files[0];
+      el.value = "";
+      BH.readBackup(file).then(data => {
+        const n = data.sessions.length, cur = S().sessions.length;
+        openDialog({ title: "Заменить данные копией?", text: `В копии ${n} ${BH.plural(n, "партия", "партии", "партий")} и ${data.players.length} ${BH.plural(data.players.length, "игрок", "игрока", "игроков")}. Сейчас на устройстве ${cur} ${BH.plural(cur, "партия", "партии", "партий")}: они заменятся копией.`, buttons: [
+          { label: "Заменить", danger: true, run: () => {
+            const before = S();
+            BH.state = data; BH.saveNow(); dialog = null; applyTheme(); go("#/");
+            BH.toast("Данные загружены из копии", { label: "Вернуть как было", run: () => { BH.state = before; BH.saveNow(); applyTheme(); render(); } });
+          } },
+          { label: "Отмена", run: closeDialog }] });
+      }).catch(err => BH.toast("Не загрузилось: " + err.message));
+    }
+  });
+
+  document.addEventListener("input", e => {
+    const el = e.target;
+    if (el.dataset.act === "manual" && sheet) {
+      const en = sheet.entries[el.dataset.p];
+      en.manual = el.value === "" ? null : el.value;
+      // typing a score means the player did not bust
+      if (en.manual !== null && en.sel.flags && en.sel.flags.bust) {
+        en.sel.flags.bust = false;
+        const b = overlayRoot.querySelector(`[data-act="flag"][data-p="${el.dataset.p}"][data-f="bust"]`); if (b) b.setAttribute("aria-pressed", "false");
+      }
+      const s = BH.session(sheet.sid), g = BH.game(s.gameId);
+      const res = entryResult(g, s, en);
+      const n = overlayRoot.querySelector(`[data-notes="${el.dataset.p}"]`); if (n) n.textContent = (res.notes || []).join("; ");
+      if (el.value === "") el.placeholder = String(res.score);
+    }
+  });
+
+  document.addEventListener("submit", e => {
+    const f = e.target, form = f.dataset.form;
+    if (!form) return;
+    e.preventDefault();
+    const name = (f.elements.name && f.elements.name.value || "").trim();
+    if (form === "add-player" || form === "add-player-page") {
+      if (!name) return;
+      const ex = S().players.find(p => p.name.toLowerCase() === name.toLowerCase());
+      const p = ex || BH.addPlayer(name);
+      if (ex && ex.hidden) ex.hidden = false;
+      if (form === "add-player" && draft && !draft.players.includes(p.id)) draft.players.push(p.id);
+      BH.saveNow(); render();
+      const inp = BH.$(`form[data-form="${form}"] input`); if (inp) inp.focus();
+    } else if (form === "add-place") {
+      if (!name) return;
+      const p = S().places.find(x => x.name.toLowerCase() === name.toLowerCase()) || BH.addPlace(name);
+      if (draft) draft.placeId = p.id;
+      render();
+    } else if (form === "edit-player") {
+      const p = BH.player(f.dataset.id); if (p && name) { p.name = name.slice(0, 40); BH.saveNow(); }
+      editPlayer = null; render();
+    }
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") { if (dialog) closeDialog(); else if (sheet) { sheet = null; renderOverlay(); } }
+    // keep Tab inside an open sheet or dialog
+    if (e.key === "Tab" && (sheet || dialog)) {
+      const items = BH.$$('button:not([disabled]), input:not([disabled]), [tabindex="0"]', overlayRoot).filter(x => x.offsetParent !== null);
+      if (items.length) {
+        const first = items[0], last = items[items.length - 1];
+        if (!overlayRoot.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("tr[data-act]")) { e.preventDefault(); e.target.click(); }
+  });
+
+  window.addEventListener("hashchange", () => {
+    spinToken++;
+    if (route().a !== "new") draft = null;
+    if (route().a !== "") showAllDone = false;
+    if (route().a !== "players") editPlayer = null;
+    sheet = null; dialog = null;
+    render();
+    window.scrollTo(0, 0);
+  });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
+  /* ---------- start ---------- */
+  BH.version = "0.1.0";
+  applyTheme();
+  if (route().a === "new") startDraft();
+  render();
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname)) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+  BH._render = render; // for tests
+})();

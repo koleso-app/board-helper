@@ -1,0 +1,50 @@
+{
+  "name": "board-helper",
+  "version": "0.1.0",
+  "description": "Помощник настолок: партии, подготовка к игре, первый игрок, раунды и очки, шпаргалка по правилам.",
+  "main": "main.js",
+  "private": true,
+  "author": "Studio Yomigo",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "web": "node scripts/serve.js",
+    "web:lan": "node scripts/serve.js --lan",
+    "assets": "node scripts/make-icons.js && node scripts/copy-fonts.js",
+    "test": "node scripts/test-core.js",
+    "dist": "npm run assets && electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "com.yomigo.board-helper",
+    "productName": "BoardHelper",
+    "executableName": "BoardHelper",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "app/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "Помощник настолок",
+      "uninstallDisplayName": "Помощник настолок",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "devDependencies": {
+    "@fontsource/onest": "^5.3.1",
+    "@fontsource/unbounded": "^5.2.8",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  }
+}

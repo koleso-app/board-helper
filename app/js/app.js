@@ -19,12 +19,16 @@
 
   /* ---------- routing ---------- */
   const go = h => { if (location.hash === h) render(); else location.hash = h; };
+  // same, but the current screen is dropped from the history: "back" will not return to it
+  // (used after a game is created, so "back" cannot bring up the form and create it twice)
+  const goReplace = h => { if (location.hash === h) render(); else location.replace(location.pathname + location.search + h); };
   function route() {
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
     return { a: parts[0] || "", b: parts[1] || "", c: parts[2] || "" };
   }
 
   let draft = null;           // new-game wizard in progress
+  let prevHash = "";          // the screen before the current one
   let sheet = null;           // round entry sheet
   let dialog = null;          // confirm dialog
   let rulesQuery = "";
@@ -226,7 +230,8 @@
       Object.assign(s, { gameId: g.id, exp: draft.exp.slice(), placeId: draft.placeId || null, players: draft.players.slice(), opts, created: draft.date });
       if (s.first && !s.players.includes(s.first)) s.first = null;
       BH.saveNow(); draft = null;
-      go("#/s/" + s.id + "/setup");
+      // came here from the setup screen: step back to it, so the history does not grow setup → edit → setup
+      if (prevHash === "#/s/" + s.id + "/setup") history.back(); else goReplace("#/s/" + s.id + "/setup");
       BH.toast("Партия обновлена");
       return;
     }
@@ -246,7 +251,7 @@
       S().sessions.push(s);
       S().sessions.sort((a, b) => (b.created || 0) - (a.created || 0));
       BH.saveNow(); draft = null;
-      go("#/s/" + s.id + "/done");
+      goReplace("#/s/" + s.id + "/done");
       BH.toast("Партия записана в историю");
       return;
     }
@@ -254,7 +259,7 @@
     S().sessions.unshift(s);
     BH.saveNow();
     draft = null;
-    go("#/s/" + s.id + "/" + (s.status === "setup" ? "setup" : "first"));
+    goReplace("#/s/" + s.id + "/" + (s.status === "setup" ? "setup" : "first"));
   }
 
   /* ---------- session screens ---------- */
@@ -1002,6 +1007,7 @@
       case "set": { const k = el.dataset.k; let v = el.dataset.v; if (k === "voiceRate") v = Number(v); S().settings[k] = v; BH.saveNow(); applyTheme(); render(); break; }
       case "say-test": BH.speech.speak("Привет! Я буду читать подготовку к игре и правила."); break;
       case "export": BH.exportData(); break;
+      case "reload": location.reload(); break;
       case "sync-now": BH.cloud.syncNow(); break;
       case "sync-off": openDialog({ title: "Отключить синхронизацию?", text: "Только на этом устройстве. Данные останутся и здесь, и в GitHub; изменения перестанут отправляться, пока не подключите снова.", buttons: [
         { label: "Отключить", danger: true, run: () => { BH.cloud.disconnect(); dialog = null; render(); BH.toast("Синхронизация на этом устройстве отключена"); } },
@@ -1129,7 +1135,15 @@
     if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("tr[data-act]")) { e.preventDefault(); e.target.click(); }
   });
 
-  window.addEventListener("hashchange", () => {
+  window.addEventListener("hashchange", e => {
+    prevHash = e.oldURL && e.oldURL.includes("#") ? "#" + e.oldURL.split("#")[1] : "";
+    // key moments for the sync: a game form or the players / settings page is left,
+    // a game reaches its result, or we are back on the home screen (e.g. after a delete)
+    {
+      const now = route(), was = prevHash.replace(/^#\/?/, "").split("/");
+      const leftForm = was[0] === "new" || (was[0] === "s" && was[2] === "edit") || was[0] === "players" || was[0] === "settings";
+      if (leftForm || now.c === "done" || now.a === "") BH.cloud.keyMoment();
+    }
     spinToken++; spinning = false;
     if (route().a !== "settings") { syncMsg = ""; wheelTokenBad = false; }
     const rt = route();
@@ -1144,8 +1158,14 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.6.0";
+  BH.version = "0.6.1";
   applyTheme();
+  // a file that failed to load (e.g. a 503 while the site publishes an update) must not leave a half-working app
+  const missing = [["игры", BH.games && BH.games.length], ["правила", BH.rulesUI], ["колесо", BH.wheel], ["синхронизация", window.BHSync && BH.cloud], ["голос", BH.voice], ["картинки", BH.assets]].filter(x => !x[1]).map(x => x[0]);
+  if (missing.length) {
+    main.innerHTML = `<div class="empty"><p>Не все части приложения загрузились (${esc(missing.join(", "))}). Обычно это бывает, когда сайт как раз обновляется.</p><p style="margin-top:12px"><button class="btn primary big" data-act="reload">Обновить</button></p></div>`;
+    return;
+  }
   if (route().a === "new") startDraft();
   render();
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname)) {

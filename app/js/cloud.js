@@ -1,8 +1,9 @@
 /* Sync controller: keeps this device's copy and the encrypted file on GitHub in step.
  * - Every change is saved on the device first, so nothing waits for the network.
  * - A changed device is "pending" (remembered across restarts) until a send succeeds.
- * - Sending is tried shortly after a change, when the connection comes back, when the app
- *   is opened again, and every minute while something is pending.
+ * - Sending happens at key moments (a game created or finished, players edited…), when the
+ *   app goes to the background or is opened, when the connection comes back, and 10 minutes
+ *   after a change at the latest. No polling: rounds of a running game travel together.
  * - Before sending, the copy on GitHub is read and merged record by record (sync.js). */
 (function () {
   "use strict";
@@ -32,14 +33,20 @@
     notify();
   };
 
-  /* called by the store after every local change */
+  /* called by the store after every local change: remembered, but not sent at once.
+     Sending happens at key moments (C.keyMoment), when the app goes to the background,
+     when it is opened, when the connection returns — and, as a safety net, 10 minutes later. */
+  const FALLBACK_MS = 10 * 60 * 1000;
+  let timerAt = 0;
   C.changed = () => {
     seq++;
     setPending(true);
     notify();
-    if (C.cfg) schedule(3000);
+    if (C.cfg && (!timerAt || timerAt - Date.now() > FALLBACK_MS)) schedule(FALLBACK_MS);
   };
-  function schedule(ms) { clearTimeout(timer); timer = setTimeout(() => C.syncNow(), ms); }
+  // a game created / finished / deleted, players edited, data imported: send soon
+  C.keyMoment = () => { if (C.cfg && C.pending) schedule(800); };
+  function schedule(ms) { clearTimeout(timer); timerAt = Date.now() + ms; timer = setTimeout(() => { timerAt = 0; C.syncNow(); }, ms); }
 
   /* «Колесо недели» connection on this device, if any (same site, so the same storage) */
   C.wheelCfg = () => {
@@ -63,7 +70,7 @@
     if (typeof navigator !== "undefined" && navigator.onLine === false) { setStatus("offline"); return false; }
     // the app asks to wait while a round is being entered or a dialog is open
     if (!cfgOverride && BH.uiBusy && BH.uiBusy()) { schedule(4000); return false; }
-    busy = true; clearTimeout(timer);
+    busy = true; clearTimeout(timer); timerAt = 0;
     const startSeq = seq;
     setStatus("busy");
     let ok = false;
@@ -93,7 +100,8 @@
       if (cfgOverride) { busy = false; throw e; }
     }
     busy = false;
-    if (again || (C.cfg && C.pending && seq !== startSeq)) { again = false; schedule(800); }
+    if (again) { again = false; schedule(800); }
+    else if (C.cfg && C.pending && seq !== startSeq) schedule(FALLBACK_MS);   // changed meanwhile: waits for the next key moment
     return ok;
   };
 
@@ -126,12 +134,13 @@
     return "Подключено.";
   };
 
-  /* triggers */
-  window.addEventListener("online", () => { if (C.cfg) C.syncNow(); else notify(); });
+  /* triggers: only key moments, no polling */
+  window.addEventListener("online", () => { if (C.cfg && C.pending) C.syncNow(); else notify(); });
   window.addEventListener("offline", () => { if (C.cfg) setStatus("offline"); });
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && C.cfg) C.syncNow(); });
-  // while something waits: every minute; otherwise every 3 minutes, to pick up other devices' games
-  let ticks = 0;
-  setInterval(() => { ticks++; if (C.cfg && document.visibilityState === "visible" && (C.pending || ticks % 3 === 0)) C.syncNow(); }, 60000);
-  setTimeout(() => { if (C.cfg) C.syncNow(); }, 800);
+  document.addEventListener("visibilitychange", () => {
+    if (!C.cfg) return;
+    if (document.visibilityState === "hidden") { if (C.pending) C.syncNow(); }        // the phone is put away: send what waits
+    else if (C.pending || Date.now() - (C.status.at || 0) > 15 * 60 * 1000) C.syncNow(); // back after a while: pick up other devices
+  });
+  setTimeout(() => { if (C.cfg) C.syncNow(); }, 800);   // the app is opened
 })();

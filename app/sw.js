@@ -1,6 +1,6 @@
 // Offline cache for the phone version: the app's own files only.
 // Service workers run only over HTTPS (or on localhost), so offline mode needs the app hosted on HTTPS.
-const CACHE = "nastolki-v11";
+const CACHE = "nastolki-v12";
 const FONTS = ["onest-cyrillic-400", "onest-latin-400", "onest-cyrillic-500", "onest-latin-500", "onest-cyrillic-600", "onest-latin-600",
   "onest-cyrillic-700", "onest-latin-700", "unbounded-cyrillic-600", "unbounded-latin-600", "unbounded-cyrillic-700", "unbounded-latin-700"]
   .map(f => `fonts/${f}-normal.woff2`);
@@ -24,8 +24,13 @@ self.addEventListener("fetch", e => {
     const timer = setTimeout(() => fromCache().then(r => { if (r && !done) { done = true; resolve(r); } }), 3000);
     // "no-cache": always ask the server, so a new version shows on the next opening, not 10 minutes later
     fetch(e.request, { cache: "no-cache" }).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
-      if (!done) { done = true; clearTimeout(timer); resolve(res); }
+      if (res.ok) {
+        const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy));
+        if (!done) { done = true; clearTimeout(timer); resolve(res); }
+        return;
+      }
+      // a server error (e.g. 503 while GitHub Pages publishes an update): keep the cached copy
+      caches.match(e.request).then(r => { if (!done) { done = true; clearTimeout(timer); resolve(r || res); } });
     }).catch(() => fromCache().then(r => { if (!done) { done = true; clearTimeout(timer); resolve(r || Response.error()); } }));
   }));
 });

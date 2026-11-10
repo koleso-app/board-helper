@@ -20,7 +20,7 @@ function fakeFetchFor(dev) {
     const body = JSON.parse(init.body);
     if (cur && body.sha !== cur.sha) return reply(409, { message: "is at x but expected y" });
     if (!cur && body.sha) return reply(409, {});
-    gh.writes++;
+    gh.writes++; gh.lastWriter = dev.name;
     gh.files[name] = { content: body.content, sha: "sha" + (++gh.sha) };
     return reply(200, {});
   };
@@ -146,6 +146,20 @@ async function t(name, fn) { try { await fn(); passed++; } catch (e) { console.e
     await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();
     assert.strictEqual(B.BH.state.settings.theme, "auto");
   });
+  await t("a change is not sent at once, only at a key moment", async () => {
+    await new Promise(r => setTimeout(r, 900));       // let the "app opened" syncs of the test devices pass
+    await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();
+    const w = gh.writes;
+    A.BH.addPlayer("Глеб"); A.BH.saveNow();
+    assert.strictEqual(A.BH.cloud.pending, true);
+    await new Promise(r => setTimeout(r, 1500));
+    assert.strictEqual(gh.writes, w, "nothing sent without a key moment (written by " + gh.lastWriter + ")");
+    A.BH.cloud.keyMoment();
+    await new Promise(r => setTimeout(r, 1500));
+    assert.strictEqual(gh.writes, w + 1);
+    assert.strictEqual(A.BH.cloud.pending, false);
+    await B.BH.cloud.syncNow();
+  });
   await t("nothing to send means no write", async () => {
     await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();
     const w = gh.writes;
@@ -157,7 +171,7 @@ async function t(name, fn) { try { await fn(); passed++; } catch (e) { console.e
     const w = W.BH.cloud.wheelCfg();
     assert.strictEqual(w.repo, "koleso-data"); assert.strictEqual(w.pass, CFG.pass);
     await W.BH.cloud.connect(w);
-    assert.strictEqual(names(W), "Аннушка,Боря");
+    assert.strictEqual(names(W), "Аннушка,Боря,Глеб");
   });
   console.log(`sync: ${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
 })();

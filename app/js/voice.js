@@ -126,19 +126,30 @@
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { handlers.error && handlers.error("Этот браузер не умеет распознавать речь — напишите вопрос текстом."); return null; }
     let kept = "", live = "", finished = false, stopped = false, rec = null, restarts = 0;
-    const text = () => (kept + " " + live).replace(/\s+/g, " ").trim();
+    const clean = s => String(s || "").replace(/\s+/g, " ").trim();
+    // Android Chrome repeats the whole phrase in every result ("Можно", "Можно ли", "Можно ли сыграть"…).
+    // So one recognition run covers one phrase (continuous off) and only its latest, fullest text counts;
+    // the phrases of several runs are joined, and a phrase that just repeats what we have replaces it.
+    const join = (a, b) => {
+      a = clean(a); b = clean(b);
+      if (!a) return b;
+      if (!b) return a;
+      const la = a.toLowerCase(), lb = b.toLowerCase();
+      if (lb.startsWith(la)) return b;          // the new text already contains the old one
+      if (la.endsWith(lb) || la.includes(lb)) return a;
+      return a + " " + b;
+    };
+    const text = () => join(kept, live);
     const fatal = { "not-allowed": "Нет доступа к микрофону. Разрешите его для сайта в настройках Chrome.", "service-not-allowed": "Нет доступа к микрофону.", network: "Для распознавания речи нужен интернет.", "audio-capture": "Микрофон не найден." };
     function start() {
       rec = new SR();
-      rec.lang = "ru-RU"; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = true;
-      let finals = "";
+      rec.lang = "ru-RU"; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
       rec.onresult = e => {
-        let interim = ""; finals = "";
-        for (let i = 0; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) finals += t + " "; else interim += t;
-        }
-        live = finals + interim;
+        // the fullest transcript of this run: the last result holds it on Android, the joined list elsewhere
+        let joined = "";
+        for (let i = 0; i < e.results.length; i++) joined = join(joined, e.results[i][0].transcript);
+        const last = clean(e.results[e.results.length - 1][0].transcript);
+        live = last.length >= joined.length ? last : joined;
         handlers.partial && handlers.partial(text());
       };
       rec.onerror = e => {
@@ -155,6 +166,7 @@
       rec.start();
     }
     try { start(); } catch (e) { handlers.error && handlers.error("Не получилось включить микрофон."); return null; }
+    V._join = join;   // for tests
     return {
       finish() { finished = true; try { rec.stop(); } catch (e) { stopped = true; handlers.done && handlers.done(text()); } },
       abort() { stopped = true; try { rec.abort(); } catch (e) {} },

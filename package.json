@@ -11,7 +11,7 @@
     "web": "node scripts/serve.js",
     "web:lan": "node scripts/serve.js --lan",
     "assets": "node scripts/make-icons.js && node scripts/copy-fonts.js",
-    "test": "node scripts/test-core.js && node scripts/test-sync.js && node scripts/test-voice.js",
+    "test": "node scripts/test-core.js && node scripts/test-sync.js && node scripts/test-voice.js && node scripts/test-speech.js",
     "voice:build": "node scripts/build-voice.js",
     "dist": "npm run assets && electron-builder --win nsis --x64"
   },

@@ -674,6 +674,7 @@
     ok: ["ok", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', "сохранено"],
     busy: ["busy", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>', "отправляю"],
     pending: ["pending", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11l6-6 6 6"/></svg>', "ждёт связи"],
+    local: ["local", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>', "на телефоне"],
     error: ["error", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>', "ошибка"],
   };
   function updateSync() {
@@ -682,7 +683,9 @@
       if (!C.cfg) chip.hidden = true;
       else {
         const st = C.status.state;
-        const k = st === "busy" ? "busy" : st === "error" ? "error" : C.pending ? "pending" : st === "ok" || C.status.at ? "ok" : "pending";
+        const offline = st === "offline" || navigator.onLine === false;
+        // saved on the phone and waiting for the next key moment is normal, not a problem
+        const k = st === "busy" ? "busy" : st === "error" ? "error" : C.pending ? (offline ? "pending" : "local") : st === "ok" || C.status.at ? "ok" : "local";
         const [cls, icon, text] = CHIP[k];
         chip.hidden = false;
         chip.className = "sync-chip " + cls;
@@ -1158,7 +1161,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.6.1";
+  BH.version = "0.6.2";
   applyTheme();
   // a file that failed to load (e.g. a 503 while the site publishes an update) must not leave a half-working app
   const missing = [["игры", BH.games && BH.games.length], ["правила", BH.rulesUI], ["колесо", BH.wheel], ["синхронизация", window.BHSync && BH.cloud], ["голос", BH.voice], ["картинки", BH.assets]].filter(x => !x[1]).map(x => x[0]);

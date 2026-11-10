@@ -50,6 +50,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sync-chip svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .sync-chip.ok{color:var(--good);background:var(--good-soft)}
 .sync-chip.pending{color:var(--warn);background:var(--warn-soft)}
+.sync-chip.local{color:var(--muted);background:var(--sunk)}
 .sync-chip.error{color:var(--bad);background:var(--bad-soft)}
 .sync-chip.busy svg{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}

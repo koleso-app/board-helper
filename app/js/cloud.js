@@ -129,7 +129,7 @@
     if (st === "busy") return "Синхронизирую…";
     if (C.pending && (st === "offline" || (typeof navigator !== "undefined" && navigator.onLine === false))) return "Нет связи — изменения сохранены на устройстве и уйдут, когда появится интернет.";
     if (st === "error") return "Ошибка: " + C.status.msg + (C.pending ? " Изменения сохранены на устройстве." : "");
-    if (C.pending) return "Есть изменения, которые ещё не отправлены. Отправлю через несколько секунд.";
+    if (C.pending) return "Изменения сохранены на телефоне. В GitHub они уйдут в конце партии, когда вы выйдете на главный экран или свернёте приложение.";
     if (C.status.at) { const d = new Date(C.status.at); return "Всё отправлено. Последняя синхронизация: " + BH.fmtDate(C.status.at) + ", " + BH.fmtTime(C.status.at) + "."; }
     return "Подключено.";
   };

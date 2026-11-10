@@ -45,6 +45,17 @@ button,input,select,textarea{font:inherit;color:inherit}
 .nav{display:none;gap:4px;background:var(--sunk);padding:4px;border-radius:999px}
 .nav a{padding:7px 16px;border-radius:999px;text-decoration:none;color:var(--muted);font-weight:500;font-size:15px}
 .nav a[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.sync-chip{margin-left:auto;display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:4px 12px 4px 9px;border-radius:999px;
+  font-size:13px;font-weight:600;text-decoration:none;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.sync-chip svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.sync-chip.ok{color:var(--good);background:var(--good-soft)}
+.sync-chip.pending{color:var(--warn);background:var(--warn-soft)}
+.sync-chip.error{color:var(--bad);background:var(--bad-soft)}
+.sync-chip.busy svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.brand span{white-space:nowrap}
+.brand .short{display:none}
+@media (max-width:520px){.brand .long{display:none}.brand .short{display:inline}}
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);
   background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);height:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px))}
 .tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-decoration:none;color:var(--muted);font-size:12px;font-weight:500}

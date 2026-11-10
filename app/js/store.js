@@ -78,6 +78,12 @@
         continueTie: Number.isInteger(x.continueTie) && x.continueTie > 0 ? x.continueTie : undefined,
       });
     }
+    // sync stamps: when each record last changed / was deleted (see js/sync.js)
+    const META_KEY = /^(p|pl|s):[A-Za-z0-9_-]{1,40}$/;
+    const m = isObj(s.meta) ? s.meta : {};
+    out.meta = { u: {}, del: {} };
+    for (const part of ["u", "del"]) for (const [k, t] of Object.entries(isObj(m[part]) ? m[part] : {}))
+      if (META_KEY.test(k) && Number.isFinite(t) && t > 0) out.meta[part][k] = t;
     return out;
   }
 
@@ -86,21 +92,40 @@
   }
 
   BH.state = normalize(readLocal());
+
+  /* Every save first notes which players, places and games changed since the last save
+     (stamp) or disappeared (deletion mark), then writes to this device. The sync sends it on. */
+  let seen = window.BHSync ? BHSync.recordMap(BH.state) : new Map();
+  BH.resetSeen = () => { if (window.BHSync) seen = BHSync.recordMap(BH.state); };
   let saveTimer = null;
   BH.save = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(BH.saveNow, 150);
   };
+  function writeLocal() {
+    try { localStorage.setItem(KEY, JSON.stringify(BH.state)); return true; }
+    catch (e) { BH.toast("Не удалось сохранить на этом устройстве: " + (e.message || "ошибка")); return false; }
+  }
   BH.saveNow = () => {
     clearTimeout(saveTimer);
-    try { localStorage.setItem(KEY, JSON.stringify(BH.state)); }
-    catch (e) { BH.toast("Не удалось сохранить: " + (e.message || "ошибка")); }
+    let changed = false;
+    if (window.BHSync) { const r = BHSync.stampChanges(BH.state, seen); seen = r.map; changed = r.changed; }
+    writeLocal();
+    if (changed && BH.cloud) BH.cloud.changed();
+  };
+  // replaces the data with a merged copy from the sync: saved, but not counted as a local change
+  BH.replaceFromSync = data => {
+    const settings = BH.state.settings;
+    BH.state = normalize(data);
+    BH.state.settings = settings;
+    BH.resetSeen();
+    writeLocal();
   };
   window.addEventListener("pagehide", BH.saveNow);
   // another tab or the installed app changed the data: take the newer copy instead of overwriting it
   window.addEventListener("storage", e => {
     if (e.key !== KEY || !e.newValue) return;
-    try { BH.state = normalize(JSON.parse(e.newValue)); if (BH._render) BH._render(); } catch (err) {}
+    try { BH.state = normalize(JSON.parse(e.newValue)); BH.resetSeen(); if (BH._render) BH._render(); } catch (err) {}
   });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") BH.saveNow(); });
 

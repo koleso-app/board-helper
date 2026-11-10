@@ -67,7 +67,15 @@
     BH.$$("[data-nav]").forEach(a => { if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     if (after) after();
     renderOverlay();
+    updateSync();
   }
+  // the sync waits while the user is in the middle of something
+  let spinning = false;
+  BH.uiBusy = () => {
+    const a = document.activeElement;
+    const typing = a && a.matches && a.matches("main input:not([type=checkbox]), main textarea") && a.value;   // half-typed text would be lost by a redraw
+    return !!(sheet || dialog || spinning || typing);
+  };
   const notFound = text => `<div class="empty"><p>${esc(text)}</p><p style="margin-top:12px"><a class="btn" href="#/">На главную</a></p></div>`;
   const backLink = (href, text) => `<a class="back" href="${href}">${I.back}<span>${esc(text)}</span></a>`;
 
@@ -427,6 +435,7 @@
     const seg = (key, val, label) => `<button type="button" data-act="set" data-k="${key}" data-v="${val}" aria-pressed="${String(st[key]) === String(val)}">${label}</button>`;
     return `<div class="stack">
       <div>${backLink("#/", "Партии")}<div class="page-head"><div><h1>Настройки</h1></div></div></div>
+      ${viewSync()}
       <section class="panel stack">
         <div class="spread"><span>Тема</span><div class="seg">${seg("theme", "auto", "Как в системе")}${seg("theme", "light", "Светлая")}${seg("theme", "dark", "Тёмная")}</div></div>
         <div class="spread"><span>Скорость чтения вслух</span><div class="seg">${seg("voiceRate", 0.85, "Медленно")}${seg("voiceRate", 1, "Обычно")}${seg("voiceRate", 1.2, "Быстро")}</div></div>
@@ -434,12 +443,99 @@
       </section>
       <section class="panel stack">
         <h2>Копия данных</h2>
-        <p class="small muted">Всё хранится только на этом устройстве. Сохраните копию в файл, чтобы перенести партии на другое устройство или не потерять их. Синхронизация ПК и телефона появится позже.</p>
+        <p class="small muted">Партии и игроки всегда сохраняются на этом устройстве${BH.cloud.cfg ? " и уходят в GitHub" : ""}. Копию в файл можно сохранить на всякий случай или чтобы перенести данные без синхронизации.</p>
         <div class="actions"><button class="btn" data-act="export">Сохранить копию</button>
           <label class="btn">Загрузить из копии<input type="file" accept="application/json,.json" data-act="import" hidden></label></div>
       </section>
       <p class="tiny muted">Помощник настолок ${esc(BH.version || "")} · правила в приложении пересказаны своими словами, полные правила — в книге правил игры.</p>
     </div>`;
+  }
+
+  /* ---------- sync ---------- */
+  let syncMsg = "";   // result of the last connect attempt, shown under the form
+  function viewSync() {
+    const C = BH.cloud, c = C.cfg;
+    if (c) return `<section class="panel stack" id="sync-panel">
+        <div class="spread"><h2>Синхронизация</h2><span class="badge good">включена</span></div>
+        <p class="small">Репозиторий <b>${esc(c.owner)}/${esc(c.repo)}</b>, файл ${esc(BHSync.FILE)}. Данные зашифрованы вашим паролем.</p>
+        <p class="small ${C.status.state === "error" ? "" : "muted"}" id="sync-status" role="status">${esc(C.label())}</p>
+        <div class="actions"><button class="btn sm" data-act="sync-now">Синхронизировать сейчас</button><button class="btn ghost sm" data-act="sync-off">Отключить на этом устройстве</button></div>
+      </section>`;
+    const w = C.wheelCfg();
+    const manual = `<form class="stack" data-form="sync" autocomplete="off">
+        <details class="small"><summary style="cursor:pointer;font-weight:600">Как подготовить GitHub</summary>
+          <ol style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+            <li>Нужен закрытый (Private) репозиторий. Подойдёт тот же <b>koleso-data</b>, что у «Колеса недели»: данные помощника лягут в отдельный файл.</li>
+            <li>Нужен токен: github.com → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b>. Repository access — только этот репозиторий, Permissions → <b>Contents: Read and write</b>. Подойдёт и токен от «Колеса недели».</li>
+            <li>На всех устройствах — один репозиторий и один пароль шифрования.</li>
+          </ol></details>
+        <label class="field">Имя на GitHub<input class="input" name="owner" required placeholder="например, PlayWithMao" autocapitalize="off" spellcheck="false"></label>
+        <label class="field">Репозиторий<input class="input" name="repo" required value="koleso-data" autocapitalize="off" spellcheck="false"></label>
+        <label class="field">Токен доступа<input class="input" name="token" type="password" required placeholder="github_pat_…" autocomplete="off"></label>
+        <label class="field">Пароль шифрования<input class="input" name="pass" type="password" required minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
+        <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
+        <div><button class="btn primary" type="submit">Подключить</button></div>
+      </form>`;
+    return `<section class="panel stack" id="sync-panel">
+      <h2>Синхронизация</h2>
+      <p class="small muted">Партии и игроки шифруются на устройстве вашим паролем и хранятся в закрытом репозитории на GitHub. Без интернета всё сохраняется на устройстве и отправляется само, когда связь появится. Так данные видны и на телефоне, и на ПК.</p>
+      ${w ? `<form class="stack" data-form="sync-wheel" autocomplete="off">
+          <div class="note good">На этом устройстве подключено «Колесо недели»: <b>${esc(w.owner)}/${esc(w.repo)}</b>. Можно взять это подключение — новый токен не нужен.</div>
+          ${w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" checked> Тот же пароль шифрования, что в колесе</label>` : ""}
+          <div class="stack" id="own-pass" ${w.pass ? "hidden" : ""}>
+            <label class="field">Пароль шифрования для настолок<input class="input" name="pass" type="password" minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
+            <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
+          </div>
+          <div><button class="btn primary" type="submit">Подключить</button></div>
+        </form>
+        <details><summary class="small" style="cursor:pointer;font-weight:600">Подключить другой репозиторий</summary><div style="margin-top:12px">${manual}</div></details>` : manual}
+      <p class="small" id="sync-status" role="status">${esc(syncMsg)}</p>
+      <p class="tiny muted">Токен и пароль хранятся только на этом устройстве. Пароль запомните: без него данные не расшифровать, восстановить его нельзя.</p>
+    </section>`;
+  }
+
+  const CHIP = {
+    ok: ["ok", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', "сохранено"],
+    busy: ["busy", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>', "отправляю"],
+    pending: ["pending", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11l6-6 6 6"/></svg>', "ждёт связи"],
+    error: ["error", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>', "ошибка"],
+  };
+  function updateSync() {
+    const C = BH.cloud, chip = document.getElementById("sync-chip");
+    if (chip) {
+      if (!C.cfg) chip.hidden = true;
+      else {
+        const st = C.status.state;
+        const k = st === "busy" ? "busy" : st === "error" ? "error" : C.pending ? "pending" : st === "ok" || C.status.at ? "ok" : "pending";
+        const [cls, icon, text] = CHIP[k];
+        chip.hidden = false;
+        chip.className = "sync-chip " + cls;
+        chip.innerHTML = icon + "<span>" + text + "</span>";
+        chip.title = C.label();
+        chip.setAttribute("aria-label", "Синхронизация: " + C.label());
+      }
+    }
+    const el = document.getElementById("sync-status");
+    if (el && C.cfg) el.textContent = C.label();
+  }
+  BH.cloud.onChange(updateSync);
+  BH.onRemoteData = news => { render(); if (news && !BH.cloud.connecting) BH.toast("Пришли изменения с другого устройства"); };
+
+  async function connectSync(form, cfg, pass2) {
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    syncMsg = "Проверяю репозиторий и пароль…";
+    const el = document.getElementById("sync-status"); if (el) el.textContent = syncMsg;
+    try {
+      const r = await BH.cloud.connect(cfg, pass2);
+      syncMsg = "";
+      render();
+      BH.toast(r.firstDevice ? "Синхронизация включена. Это первое устройство — данные отправлены." : "Синхронизация включена, данные объединены");
+    } catch (err) {
+      syncMsg = "Не получилось: " + ((err && err.message) || String(err));
+      if (btn) btn.disabled = false;
+      const e2 = document.getElementById("sync-status"); if (e2) e2.textContent = syncMsg;
+    }
   }
 
   /* ---------- overlays: round sheet and dialogs ---------- */
@@ -575,8 +671,9 @@
       const count = s.rounds.length;
       BH.toast(`Раунд ${count} записан${next ? ". " + (g.rounds.leaderLabel || "Начинает") + ": " + next.name : ""}`, { label: "Отменить", run: () => {
         // only while that round is still the last one and nothing else is open
-        if (s.status !== "playing" || sheet || dialog || s.rounds.length !== count) return;
-        s.rounds.pop(); BH.saveNow(); afterRoundChange(s, false);
+        const cur = BH.session(s.id);   // the data may have been refreshed by the sync meanwhile
+        if (!cur || cur.status !== "playing" || sheet || dialog || cur.rounds.length !== count) return;
+        cur.rounds.pop(); BH.saveNow(); afterRoundChange(cur, false);
       } });
     }
   }
@@ -628,8 +725,10 @@
         el.disabled = true;
         const res = BH.$("#wheel-result"); if (res) res.textContent = "Крутится…";
         const my = ++spinToken;
+        spinning = true;
         BH.$$('[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = true; });
         BH.wheel.spin(main, pl.length, i => {
+          spinning = false;
           if (my !== spinToken) return;            // the user picked someone else or left the screen meanwhile
           BH.$$('[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = false; });
           s.first = pl[i]; BH.saveNow();
@@ -708,6 +807,10 @@
       case "set": { const k = el.dataset.k; let v = el.dataset.v; if (k === "voiceRate") v = Number(v); S().settings[k] = v; BH.saveNow(); applyTheme(); render(); break; }
       case "say-test": BH.speech.speak("Привет! Я буду читать подготовку к игре и правила."); break;
       case "export": BH.exportData(); break;
+      case "sync-now": BH.cloud.syncNow(); break;
+      case "sync-off": openDialog({ title: "Отключить синхронизацию?", text: "Только на этом устройстве. Данные останутся и здесь, и в GitHub; изменения перестанут отправляться, пока не подключите снова.", buttons: [
+        { label: "Отключить", danger: true, run: () => { BH.cloud.disconnect(); dialog = null; render(); BH.toast("Синхронизация на этом устройстве отключена"); } },
+        { label: "Отмена", run: closeDialog }] }); break;
     }
   });
 
@@ -723,6 +826,7 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
+    if (el.dataset.act === "sync-same") { const own = BH.$("#own-pass"); if (own) own.hidden = el.checked; }
     if (el.dataset.act === "import" && el.files && el.files[0]) {
       const file = el.files[0];
       el.value = "";
@@ -760,6 +864,23 @@
     const f = e.target, form = f.dataset.form;
     if (!form) return;
     e.preventDefault();
+    if (form === "sync" || form === "sync-wheel") {
+      const fd = new FormData(f), val = k => String(fd.get(k) || "");
+      let cfg, pass2;
+      if (form === "sync") {
+        cfg = { owner: val("owner").trim(), repo: val("repo").trim(), token: val("token").trim(), pass: val("pass") };
+        pass2 = val("pass2");
+        if (!cfg.owner || !cfg.repo || !cfg.token) { syncMsg = "Заполните имя, репозиторий и токен."; render(); return; }
+      } else {
+        const w = BH.cloud.wheelCfg(); if (!w) return;
+        const same = w.pass && fd.get("same") === "on";
+        cfg = { owner: w.owner, repo: w.repo, token: w.token, pass: same ? w.pass : val("pass") };
+        pass2 = same ? undefined : val("pass2");
+      }
+      if (cfg.pass.length < 8) { syncMsg = "Пароль шифрования — не меньше 8 символов."; const el = BH.$("#sync-status"); if (el) el.textContent = syncMsg; return; }
+      connectSync(f, cfg, pass2);
+      return;
+    }
     const name = (f.elements.name && f.elements.name.value || "").trim();
     if (form === "add-player" || form === "add-player-page") {
       if (!name) return;
@@ -796,7 +917,8 @@
   });
 
   window.addEventListener("hashchange", () => {
-    spinToken++;
+    spinToken++; spinning = false;
+    if (route().a !== "settings") syncMsg = "";
     if (route().a !== "new") draft = null;
     if (route().a !== "") showAllDone = false;
     if (route().a !== "players") editPlayer = null;

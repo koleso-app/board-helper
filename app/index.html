@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://api.github.com; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#15130F">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,8 +21,9 @@
   <header class="topbar">
     <a class="brand" href="#/" aria-label="На главную">
       <img src="icons/icon-192.png" alt="" width="28" height="28">
-      <span>Помощник настолок</span>
+      <span class="long">Помощник настолок</span><span class="short">Настолки</span>
     </a>
+    <a class="sync-chip" id="sync-chip" href="#/settings" hidden></a>
     <nav class="nav" aria-label="Разделы">
       <a href="#/" data-nav="home">Партии</a>
       <a href="#/games" data-nav="games">Игры</a>
@@ -41,7 +42,9 @@
 <div id="overlay-root"></div>
 <div id="toast-root" aria-live="polite"></div>
 <script src="js/util.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/store.js"></script>
+<script src="js/cloud.js"></script>
 <script src="js/games.js"></script>
 <script src="js/art.js"></script>
 <script src="games/flip7.js"></script>

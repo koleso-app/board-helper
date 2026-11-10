@@ -29,7 +29,7 @@
     let res;
     try {
       res = await fetch(V.url(), { method: "POST", headers: { "Content-Type": "application/json" }, signal,
-        body: JSON.stringify(Object.assign({ gh: { owner: c.owner, repo: c.repo, token: c.token }, voice: V.voice() }, body)) });
+        body: JSON.stringify(Object.assign({ gh: { owner: c.owner, repo: c.repo, token: String(c.token || "").trim() }, voice: V.voice() }, body)) });
     } catch (e) {
       if (e && e.name === "AbortError") throw e;
       throw Object.assign(new Error("Нет связи с помощником. Проверьте интернет."), { code: "offline" });

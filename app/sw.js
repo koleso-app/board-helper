@@ -1,11 +1,11 @@
 // Offline cache for the phone version: the app's own files only.
 // Service workers run only over HTTPS (or on localhost), so offline mode needs the app hosted on HTTPS.
-const CACHE = "nastolki-v6";
+const CACHE = "nastolki-v7";
 const FONTS = ["onest-cyrillic-400", "onest-latin-400", "onest-cyrillic-500", "onest-latin-500", "onest-cyrillic-600", "onest-latin-600",
   "onest-cyrillic-700", "onest-latin-700", "unbounded-cyrillic-600", "unbounded-latin-600", "unbounded-cyrillic-700", "unbounded-latin-700"]
   .map(f => `fonts/${f}-normal.woff2`);
 const SHELL = ["./", "index.html", "styles.css", "manifest.webmanifest", "fonts/fonts.css", ...FONTS,
-  "js/util.js", "js/sync.js", "js/store.js", "js/cloud.js", "js/games.js", "js/art.js", "js/speech.js", "js/wheel.js", "js/rules.js", "js/app.js",
+  "js/util.js", "js/sync.js", "js/store.js", "js/cloud.js", "js/voice.js", "js/games.js", "js/art.js", "js/speech.js", "js/wheel.js", "js/rules.js", "js/app.js",
   "games/flip7.js", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

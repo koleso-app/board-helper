@@ -17,7 +17,7 @@
   const plain = html => html.replace(/<li>/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
   R.ruleHTML = (r, q, hit) => `<section class="rule ${hit ? "hit" : ""}" id="rule-${esc(r.id)}">
-      <div class="spread"><h3>${esc(r.title)}${r.page ? ` <span class="badge" title="Страница в книге правил">стр. ${esc(r.page)}</span>` : ""}</h3>${BH.speech.supported ? `<button class="icon-btn" data-act="say-rule" data-id="${esc(r.id)}" aria-label="Прочитать вслух: ${esc(r.title)}" title="Прочитать вслух">${BH.ICON.speak}</button>` : ""}</div>
+      <div class="spread"><h3>${esc(r.title)}${r.page ? ` <span class="badge" title="Страница в книге правил">стр. ${esc(r.page)}</span>` : ""}</h3>${BH.speech.available() ? `<button class="icon-btn" data-act="say-rule" data-id="${esc(r.id)}" aria-label="Прочитать вслух: ${esc(r.title)}" title="Прочитать вслух">${BH.ICON.speak}</button>` : ""}</div>
       ${mark("<div>" + r.body + "</div>", q || "")}
     </section>`;
 

@@ -1,6 +1,6 @@
 {
   "name": "board-helper",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Помощник настолок: партии, подготовка к игре, первый игрок, раунды и очки, шпаргалка по правилам.",
   "main": "main.js",
   "private": true,
@@ -11,7 +11,8 @@
     "web": "node scripts/serve.js",
     "web:lan": "node scripts/serve.js --lan",
     "assets": "node scripts/make-icons.js && node scripts/copy-fonts.js",
-    "test": "node scripts/test-core.js && node scripts/test-sync.js",
+    "test": "node scripts/test-core.js && node scripts/test-sync.js && node scripts/test-voice.js",
+    "voice:build": "node scripts/build-voice.js",
     "dist": "npm run assets && electron-builder --win nsis --x64"
   },
   "build": {

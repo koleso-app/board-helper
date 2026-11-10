@@ -247,6 +247,18 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .seg button{border:none;background:transparent;padding:6px 12px;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;min-height:34px}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 
+/* ---------- voice question ---------- */
+.ask-live{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;padding:12px 0}
+.ask-pulse{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);animation:pulse 1.4s ease-in-out infinite}
+.ask-pulse svg{width:38px;height:38px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}50%{box-shadow:0 0 0 18px color-mix(in srgb,var(--accent) 0%,transparent)}}
+.ask-heard{font-size:19px;font-weight:600;min-height:28px}
+.ask-q{color:var(--muted);font-size:15px}
+.ask-answer{font-size:19px;line-height:1.45;font-weight:500;padding:14px 16px;border-radius:14px;background:var(--good-soft)}
+.ask-answer.nf{background:var(--warn-soft)}
+.ask-quote{margin:0;padding:12px 14px;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 12px 12px 0;font-size:15px;display:flex;flex-direction:column;gap:6px}
+.ask-quote cite{font-style:normal;font-size:12.5px;font-weight:600;color:var(--muted)}
+
 /* ---------- rules ---------- */
 .search{position:relative}
 .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:20px;height:20px;fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round}

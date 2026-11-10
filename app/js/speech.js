@@ -37,9 +37,30 @@
     synth.speak(u);
   }
 
+  // natural voice through the owner's function when it is connected; the system voice otherwise
   sp.speak = (text, done) => {
-    if (!sp.supported) { BH.toast("Этот браузер не умеет читать вслух"); return; }
     sp.stop();
+    if (BH.voice && BH.voice.ready()) {
+      token++;
+      const my = token;
+      onDone = done || null;
+      sp.speaking = true;
+      BH.voice.say(text, () => my !== token).then(() => {
+        if (my !== token) return;
+        sp.speaking = false; const cb = onDone; onDone = null; if (cb) cb();
+      }).catch(err => {
+        if (my !== token) return;
+        sp.speaking = false; onDone = null;
+        if (sp.supported) { BH.toast("Живой голос недоступен, читаю голосом телефона"); systemSpeak(text, done); }
+        else BH.toast("Не получилось прочитать: " + (err && err.message || "ошибка"));
+      });
+      return;
+    }
+    systemSpeak(text, done);
+  };
+  sp.available = () => sp.supported || !!(BH.voice && BH.voice.ready());
+  function systemSpeak(text, done) {
+    if (!sp.supported) { BH.toast("Этот браузер не умеет читать вслух"); return; }
     if (!voice) pickVoice();
     token++;
     queue = split(text);
@@ -52,6 +73,7 @@
     queue = [];
     const cb = onDone; onDone = null;
     if (sp.supported && (synth.speaking || synth.pending)) synth.cancel();
+    if (BH.voice) BH.voice.stopAudio();
     if (sp.speaking) { sp.speaking = false; if (cb) cb(); }
   };
   window.addEventListener("hashchange", () => sp.stop());

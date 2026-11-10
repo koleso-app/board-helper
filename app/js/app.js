@@ -74,7 +74,7 @@
   BH.uiBusy = () => {
     const a = document.activeElement;
     const typing = a && a.matches && a.matches("main input:not([type=checkbox]), main textarea") && a.value;   // half-typed text would be lost by a redraw
-    return !!(sheet || dialog || spinning || typing);
+    return !!(sheet || dialog || ask || spinning || typing);
   };
   const notFound = text => `<div class="empty"><p>${esc(text)}</p><p style="margin-top:12px"><a class="btn" href="#/">На главную</a></p></div>`;
   const backLink = (href, text) => `<a class="back" href="${href}">${I.back}<span>${esc(text)}</span></a>`;
@@ -219,7 +219,7 @@
   function viewSetup(s, g) {
     const steps = BH.setupSteps(s);
     const done = steps.filter(st => s.setupDone[st.id]).length;
-    const speakAll = BH.speech.supported ? `<button class="btn sm" data-act="say-setup">${BH.speech.speaking ? I.stop + "Стоп" : I.speak + "Прочитать по порядку"}</button>` : "";
+    const speakAll = BH.speech.available() ? `<button class="btn sm" data-act="say-setup">${BH.speech.speaking ? I.stop + "Стоп" : I.speak + "Прочитать по порядку"}</button>` : "";
     return `<div class="stack">
       <div>${backLink("#/", "Партии")}
         <div class="page-head"><div>${sessionTitle(s, g)}<h1>Подготовка</h1><p class="sub">${done} из ${steps.length} готово</p></div><div class="row">${speakAll}<button class="icon-btn" data-act="delete-session" aria-label="Удалить партию" title="Удалить партию">${I.trash}</button></div></div></div>
@@ -232,7 +232,7 @@
             <p>${esc(st.text)}</p>
             <div class="row wrap">
               <label class="check"><input type="checkbox" data-act="setup-check" data-id="${esc(st.id)}" ${s.setupDone[st.id] ? "checked" : ""}> Готово</label>
-              ${BH.speech.supported ? `<button class="btn ghost sm" data-act="say-step" data-id="${esc(st.id)}">${I.speak}Прочитать</button>` : ""}
+              ${BH.speech.available() ? `<button class="btn ghost sm" data-act="say-step" data-id="${esc(st.id)}">${I.speak}Прочитать</button>` : ""}
             </div>
           </div>
         </section>`).join("")}
@@ -301,6 +301,7 @@
         </div>
       </div>
       <div class="game-bar">
+        <button class="btn big" data-act="ask-open" aria-label="Спросить по правилам голосом" title="Спросить по правилам">${MIC}</button>
         <button class="btn primary big" data-act="new-round">${I.plus}Записать раунд ${r + 1}</button>
         ${s.rounds.length ? `<button class="btn big" data-act="undo-round" aria-label="Отменить последний раунд" title="Отменить последний раунд">${I.undo}</button>` : ""}
       </div>
@@ -310,6 +311,7 @@
   function viewSessionRules(s, g) {
     return `<div class="stack">
       <div>${backLink("#/s/" + s.id + "/play", "К игре")}<div class="page-head"><div>${sessionTitle(s, g)}<h1>Правила</h1></div></div></div>
+      ${askButton(g)}
       ${BH.rulesUI.panel(g, rulesQuery)}
     </div>`;
   }
@@ -356,7 +358,7 @@
         <div class="game" style="cursor:default;border:none;padding:0;background:none"><span class="cover" style="width:80px;height:80px">${g.cover || ""}</span>
           <span><h1>${esc(g.name)}</h1><span>${esc(g.publisher || "")}${g.year ? ", " + g.year : ""} · от ${g.players.recommendedMin || g.players.min} игроков · ${esc(g.time || "")} · ${esc(g.age || "")}</span></span></div></div>
       ${g.tagline ? `<p>${esc(g.tagline)}</p>` : ""}
-      <div><button class="btn primary big" data-act="new-with" data-id="${g.id}">${I.plus}Новая партия</button></div>
+      <div class="actions"><button class="btn primary big" data-act="new-with" data-id="${g.id}">${I.plus}Новая партия</button>${askButton(g, true)}</div>
       ${BH.rulesUI.panel(g, "")}
     </div>`;
   }
@@ -437,10 +439,9 @@
     return `<div class="stack">
       <div>${backLink("#/", "Партии")}<div class="page-head"><div><h1>Настройки</h1><p class="sub">Версия ${esc(BH.version)}</p></div></div></div>
       ${viewSync()}
+      ${viewVoiceSettings()}
       <section class="panel stack">
         <div class="spread"><span>Тема</span><div class="seg">${seg("theme", "auto", "Как в системе")}${seg("theme", "light", "Светлая")}${seg("theme", "dark", "Тёмная")}</div></div>
-        <div class="spread"><span>Скорость чтения вслух</span><div class="seg">${seg("voiceRate", 0.85, "Медленно")}${seg("voiceRate", 1, "Обычно")}${seg("voiceRate", 1.2, "Быстро")}</div></div>
-        ${BH.speech.supported ? `<div class="spread"><span class="small muted">${BH.speech.hasRussian ? "Русский голос найден." : "Русский голос в системе не найден: текст прочитается голосом по умолчанию."}</span><button class="btn sm" data-act="say-test">${I.speak}Проверить голос</button></div>` : `<p class="small muted">Этот браузер не умеет читать вслух.</p>`}
       </section>
       <section class="panel stack">
         <h2>Копия данных</h2>
@@ -450,6 +451,106 @@
       </section>
       <p class="tiny muted">Помощник настолок ${esc(BH.version || "")} · правила в приложении пересказаны своими словами, полные правила — в книге правил игры.</p>
     </div>`;
+  }
+
+  /* ---------- voice assistant: settings ---------- */
+  function viewVoiceSettings() {
+    const V = BH.voice, st = S().settings, ready = V.ready();
+    const seg = (key, val, label) => `<button type="button" data-act="set" data-k="${key}" data-v="${val}" aria-pressed="${String(st[key]) === String(val)}">${label}</button>`;
+    return `<section class="panel stack" id="voice-panel">
+      <div class="spread"><h2>Голосовой помощник</h2>${ready ? '<span class="badge good">работает</span>' : '<span class="badge">не подключён</span>'}</div>
+      <p class="small muted">Спросите голосом во время партии: помощник найдёт ответ в книге правил, покажет цитату со страницей и прочитает ответ живым голосом. Работает через ваш Yandex Cloud и только для вас: доступ даёт подключённая выше синхронизация.</p>
+      ${ready ? "" : `<p class="note info small">${esc(V.why())}</p>`}
+      <label class="field">Голос
+        <select class="input" data-act="voice-name">${V.VOICES.map(([id, name]) => `<option value="${id}" ${id === V.voice() ? "selected" : ""}>${name}</option>`).join("")}</select></label>
+      <div class="actions"><button class="btn sm" data-act="say-test">${I.speak}Проверить голос</button></div>
+      ${ready ? "" : `<p class="tiny muted">Без помощника кнопки «Прочитать» читают голосом телефона${BH.speech.supported ? (BH.speech.hasRussian ? " (русский голос найден)" : " (русского голоса в системе нет)") : " — но этот браузер не умеет читать вслух"}.</p>
+        <div class="spread"><span class="small">Скорость голоса телефона</span><div class="seg">${seg("voiceRate", 0.85, "Медленно")}${seg("voiceRate", 1, "Обычно")}${seg("voiceRate", 1.2, "Быстро")}</div></div>`}
+      <details class="small"><summary style="cursor:pointer;font-weight:600">Адрес функции</summary>
+        <form class="row" data-form="voice-url" style="margin-top:8px"><input class="input" name="url" value="${esc(V.url())}" placeholder="https://functions.yandexcloud.net/…" autocapitalize="off" spellcheck="false" aria-label="Адрес функции"><button class="btn sm" type="submit">Сохранить</button></form>
+      </details>
+    </section>`;
+  }
+
+  const MIC = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
+  const askButton = (g, inline) => `${inline ? "" : '<div class="actions">'}<button class="btn big" data-act="ask-open" data-game="${esc(g.id)}">${MIC}Спросить голосом</button>${inline ? "" : "</div>"}`;
+
+  /* ---------- voice assistant: asking ---------- */
+  let ask = null;   // { gameId, sid, phase: listening|thinking|answer|error, text, result, error }
+  let rec = null, askCtl = null;
+  function situationOf(s) {
+    if (!s) return "";
+    const g = BH.game(s.gameId), lead = BH.player(BH.leaderAt(s, s.rounds.length));
+    return `раунд ${s.rounds.length + 1}, игроков ${s.players.length}${lead && g && g.rounds ? ", " + (g.rounds.leaderLabel || "ходит") + ": " + lead.name : ""}`;
+  }
+  function openAsk(gameId, sid) {
+    BH.speech.stop();
+    BH.clearToast();
+    ask = { gameId, sid, phase: "idle", text: "", result: null, error: "" };
+    if (!BH.voice.ready()) { ask.phase = "error"; ask.error = BH.voice.why(); renderOverlay(); return; }
+    renderOverlay();
+    if (BH.voice.canListen) startListening(); else { ask.phase = "type"; renderOverlay(); }
+  }
+  function startListening() {
+    stopListening();
+    ask.phase = "listening"; ask.text = ""; ask.error = "";
+    renderOverlay();
+    rec = BH.voice.listen({
+      partial: t => { if (!ask) return; ask.text = t; const el = BH.$("#ask-heard"); if (el) el.textContent = t || "Слушаю…"; },
+      error: m => { if (!ask) return; ask.phase = "type"; ask.error = m; renderOverlay(); },
+      done: t => { rec = null; if (!ask || ask.phase !== "listening") return; if (t) sendAsk(t); else { ask.phase = "type"; renderOverlay(); } },
+    });
+  }
+  function stopListening() { if (rec) { try { rec.abort(); } catch (e) {} rec = null; } }
+  async function sendAsk(question) {
+    question = String(question || "").trim().slice(0, 400);
+    if (!question || !ask) return;
+    ask.text = question; ask.phase = "thinking"; ask.error = "";
+    renderOverlay();
+    if (askCtl) askCtl.abort();
+    const ctl = askCtl = new AbortController();
+    try {
+      const s = ask.sid ? BH.session(ask.sid) : null;
+      const r = await BH.voice.ask(ask.gameId, question, situationOf(s), ctl.signal);
+      if (!ask || ctl !== askCtl) return;
+      ask.phase = "answer"; ask.result = r;
+      renderOverlay();
+      if (r.audio) { BH.voice.remember(r.answer, r.audio); BH.voice.play(r.audio).catch(() => {}); }
+    } catch (e) {
+      if (!ask || ctl !== askCtl || (e && e.name === "AbortError")) return;
+      // no connection: fall back to the cheat sheet on the device
+      const g = BH.game(ask.gameId), hits = g ? BH.searchRules(g, question).slice(0, 3) : [];
+      ask.phase = "error"; ask.error = e.message; ask.local = hits;
+      renderOverlay();
+    }
+  }
+  function closeAsk() { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; BH.voice.stopAudio(); ask = null; renderOverlay(); }
+
+  function askHTML() {
+    const a = ask, r = a.result;
+    const mic = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
+    let body = "";
+    if (a.phase === "listening") body = `<div class="ask-live"><span class="ask-pulse" aria-hidden="true">${mic}</span><p id="ask-heard" class="ask-heard">${esc(a.text || "Слушаю…")}</p><p class="tiny muted">Говорите вопрос, например: «можно ли сыграть заморозь на себя?»</p></div>`;
+    else if (a.phase === "thinking") body = `<div class="ask-live"><p class="ask-q">«${esc(a.text)}»</p><p class="muted">Ищу в правилах…</p></div>`;
+    else if (a.phase === "answer") body = `<p class="ask-q">«${esc(a.text)}»</p>
+        <div class="ask-answer ${r.found ? "" : "nf"}">${esc(r.answer)}</div>
+        ${r.quote ? `<blockquote class="ask-quote">${esc(r.quote)}${r.page ? `<cite>Книга правил, стр. ${esc(r.page)}</cite>` : ""}</blockquote>` : ""}
+        ${r.ttsError ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}`;
+    else if (a.phase === "error") body = `${a.text ? `<p class="ask-q">«${esc(a.text)}»</p>` : ""}<div class="note">${esc(a.error)}</div>
+        ${a.local && a.local.length ? `<p class="small muted">Нашёл в шпаргалке на телефоне:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true)).join("")}` : ""}`;
+    const typing = a.phase === "type" || a.phase === "answer" || (a.phase === "error" && BH.voice.ready());
+    const foot = (a.phase === "listening" ? `<button class="btn big block" data-act="ask-stop">Готово</button>` : "") +
+      (a.phase === "answer" && r.audio ? `<button class="btn big" data-act="ask-replay" aria-label="Прослушать ещё раз">${I.speak}</button>` : "") +
+      (BH.voice.ready() && BH.voice.canListen && a.phase !== "listening" && a.phase !== "thinking" ? `<button class="btn primary big" data-act="ask-again">${mic}${a.phase === "answer" ? "Ещё вопрос" : "Сказать"}</button>` : "");
+    return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ask-h">
+      <div class="sheet-head"><h2 id="ask-h">Вопрос по правилам</h2><button class="icon-btn" data-act="ask-close" aria-label="Закрыть">${I.x}</button></div>
+      <div class="sheet-body">
+        ${a.phase === "type" && a.error ? `<div class="note">${esc(a.error)}</div>` : ""}
+        ${body}
+        ${typing ? `<form class="row" data-form="ask"><input class="input" name="q" maxlength="400" placeholder="Или напишите вопрос" value="${a.phase === "type" ? esc(a.text) : ""}" aria-label="Вопрос"><button class="btn" type="submit">Спросить</button></form>` : ""}
+      </div>
+      ${foot ? `<div class="sheet-foot">${foot}</div>` : ""}
+    </div></div>`;
   }
 
   /* ---------- sync ---------- */
@@ -554,6 +655,12 @@
 
   /* ---------- overlays: round sheet and dialogs ---------- */
   function renderOverlay() {
+    if (ask && !dialog) {
+      const scroll = overlayRoot.querySelector(".sheet-body"), top = scroll ? scroll.scrollTop : 0;
+      overlayRoot.innerHTML = askHTML();
+      const body = overlayRoot.querySelector(".sheet-body"); if (body) body.scrollTop = top;
+      return;
+    }
     if (dialog) {
       overlayRoot.innerHTML = `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dlg-h" style="max-width:460px">
         <div class="sheet-head"><h2 id="dlg-h">${esc(dialog.title)}</h2></div>
@@ -779,7 +886,13 @@
         break;
       }
       case "close-sheet": sheet = null; renderOverlay(); break;
-      case "overlay-bg": if (e.target === el) { if (dialog) closeDialog(); else { sheet = null; renderOverlay(); } } break;
+      case "overlay-bg": if (e.target === el) { if (dialog) closeDialog(); else if (ask) closeAsk(); else { sheet = null; renderOverlay(); } } break;
+      /* voice questions */
+      case "ask-open": openAsk(el.dataset.game || (s && s.gameId), s ? s.id : null); break;
+      case "ask-close": closeAsk(); break;
+      case "ask-stop": if (rec) { try { rec.stop(); } catch (err) {} } break;
+      case "ask-again": BH.voice.stopAudio(); startListening(); break;
+      case "ask-replay": if (ask && ask.result && ask.result.audio) BH.voice.play(ask.result.audio).catch(() => {}); break;
       case "open-entry": sheet.open = el.dataset.p || null; renderOverlay(); { const n = overlayRoot.querySelector(`[data-entry="${el.dataset.p}"]`); if (n) n.scrollIntoView({ block: "nearest" }); } break;
       case "pick": {
         const en = sheet.entries[el.dataset.p], gid = el.dataset.g, v = JSON.parse(el.dataset.v);
@@ -840,6 +953,7 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
+    if (el.dataset.act === "voice-name") { BH.voice.setVoice(el.value); BH.toast("Голос: " + el.options[el.selectedIndex].text); }
     if (el.dataset.act === "sync-same") { const own = document.getElementById(el.dataset.target || "own-pass"); if (own) own.hidden = el.checked; }
     if (el.dataset.act === "import" && el.files && el.files[0]) {
       const file = el.files[0];
@@ -878,6 +992,12 @@
     const f = e.target, form = f.dataset.form;
     if (!form) return;
     e.preventDefault();
+    if (form === "ask") { const q = (f.elements.q.value || "").trim(); if (q && ask) { stopListening(); sendAsk(q); } return; }
+    if (form === "voice-url") {
+      const u = (f.elements.url.value || "").trim();
+      if (u && !/^https:\/\/functions\.yandexcloud\.net\/[A-Za-z0-9]+$/.test(u)) { BH.toast("Адрес должен быть вида https://functions.yandexcloud.net/…"); return; }
+      BH.voice.setUrl(u); render(); BH.toast(u ? "Адрес сохранён" : "Адрес убран"); return;
+    }
     if (form === "sync" || form === "sync-wheel") {
       const fd = new FormData(f), val = k => String(fd.get(k) || "");
       let cfg, pass2;
@@ -918,9 +1038,9 @@
   });
 
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape") { if (dialog) closeDialog(); else if (sheet) { sheet = null; renderOverlay(); } }
+    if (e.key === "Escape") { if (dialog) closeDialog(); else if (ask) closeAsk(); else if (sheet) { sheet = null; renderOverlay(); } }
     // keep Tab inside an open sheet or dialog
-    if (e.key === "Tab" && (sheet || dialog)) {
+    if (e.key === "Tab" && (sheet || dialog || ask)) {
       const items = BH.$$('button:not([disabled]), input:not([disabled]), [tabindex="0"]', overlayRoot).filter(x => x.offsetParent !== null);
       if (items.length) {
         const first = items[0], last = items[items.length - 1];
@@ -939,13 +1059,14 @@
     if (route().a !== "") showAllDone = false;
     if (route().a !== "players") editPlayer = null;
     sheet = null; dialog = null;
+    if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; ask = null; }
     render();
     window.scrollTo(0, 0);
   });
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.3.0";
+  BH.version = "0.4.0";
   applyTheme();
   if (route().a === "new") startDraft();
   render();

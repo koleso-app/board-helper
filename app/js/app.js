@@ -219,7 +219,7 @@
   function viewSetup(s, g) {
     const steps = BH.setupSteps(s);
     const done = steps.filter(st => s.setupDone[st.id]).length;
-    const speakAll = BH.speech.available() ? `<button class="btn sm" data-act="say-setup">${BH.speech.speaking ? I.stop + "Стоп" : I.speak + "Прочитать по порядку"}</button>` : "";
+    const speakAll = "";   // voice is only for players' questions
     return `<div class="stack">
       <div>${backLink("#/", "Партии")}
         <div class="page-head"><div>${sessionTitle(s, g)}<h1>Подготовка</h1><p class="sub">${done} из ${steps.length} готово</p></div><div class="row">${speakAll}<button class="icon-btn" data-act="delete-session" aria-label="Удалить партию" title="Удалить партию">${I.trash}</button></div></div></div>
@@ -232,7 +232,6 @@
             <p>${esc(st.text)}</p>
             <div class="row wrap">
               <label class="check"><input type="checkbox" data-act="setup-check" data-id="${esc(st.id)}" ${s.setupDone[st.id] ? "checked" : ""}> Готово</label>
-              ${BH.speech.available() ? `<button class="btn ghost sm" data-act="say-step" data-id="${esc(st.id)}">${I.speak}Прочитать</button>` : ""}
             </div>
           </div>
         </section>`).join("")}
@@ -464,7 +463,7 @@
       <label class="field">Голос
         <select class="input" data-act="voice-name">${V.VOICES.map(([id, name]) => `<option value="${id}" ${id === V.voice() ? "selected" : ""}>${name}</option>`).join("")}</select></label>
       <div class="actions"><button class="btn sm" data-act="say-test">${I.speak}Проверить голос</button></div>
-      ${ready ? "" : `<p class="tiny muted">Без помощника кнопки «Прочитать» читают голосом телефона${BH.speech.supported ? (BH.speech.hasRussian ? " (русский голос найден)" : " (русского голоса в системе нет)") : " — но этот браузер не умеет читать вслух"}.</p>
+      ${ready ? "" : `<p class="tiny muted">Пока помощник не подключён, ответы читает голос телефона${BH.speech.supported ? (BH.speech.hasRussian ? " (русский голос найден)" : " (русского голоса в системе нет)") : " — но этот браузер не умеет читать вслух"}.</p>
         <div class="spread"><span class="small">Скорость голоса телефона</span><div class="seg">${seg("voiceRate", 0.85, "Медленно")}${seg("voiceRate", 1, "Обычно")}${seg("voiceRate", 1.2, "Быстро")}</div></div>`}
       <details class="small"><summary style="cursor:pointer;font-weight:600">Адрес функции</summary>
         <form class="row" data-form="voice-url" style="margin-top:8px"><input class="input" name="url" value="${esc(V.url())}" placeholder="https://functions.yandexcloud.net/…" autocapitalize="off" spellcheck="false" aria-label="Адрес функции"><button class="btn sm" type="submit">Сохранить</button></form>
@@ -1068,7 +1067,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.4.1";
+  BH.version = "0.4.2";
   applyTheme();
   if (route().a === "new") startDraft();
   render();

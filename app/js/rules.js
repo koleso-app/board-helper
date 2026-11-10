@@ -48,32 +48,60 @@
       <summary><span class="fold-t">${esc(f.q)}</span></summary>
       <div class="fold-body"><p>${esc(f.a)}${srcBadge(f)}</p>${f.ref ? `<button class="btn ghost sm" data-act="goto-rule" data-id="${esc(f.ref)}">Раздел правил</button>` : ""}</div>
     </details>`;
-  const foldTools = which => `<div class="row"><button class="btn ghost sm" data-act="fold-all" data-in="${which}" data-open="1">Развернуть все</button><button class="btn ghost sm" data-act="fold-all" data-in="${which}" data-open="0">Свернуть</button></div>`;
+  // "Развернуть все" / "Свернуть" act on the topics and the items in them
+  const foldTools = which =>`<div class="row"><button class="btn ghost sm" data-act="fold-all" data-in="${which}" data-open="1">Развернуть все</button><button class="btn ghost sm" data-act="fold-all" data-in="${which}" data-open="0">Свернуть</button></div>`;
 
   // compact: used inside the play screen's own panel, so no panels of its own.
   // full: rules first, then the players' questions, every item folds
   R.full = (g, opts) => opts.compact
     ? `<div><span class="label">Частые вопросы</span>${g.faq.slice(0, 4).map(f => `<div class="qa"><b>${esc(f.q)}</b><p>${esc(f.a)}</p></div>`).join("")}</div>`
-    : `<section class="panel" id="fold-rules"><div class="spread" style="margin-bottom:4px"><h2>Правила</h2>${foldTools("fold-rules")}</div>
-        ${g.source ? `<p class="tiny muted" style="margin-bottom:6px">Пересказ своими словами по книге: ${esc(g.source)}. Страницы — как напечатаны в книге.</p>` : ""}
-        ${g.rules.map(r => R.ruleFold(r, g)).join("")}</section>
-      ${g.faq.length ? `<section class="panel" id="fold-faq"><div class="spread" style="margin-bottom:4px"><h2>Частые вопросы <span class="badge">${g.faq.length}</span></h2>${foldTools("fold-faq")}</div>
-        ${faqGrouped(g)}</section>` : ""}`;
+    : section("fold-rules", `Правила <span class="badge">${g.rules.length}</span>`,
+        (g.source ? `<p class="tiny muted" style="margin-bottom:6px">Пересказ своими словами по книге: ${esc(g.source)}. Страницы — как напечатаны в книге.</p>` : "") +
+        grouped("fold-rules", g.rules, g.ruleGroups, (grp, r) => grp.ids.includes(r.id), r => R.ruleFold(r, g),
+          // inside a topic the rules follow the topic's own order
+          (grp, list) => list.sort((x, y) => grp.ids.indexOf(x[0].id) - grp.ids.indexOf(y[0].id))))
+      + (g.faq.length ? section("fold-faq", `Частые вопросы <span class="badge">${g.faq.length}</span>`,
+        grouped("fold-faq", g.faq, g.faqGroups, (grp, f) => grp.refs.includes(f.ref), (f, i) => R.faqFold(f, i))) : "");
 
-  /* the game may sort its questions into topics by the rule they point at; the rest go last */
-  function faqGrouped(g) {
-    const items = g.faq.map((f, i) => [f, i]);
-    if (!g.faqGroups || !g.faqGroups.length) return items.map(([f, i]) => R.faqFold(f, i)).join("");
-    const used = new Set(), html = [];
-    const block = (title, list) => { if (list.length) html.push(`<h3 class="faq-group">${esc(title)}</h3>` + list.map(([f, i]) => R.faqFold(f, i)).join("")); };
-    for (const grp of g.faqGroups) {
-      const list = items.filter(([f, i]) => !used.has(i) && grp.refs.includes(f.ref));
+  /* a whole part of the page (rules, questions) folds too; the phone remembers which ones were closed */
+  const SEC_KEY = "board-helper-closed-sections";
+  const closedSecs = () => { try { return JSON.parse(localStorage.getItem(SEC_KEY) || "[]"); } catch (e) { return []; } };
+  R.rememberSection = d => {
+    try {
+      const set = new Set(closedSecs());
+      if (d.open) set.delete(d.id); else set.add(d.id);
+      localStorage.setItem(SEC_KEY, JSON.stringify([...set]));
+    } catch (e) { /* private mode: just don't remember */ }
+  };
+  const section = (id, title, body) => `<details class="panel fold-sec" id="${id}"${closedSecs().includes(id) ? "" : " open"}>
+      <summary><h2>${title}</h2></summary>
+      <div class="fold-sec-body">${foldTools(id)}${body}</div>
+    </details>`;
+
+  /* items sorted into topics given by the game (each topic folds too); whatever fits no topic goes last */
+  function grouped(secId, all, groups, fits, one, order) {
+    const items = all.map((x, i) => [x, i]);
+    if (!groups || !groups.length) return items.map(([x, i]) => one(x, i)).join("");
+    const used = new Set(), html = [], closed = closedSecs();
+    const block = (title, list, n) => {
+      if (!list.length) return;
+      const id = `${secId}-g${n}`;
+      html.push(`<details class="fold-grp" id="${id}"${closed.includes(id) ? "" : " open"}>
+        <summary><span class="fold-t">${esc(title)}</span><span class="badge">${list.length}</span></summary>
+        <div class="fold-grp-body">${list.map(([x, i]) => one(x, i)).join("")}</div></details>`);
+    };
+    groups.forEach((grp, n) => {
+      let list = items.filter(([x, i]) => !used.has(i) && fits(grp, x));
       list.forEach(([, i]) => used.add(i));
-      block(grp.title, list);
-    }
-    block("Другое", items.filter(([, i]) => !used.has(i)));
+      if (order) list = order(grp, list);
+      block(grp.title, list, n);
+    });
+    block("Другое", items.filter(([, i]) => !used.has(i)), "x");
     return html.join("");
   }
+
+  // "toggle" does not bubble, so listen while it travels down
+  document.addEventListener("toggle", e => { const d = e.target; if (d && d.matches && d.matches("details.fold-sec, details.fold-grp")) R.rememberSection(d); }, true);
 
   R.say = (g, id) => {
     const r = g.rules.find(x => x.id === id);

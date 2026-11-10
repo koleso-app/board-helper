@@ -56,5 +56,9 @@ const t = async (name, f) => { try { await f(); passed++; } catch (e) { console.
     const r = await listen([[[["можно ли сыграть", true]]], [[["можно ли сыграть заморозь", true]]]], 2);
     assert.strictEqual(r.text, "можно ли сыграть заморозь");
   });
+  await t("a restart that repeats only the tail and goes on does not double the words", async () => {
+    const r = await listen([[[["можно ли сыграть заморозь", true]]], [[["заморозь на себя", true]]]], 2);
+    assert.strictEqual(r.text, "можно ли сыграть заморозь на себя");
+  });
   console.log(`speech: ${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
 })();

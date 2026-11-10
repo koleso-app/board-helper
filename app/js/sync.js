@@ -174,8 +174,16 @@
   }
   /* what travels: everything but this device's own settings */
   const shared = s => ({ v: 1, players: s.players || [], places: s.places || [], sessions: s.sessions || [], answers: s.answers || [], meta: s.meta || { u: {}, del: {} } });
+  // the same records and stamps, whatever their order in the lists
+  const sameData = (a, b) => {
+    const A = recordMap(a), B = recordMap(b);
+    if (A.size !== B.size) return false;
+    for (const [k, v] of A) if (B.get(k) !== v) return false;
+    const none = { u: {}, del: {} };
+    return stable((a && a.meta) || none) === stable((b && b.meta) || none);
+  };
 
-  const lib = { FILE, FORMAT, ITER, seal, open, checkRepo, pull, push, merge, recordMap, stampChanges, stable, shared, SyncError };
+  const lib = { FILE, FORMAT, ITER, seal, open, checkRepo, pull, push, merge, recordMap, stampChanges, stable, shared, sameData, SyncError };
   if (typeof module === "object" && module.exports) module.exports = lib;
   else root.BHSync = lib;
 })(typeof window !== "undefined" ? window : globalThis);

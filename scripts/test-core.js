@@ -70,9 +70,9 @@ t("the 5-round challenge is an option for 1-2 players", () => {
   assert.ok(!BH.setupSteps(withOpt(2, false)).some(x => x.id === "challenge"));
   assert.ok(BH.setupSteps(withOpt(2, false)).some(x => x.id === "goal"));
   const s = withOpt(1, true); s.rounds = [1, 2, 3, 4].map(() => ({ scores: { p0: 50 } }));
-  assert.ok(g.finishNote(s).startsWith("Вызов выполнен"));
+  assert.ok(g.finishNote(s).text.startsWith("Вызов выполнен") && g.finishNote(s).ok);
   s.rounds.push({ scores: { p0: 1 } });
-  assert.ok(g.finishNote(s).startsWith("Вызов не выполнен"));
+  assert.ok(g.finishNote(s).text.startsWith("Вызов не выполнен") && !g.finishNote(s).ok);
   assert.strictEqual(g.finishNote(Object.assign(withOpt(1, false), { rounds: s.rounds })), "");
   assert.strictEqual(g.finishNote(mk(3)), "");
 });
@@ -97,6 +97,11 @@ t("every rule from the book has a page, except our own tie note", () => { for (c
 t("normalize keeps a default place", () => assert.strictEqual(BH._normalize({}).places[0].name, "Дома"));
 t("faq refs point at real sections", () => { for (const f of g.faq) if (f.ref) assert.ok(g.rules.some(r => r.id === f.ref), f.ref); });
 t("every faq topic points at real sections", () => { for (const grp of g.faqGroups || []) for (const r of grp.refs) assert.ok(g.rules.some(x => x.id === r), r); });
+t("every rule is in exactly one topic", () => {
+  const ids = (g.ruleGroups || []).flatMap(grp => grp.ids);
+  for (const r of g.rules) assert.strictEqual(ids.filter(x => x === r.id).length, 1, r.id);
+  assert.strictEqual(ids.length, g.rules.length);
+});
 t("faq sources are known and questions are not repeated", () => {
   for (const f of g.faq) if (f.src) assert.ok(BH.FAQ_SRC[f.src], f.src);
   assert.strictEqual(new Set(g.faq.map(f => f.q)).size, g.faq.length);

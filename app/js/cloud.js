@@ -71,25 +71,29 @@
     // the app asks to wait while a round is being entered or a dialog is open
     if (!cfgOverride && BH.uiBusy && BH.uiBusy()) { schedule(4000); return false; }
     busy = true; clearTimeout(timer); timerAt = 0;
-    const startSeq = seq;
+    let startSeq = seq;
     setStatus("busy");
     let ok = false;
     try {
       for (let attempt = 0; attempt < 4 && !ok; attempt++) {
         const { env, sha } = await L.pull(c);
         const remote = env ? BH._normalize(await L.open(env, c.pass)) : null;
+        // a change made while we were reading (a save still waiting 150 ms) gets its stamp now,
+        // so the merge sees it as newer instead of overwriting it; it travels with this send
+        BH.saveNow(); startSeq = seq;
         if (remote) {
           const merged = BH._normalize(L.merge(BH.state, remote));
           // compare like with like: the local data as it would look after the same normalize,
-          // otherwise every sync "finds" differences and swaps BH.state under the screens' feet
+          // and ignore the order of the lists — otherwise a sync "finds" differences that are not
+          // there and swaps BH.state under the screens' feet
           const local = BH._normalize(JSON.parse(JSON.stringify(BH.state)));
-          if (L.stable(L.shared(merged)) !== L.stable(L.shared(local))) {
+          if (!L.sameData(L.shared(merged), L.shared(local))) {
             const before = L.recordMap(local), after = L.recordMap(merged);
-            const news = before.size !== after.size || [...after].some(([k, j]) => before.get(k) !== j);   // not just a new order
+            const news = before.size !== after.size || [...after].some(([k, j]) => before.get(k) !== j);   // not just stamps
             BH.replaceFromSync(merged);
             if (BH.onRemoteData) BH.onRemoteData(news);
           }
-          if (L.stable(L.shared(remote)) === L.stable(L.shared(BH._normalize(JSON.parse(JSON.stringify(BH.state)))))) { ok = true; break; }
+          if (L.sameData(L.shared(remote), L.shared(BH._normalize(JSON.parse(JSON.stringify(BH.state)))))) { ok = true; break; }
         }
         ok = await L.push(c, await L.seal(L.shared(BH.state), c.pass, env && env.salt), sha);
       }
@@ -100,13 +104,18 @@
     } catch (e) {
       const offline = e && (e.code === "offline" || e.code === "rate");
       setStatus(offline ? "offline" : "error", (e && e.message) || String(e));
-      // a server hiccup: try again in a couple of minutes (offline waits for the "online" event instead)
-      if (!offline && !cfgOverride && C.cfg && C.pending) schedule(2 * 60 * 1000);
+      // a server hiccup: try again in a couple of minutes; GitHub's request limit: in a few minutes
+      // (no connection waits for the "online" event instead)
+      if (!cfgOverride && C.cfg && C.pending) {
+        if (e && e.code === "rate") schedule(5 * 60 * 1000);
+        else if (!offline) schedule(2 * 60 * 1000);
+      }
       if (cfgOverride) { busy = false; throw e; }
     }
     busy = false;
     if (again) { again = false; schedule(800); }
-    else if (C.cfg && C.pending && seq !== startSeq) schedule(FALLBACK_MS);   // changed meanwhile: waits for the next key moment
+    // changed meanwhile: waits for the next key moment (a retry already planned stays as it is)
+    else if (C.cfg && C.pending && seq !== startSeq && !timerAt) schedule(FALLBACK_MS);
     return ok;
   };
 

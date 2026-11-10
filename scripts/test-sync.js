@@ -49,6 +49,8 @@ function device(name, storage) {
 }
 const CFG = { owner: "me", repo: "koleso-data", token: "good-token", pass: "секретный пароль" };
 const names = d => d.BH.state.players.map(p => p.name).sort().join(",");
+const PALETTE = ["#D9483B", "#2F74D0", "#22995A", "#D9A21B", "#8A4FD3"];
+const BH_COLOR = c => PALETTE.find(x => x !== c);   // some other valid colour
 const remotePlain = () => JSON.stringify(gh.files["nastolki.enc.json"] || "");
 async function addGame(d, winnerName) {
   const BH = d.BH, p = BH.state.players.find(x => x.name === winnerName) || BH.addPlayer(winnerName);
@@ -172,6 +174,26 @@ async function t(name, fn) { try { await fn(); passed++; } catch (e) { console.e
     assert.strictEqual(A.BH.state, before, "BH.state is the same object, so open screens keep working");
     delete A.BH.onRemoteData;
     await B.BH.cloud.syncNow();
+  });
+  await t("an edit made while a sync is reading (save still waiting) is not lost", async () => {
+    const p = A.BH.state.players.find(x => x.name === "Глеб");
+    const color = BH_COLOR(p.color);
+    const run = A.BH.cloud.syncNow();          // reading GitHub...
+    p.color = color; A.BH.save();              // ...while the player's colour is changed (saved 150 ms later)
+    await run; await A.BH.cloud.syncNow();
+    assert.strictEqual(A.BH.player(p.id).color, color);
+    await B.BH.cloud.syncNow();
+    assert.strictEqual(B.BH.player(p.id).color, color);
+  });
+  await t("places in another order are not 'new data': nothing is swapped", async () => {
+    A.BH.state.places.push({ id: "zzzz1", name: "Дача" }, { id: "aaaa1", name: "Клуб" }); A.BH.saveNow();
+    const before = A.BH.state;
+    await A.BH.cloud.syncNow();                 // the merge sorts places by id, the app keeps them as added
+    assert.strictEqual(A.BH.state, before, "BH.state stays the same object");
+    await B.BH.cloud.syncNow();
+    const w = gh.writes;
+    await A.BH.cloud.syncNow();
+    assert.strictEqual(gh.writes, w, "and nothing more is written");
   });
   await t("nothing to send means no write", async () => {
     await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();

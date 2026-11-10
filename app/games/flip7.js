@@ -101,8 +101,8 @@
     finishNote(s) {
       if (s.players.length > 2 || !(s.opts && s.opts.challenge) || BH.hasFinal(s)) return "";
       const n = s.rounds.length, best = Math.max(0, ...Object.values(BH.totals(s)));
-      if (best < 200) return `Вызов не выполнен: партию завершили на ${best} ${BH.plural(best, "очке", "очках", "очках")}, до 200 не дошли.`;
-      return n < 5 ? `Вызов выполнен: 200 очков за ${n} ${BH.plural(n, "раунд", "раунда", "раундов")}.` : `Вызов не выполнен: понадобилось ${n} ${BH.plural(n, "раунд", "раунда", "раундов")}, а нужно меньше пяти.`;
+      if (best < 200) return { ok: false, text: `Вызов не выполнен: партию завершили на ${best} ${BH.plural(best, "очке", "очках", "очках")}, до 200 не дошли.` };
+      return n < 5 ? { ok: true, text: `Вызов выполнен: 200 очков за ${n} ${BH.plural(n, "раунд", "раунда", "раундов")}.` } : { ok: false, text: `Вызов не выполнен: понадобилось ${n} ${BH.plural(n, "раунд", "раунда", "раундов")}, а нужно меньше пяти.` };
     },
 
     calc: {
@@ -186,6 +186,13 @@
         body: "<p>Играют от 3 человек. Если вас больше 18, правила рекомендуют вторую колоду.</p>" },
       { id: "solo", page: 12, title: "Вдвоём или в одиночку", keys: "вдвоем двое один одиночку соло вызов",
         body: "<p>Книга предлагает вызов: сможете ли вы набрать 200 очков меньше чем за 5 раундов?</p>" },
+    ],
+
+    ruleGroups: [
+      { title: "Цель и состав", ids: ["goal", "deck", "many", "solo"] },
+      { title: "Раунд и ход", ids: ["deal", "turn", "active", "example", "round-end", "next-round", "deck-out"] },
+      { title: "Карты действий", ids: ["target", "freeze", "flip3", "second"] },
+      { title: "Очки", ids: ["bust", "flip7", "mods", "score", "tie"] },
     ],
 
     faqGroups: [

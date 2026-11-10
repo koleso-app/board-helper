@@ -50,16 +50,22 @@ const DAILY = { ask: Number(process.env.DAILY_ASKS) || 150, tts: Number(process.
 const forbidden = () => Object.assign(new Error("Нет доступа"), { status: 403, code: "forbidden" });
 async function checkCaller(gh) {
   if (!ENV.allowedRepo) throw Object.assign(new Error("Функция не настроена: нет ALLOWED_REPO"), { status: 500, code: "config" });
-  if (!gh || typeof gh.token !== "string" || gh.token.length < 20 || gh.token.length > 255) throw forbidden();
+  // GitHub tokens are letters, digits and "_": anything else (spaces around it…) is refused outright,
+  // so one token cannot pose as many different ones
+  const token = gh && typeof gh.token === "string" ? gh.token : "";
+  if (!/^[A-Za-z0-9_]{20,255}$/.test(token)) throw forbidden();
   const repo = `${gh.owner || ""}/${gh.repo || ""}`.toLowerCase();
   if (repo !== ENV.allowedRepo) throw forbidden();
-  const key = crypto.createHash("sha256").update(gh.token).digest("hex");
+  const key = crypto.createHash("sha256").update(token).digest("hex");
   const now = Date.now();
   if ((deniedCache.get(key) || 0) > now) throw forbidden();
   if ((authCache.get(key) || 0) > now) return key;
   const res = await fetch(`https://api.github.com/repos/${ENV.allowedRepo}`, {
-    headers: { Authorization: "Bearer " + gh.token.trim(), Accept: "application/vnd.github+json", "User-Agent": "board-helper-voice" },
+    headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github+json", "User-Agent": "board-helper-voice" },
   });
+  // GitHub itself failing or rate-limiting is not a "no": do not lock the owner out for 5 minutes
+  const limited = res.status === 429 || (res.status === 403 && res.headers && res.headers.get && res.headers.get("x-ratelimit-remaining") === "0");
+  if (res.status >= 500 || limited) throw Object.assign(new Error("GitHub сейчас не отвечает, попробуйте через минуту"), { status: 503, code: "github" });
   const info = res.ok ? await res.json() : null;
   if (!info || !info.private || String(info.full_name).toLowerCase() !== ENV.allowedRepo) {
     deniedCache.set(key, now + 5 * 60 * 1000);
@@ -69,9 +75,11 @@ async function checkCaller(gh) {
   authCache.set(key, now + 10 * 60 * 1000);
   return key;
 }
-// counts one use; over the daily cap -> 429 (per running instance: a safety net, with a budget alert in the cloud as the real cap)
+// counts one use; over the daily cap -> 429. Only the owner gets this far, so the count is shared by
+// every token (a second token is no way round it). It lives in the running instance: the function is
+// limited to one instance in the cloud, and the budget alert there is the final safety net.
 function spend(key, kind) {
-  const day = new Date().toISOString().slice(0, 10), k = key + "|" + day + "|" + kind, n = (usage.get(k) || 0) + 1;
+  const day = new Date().toISOString().slice(0, 10), k = "all|" + day + "|" + kind, n = (usage.get(k) || 0) + 1;
   if (n > DAILY[kind]) throw Object.assign(new Error("Сегодняшний лимит помощника исчерпан. Завтра снова заработает."), { status: 429, code: "quota" });
   usage.set(k, n);
   if (usage.size > 1000) for (const old of [...usage.keys()].filter(x => !x.includes("|" + day + "|"))) usage.delete(old);
@@ -126,9 +134,11 @@ function parseAnswer(content) {
   const m = String(content).match(/\{[\s\S]*\}/);
   let j = null;
   try { j = JSON.parse(m ? m[0] : content); } catch (e) {}
-  if (!j || typeof j.answer !== "string") return { answer: String(content).trim().slice(0, 600), quote: "", page: null, found: true };
+  if (!j || typeof j !== "object") return { answer: String(content).trim().slice(0, 600), quote: "", page: null, found: true };
+  // JSON without a usable answer: "nothing found", never the raw JSON read aloud and saved
+  if (typeof j.answer !== "string") return { answer: NOT_FOUND, quote: "", page: null, found: false };
   const page = Number.isInteger(j.page) && j.page > 0 && j.page < 500 ? j.page : null;
-  const found = j.found !== false;
+  const found = !(j.found === false || j.found === "false");
   // models sometimes echo the JSON fields into the sentence ("found=false, ...")
   let answer = j.answer.replace(/\b(found|quote|page)\s*[=:]\s*\S+[,.;]?\s*/gi, "").trim();
   if (!found || !answer) answer = NOT_FOUND;
@@ -186,7 +196,8 @@ module.exports.handler = async function (event, context) {
       const extra = String(req.situation || "").slice(0, 300);
       const a = await askModel(iam, rules, question, extra, req.game);
       let audio = null;
-      if (req.speak !== false && a.answer && a.found) { try { audio = await speak(iam, a.answer.slice(0, LIMITS.tts), req.voice); } catch (e) { a.ttsError = e.message; } }
+      // the spoken answer counts against the speech cap too; over it, the answer comes as text only
+      if (req.speak !== false && a.answer && a.found) { try { spend(who, "tts"); audio = await speak(iam, a.answer.slice(0, LIMITS.tts), req.voice); } catch (e) { a.ttsError = e.message; } }
       return reply(200, Object.assign(a, { audio }), origin);
     }
     return fail(400, "action", "Неизвестное действие", origin);

@@ -137,6 +137,12 @@
       const la = a.toLowerCase(), lb = b.toLowerCase();
       if (lb.startsWith(la)) return b;          // the new text already contains the old one
       if (la.endsWith(lb)) return a;            // the same phrase again (a restart repeating the last words)
+      // a restart that repeats only the tail and goes on: "…сыграть заморозь" + "заморозь на себя"
+      const wa = a.split(" "), wb = b.split(" ");
+      for (let k = Math.min(wa.length, wb.length - 1); k >= 1; k--) {
+        const tail = wa.slice(-k).join(" ").toLowerCase();
+        if (tail.length >= 4 && tail === wb.slice(0, k).join(" ").toLowerCase()) return a + " " + wb.slice(k).join(" ");
+      }
       return a + " " + b;
     };
     const text = () => join(kept, live);

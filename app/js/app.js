@@ -35,14 +35,21 @@
   /* Overlays (round sheet, dialogs, voice question) add one history entry, so the phone's Back
      closes the overlay instead of leaving the screen. Navigating from inside an overlay first
      drops that entry, so it never lingers in the history. */
-  let ovPushed = false, pendingReplace = null;
+  /* Every app entry in the history remembers the screen right before it ({back: "#/..."}, null for
+     the first one). "Back" links and "go back after saving" use it to step back instead of piling up
+     new entries, and never leave the app by mistake. */
+  let ovPushed = false, pendingReplace = null, carry = null;   // carry: {back} for the entry a replace creates
+  const SCREENS = ["setup", "first", "play", "rules", "done", "edit"];
   const urlOf = h => location.pathname + location.search + h;
-  function ovOpen() { if (!ovPushed) { history.pushState({ ov: 1 }, ""); ovPushed = true; } }
+  const normHash = h => (!h || h === "#" || h === "#/") ? "#/" : h;
+  const backOf = () => { const st = history.state; return st && typeof st.back === "string" ? st.back : null; };
+  const backIs = h => backOf() !== null && normHash(backOf()) === normHash(h);
+  function ovOpen() { if (!ovPushed) { history.pushState({ ov: 1, back: backOf() }, ""); ovPushed = true; } }
   function ovSync() {   // all overlays closed by a button: remove their history entry
     if (ovPushed && !sheet && !dialog && !ask) { ovPushed = false; if (history.state && history.state.ov) history.back(); }
   }
   window.addEventListener("popstate", e => {
-    if (pendingReplace) { const h = pendingReplace; pendingReplace = null; location.replace(urlOf(h)); return; }
+    if (pendingReplace) { const h = pendingReplace; pendingReplace = null; carry = { back: backOf() }; location.replace(urlOf(h)); return; }
     if (ovPushed && !(e.state && e.state.ov)) {   // Back pressed while an overlay is open: just close it
       ovPushed = false;
       if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; BH.voice.stopAudio(); ask = null; }
@@ -56,9 +63,14 @@
   };
   // same, but the current screen is dropped from the history: "back" will not return to it
   // (used after a game is created, so "back" cannot bring up the form and create it twice)
+  // if the screen we go to is the one right before this one, just step back to it (no duplicate entries)
   const goReplace = h => {
+    if (backIs(h) && normHash(location.hash) !== normHash(h)) {
+      if (ovPushed) { ovPushed = false; history.go(-2); } else history.back();
+      return;
+    }
     if (ovPushed) { ovPushed = false; pendingReplace = h; history.back(); return; }   // drop the overlay entry, then replace the screen
-    if (location.hash === h) render(); else location.replace(urlOf(h));
+    if (location.hash === h) render(); else { carry = { back: backOf() }; location.replace(urlOf(h)); }
   };
   function route() {
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
@@ -275,7 +287,7 @@
       if (s.first && !s.players.includes(s.first)) s.first = null;
       BH.saveNow(); draft = null;
       // came here from the setup screen: step back to it, so the history does not grow setup → edit → setup
-      if (prevHash === "#/s/" + s.id + "/setup") history.back(); else goReplace("#/s/" + s.id + "/setup");
+      goReplace("#/s/" + s.id + "/setup");   // steps back to the setup screen when that is where we came from
       BH.toast("Партия обновлена");
       return;
     }
@@ -318,6 +330,9 @@
     if (s.status === "finished" && sub !== "done" && sub !== "rules") sub = "done";
     else if (s.status !== "finished" && sub === "done") sub = home;
     else if (s.status === "playing" && (sub === "setup" || sub === "edit" || (sub === "first" && s.rounds.length))) sub = "play";
+    // the address names the screen really shown, so "back" checks compare like with like
+    const canon = "#/s/" + s.id + "/" + sub;
+    if (SCREENS.includes(sub) && location.hash !== canon) history.replaceState(history.state, "", urlOf(canon));
     if (sub === "edit") {
       if (s.status === "finished" || s.status === "playing" || s.rounds.length) return { html: notFound("Партия уже идёт — её состав больше не меняется.") };
       if (!draft || draft.editId !== s.id) startDraft(null, s);
@@ -447,7 +462,7 @@
         ${sessionTitle(s, g)}
         <h1>${w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена"}</h1>
         <p class="muted">${s.rounds.length ? `${s.rounds.length} ${BH.plural(s.rounds.length, "раунд", "раунда", "раундов")}` : "записана после игры"}${dur && s.rounds.length ? " · " + dur : ""} · ${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""}</p>
-        ${g.finishNote && g.finishNote(s) ? `<p class="badge ${s.rounds.length < 5 ? "good" : "warn"}" style="font-size:14px;padding:6px 12px">${esc(g.finishNote(s))}</p>` : ""}
+        ${(() => { const n = g.finishNote && g.finishNote(s); if (!n) return ""; const note = typeof n === "string" ? { text: n, ok: true } : n; return `<p class="badge ${note.ok ? "good" : "warn"}" style="font-size:14px;padding:6px 12px">${esc(note.text)}</p>`; })()}
       </section>
       <section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
         <div class="list">${st.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<div class="item"><span class="place-n">${x.place}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div><span class="num" style="font-size:20px;font-weight:700">${x.total}</span></div>`; }).join("")}</div>
@@ -1004,7 +1019,7 @@
         if (s.status !== "playing") { s.status = "playing"; s.startedAt = Date.now(); }
         BH.saveNow(); BH.wheel.reset();
         // opened from the game screen ("Первый"): step back to it; from setup: the wheel leaves the history
-        if (prevHash === "#/s/" + s.id + "/play") history.back(); else goReplace("#/s/" + s.id + "/play");
+        goReplace("#/s/" + s.id + "/play");
         break;
 
       /* play */
@@ -1062,10 +1077,10 @@
           const out = BH.$("#rules-out"); if (out && g) { out.innerHTML = BH.rulesUI.full(g, {}); BH.assets.hydrate(out); }
           n = BH.$("details#rule-" + el.dataset.id);
         }
-        if (n) { n.open = true; n.classList.add("hit"); n.scrollIntoView({ block: "start", behavior: "smooth" }); }
+        if (n) { for (let p = n.parentElement; p; p = p.parentElement) if (p.matches("details.fold-sec, details.fold-grp")) p.open = true; n.open = true; n.classList.add("hit"); n.scrollIntoView({ block: "start", behavior: "smooth" }); }
         break;
       }
-      case "fold-all": { const box = document.getElementById(el.dataset.in); if (box) box.querySelectorAll("details.fold").forEach(d => { d.open = el.dataset.open === "1"; }); break; }
+      case "fold-all": { const box = document.getElementById(el.dataset.in); if (box) box.querySelectorAll("details.fold, details.fold-grp").forEach(d => { d.open = el.dataset.open === "1"; }); break; }
 
       /* players */
       case "edit-player": editPlayer = el.dataset.id || null; render(); break;
@@ -1085,8 +1100,7 @@
       case "reload": location.reload(); break;
       case "nav-back": {
         const href = el.dataset.href;
-        const same = prevHash === href || (href === "#/" && (prevHash === "" || prevHash === "#/" || prevHash === "#"));
-        if (same && history.length > 1) { e.preventDefault(); history.back(); }
+        if (backIs(href)) { e.preventDefault(); history.back(); }
         break;   // otherwise the link works as a normal link
       }
       case "sync-now": BH.cloud.syncNow(); break;
@@ -1218,6 +1232,9 @@
 
   window.addEventListener("hashchange", e => {
     prevHash = e.oldURL && e.oldURL.includes("#") ? "#" + e.oldURL.split("#")[1] : "";
+    // a new entry (a link, or a replace): remember the screen before it; entries we step back to keep theirs
+    if (!history.state || !("back" in history.state)) history.replaceState({ back: carry ? carry.back : prevHash }, "");
+    carry = null;
     // key moments for the sync: a game form or the players / settings page is left,
     // a game reaches its result, or we are back on the home screen (e.g. after a delete)
     {
@@ -1239,8 +1256,11 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.7.0";
+  BH.version = "0.7.1";
   applyTheme();
+  // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
+  if (history.state && history.state.ov) history.back();
+  else if (!history.state || !("back" in history.state)) history.replaceState({ back: null }, "");
   // a file that failed to load (e.g. a 503 while the site publishes an update) must not leave a half-working app
   if (route().a === "new") startDraft();
   render();

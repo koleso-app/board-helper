@@ -61,6 +61,22 @@ t("search: x2", () => assert.ok(BH.searchRules(g, "удваивает ли x2 м
 t("search: freeze on myself", () => assert.ok(BH.searchRules(g, "можно ли freeze на себя").slice(0, 3).some(h => /Freeze/.test(h.title))));
 t("search: running out of cards", () => assert.ok(BH.searchRules(g, "закончилась колода").slice(0, 3).some(h => /Колода закончилась|Колода закончилась посреди/.test(h.title))));
 t("search: dealer next round", () => assert.ok(BH.searchRules(g, "кто сдаёт следующим").length > 0));
+t("solo / two players get the 5-round challenge", () => {
+  assert.ok(BH.setupSteps(mk(2)).some(x => x.id === "challenge"));
+  assert.ok(!BH.setupSteps(mk(2)).some(x => x.id === "goal"));
+  assert.ok(!BH.setupSteps(mk(4)).some(x => x.id === "challenge"));
+  const s = mk(1); s.rounds = [1, 2, 3, 4].map(() => ({ scores: { p0: 50 } }));
+  assert.ok(g.finishNote(s).startsWith("Вызов выполнен"));
+  s.rounds.push({ scores: { p0: 1 } });
+  assert.ok(g.finishNote(s).startsWith("Вызов не выполнен"));
+  assert.strictEqual(g.finishNote(mk(3)), "");
+});
+t("search by the rulebook's words", () => {
+  assert.ok(BH.searchRules(g, "что такое хит").slice(0, 2).some(h => /Хит/.test(h.title)));
+  assert.ok(BH.searchRules(g, "заморозь").slice(0, 3).some(h => /Заморозь/.test(h.title)));
+  assert.ok(BH.searchRules(g, "вторая попытка").slice(0, 3).some(h => /Вторая попытка/.test(h.title)));
+});
+t("every rule from the book has a page, except our own tie note", () => { for (const r of g.rules) if (r.id !== "tie") assert.ok(r.page > 0, r.id); });
 t("normalize keeps a default place", () => assert.strictEqual(BH._normalize({}).places[0].name, "Дома"));
 t("faq refs point at real sections", () => { for (const f of g.faq) if (f.ref) assert.ok(g.rules.some(r => r.id === f.ref), f.ref); });
 

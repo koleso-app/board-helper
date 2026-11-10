@@ -17,7 +17,7 @@
   const plain = html => html.replace(/<li>/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
   R.ruleHTML = (r, q, hit) => `<section class="rule ${hit ? "hit" : ""}" id="rule-${esc(r.id)}">
-      <div class="spread"><h3>${esc(r.title)}</h3>${BH.speech.supported ? `<button class="icon-btn" data-act="say-rule" data-id="${esc(r.id)}" aria-label="Прочитать вслух: ${esc(r.title)}" title="Прочитать вслух">${BH.ICON.speak}</button>` : ""}</div>
+      <div class="spread"><h3>${esc(r.title)}${r.page ? ` <span class="badge" title="Страница в книге правил">стр. ${esc(r.page)}</span>` : ""}</h3>${BH.speech.supported ? `<button class="icon-btn" data-act="say-rule" data-id="${esc(r.id)}" aria-label="Прочитать вслух: ${esc(r.title)}" title="Прочитать вслух">${BH.ICON.speak}</button>` : ""}</div>
       ${mark("<div>" + r.body + "</div>", q || "")}
     </section>`;
 
@@ -42,7 +42,7 @@
     ? `<div><span class="label">Частые вопросы</span>${g.faq.slice(0, 4).map(f => `<div class="qa"><b>${esc(f.q)}</b><p>${esc(f.a)}</p></div>`).join("")}</div>`
     : `${g.faq.length ? `<section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Частые вопросы</h2><span class="badge">${g.faq.length}</span></div>
       ${g.faq.map(f => `<div class="qa"><b>${esc(f.q)}</b><p>${esc(f.a)}</p></div>`).join("")}</section>` : ""}
-    <section class="panel"><h2 style="margin-bottom:4px">Правила кратко</h2>${g.rules.map(r => R.ruleHTML(r, "")).join("")}</section>`;
+    <section class="panel"><h2 style="margin-bottom:4px">Правила кратко</h2>${g.source ? `<p class="tiny muted">Пересказ своими словами по книге: ${esc(g.source)}. Страницы — как напечатаны в книге.</p>` : ""}${g.rules.map(r => R.ruleHTML(r, "")).join("")}</section>`;
 
   R.say = (g, id) => {
     const r = g.rules.find(x => x.id === id);

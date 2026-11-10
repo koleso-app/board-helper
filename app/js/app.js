@@ -171,7 +171,7 @@
         ${n ? `<section class="panel"><div class="label" style="margin-bottom:4px">За столом</div>${draft.players.map((id, i) => { const p = BH.player(id); return `<div class="seat"><span class="n">${i + 1}</span>${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
             <span class="mv"><button class="icon-btn" data-act="seat-up" data-i="${i}" aria-label="Выше" ${i ? "" : "disabled"}>${I.up}</button><button class="icon-btn" data-act="seat-down" data-i="${i}" aria-label="Ниже" ${i < n - 1 ? "" : "disabled"}>${I.down}</button><button class="icon-btn" data-act="toggle-player" data-id="${id}" aria-label="Убрать">${I.x}</button></span></div>`; }).join("")}</section>` : ""}
         ${n && n < pmin ? `<div class="note">Для ${esc(g.name)} нужно минимум ${pmin} ${BH.plural(pmin, "игрок", "игрока", "игроков")}.</div>` : ""}
-        ${n >= pmin && g.players.recommendedMin && n < g.players.recommendedMin ? `<div class="note">По правилам ${esc(g.name)} рассчитан на ${g.players.recommendedMin} и больше игроков, но вдвоём тоже можно попробовать.</div>` : ""}
+        ${n >= pmin && g.players.recommendedMin && n < g.players.recommendedMin ? `<div class="note">${esc(g.playersNote || `По правилам ${g.name} рассчитан на ${g.players.recommendedMin} и больше игроков.`)}</div>` : ""}
         ${n > pmax ? `<div class="note">Для ${esc(g.name)} не больше ${pmax} игроков.</div>` : ""}`;
       canNext = n >= pmin && n <= pmax;
       nextLabel = "Создать партию";
@@ -326,6 +326,7 @@
         ${sessionTitle(s, g)}
         <h1>${w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена"}</h1>
         <p class="muted">${s.rounds.length} ${BH.plural(s.rounds.length, "раунд", "раунда", "раундов")}${dur ? " · " + dur : ""} · ${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""}</p>
+        ${g.finishNote && g.finishNote(s) ? `<p class="badge ${s.rounds.length < 5 ? "good" : "warn"}" style="font-size:14px;padding:6px 12px">${esc(g.finishNote(s))}</p>` : ""}
       </section>
       <section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
         <div class="list">${st.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<div class="item"><span class="place-n">${x.place}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div><span class="num" style="font-size:20px;font-weight:700">${x.total}</span></div>`; }).join("")}</div>
@@ -944,7 +945,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.2.2";
+  BH.version = "0.3.0";
   applyTheme();
   if (route().a === "new") startDraft();
   render();

@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.log
 .claude/
+# rulebooks and other copyrighted sources: kept locally, never published
+sources/

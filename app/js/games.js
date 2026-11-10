@@ -16,6 +16,9 @@
   };
   BH.game = id => BH.games.find(g => g.id === id) || null;
 
+  /* where a FAQ answer comes from, when it is not the rulebook itself */
+  BH.FAQ_SRC = { author: "ответ автора игры", players: "так решают игроки", disputed: "спорный вопрос", house: "домашнее правило" };
+
   /* context handed to a game's conditions: how many players, which expansions */
   BH.ctxOf = s => ({ players: s.players.length, exp: new Set(s.exp), has: id => s.exp.includes(id), opt: id => !!(s.opts && s.opts[id]) });
 

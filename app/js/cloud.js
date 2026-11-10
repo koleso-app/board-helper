@@ -80,23 +80,28 @@
         const remote = env ? BH._normalize(await L.open(env, c.pass)) : null;
         if (remote) {
           const merged = BH._normalize(L.merge(BH.state, remote));
-          if (L.stable(L.shared(merged)) !== L.stable(L.shared(BH.state))) {
-            const before = L.recordMap(BH.state), after = L.recordMap(merged);
+          // compare like with like: the local data as it would look after the same normalize,
+          // otherwise every sync "finds" differences and swaps BH.state under the screens' feet
+          const local = BH._normalize(JSON.parse(JSON.stringify(BH.state)));
+          if (L.stable(L.shared(merged)) !== L.stable(L.shared(local))) {
+            const before = L.recordMap(local), after = L.recordMap(merged);
             const news = before.size !== after.size || [...after].some(([k, j]) => before.get(k) !== j);   // not just a new order
             BH.replaceFromSync(merged);
             if (BH.onRemoteData) BH.onRemoteData(news);
           }
-          if (L.stable(L.shared(remote)) === L.stable(L.shared(BH.state))) { ok = true; break; }
+          if (L.stable(L.shared(remote)) === L.stable(L.shared(BH._normalize(JSON.parse(JSON.stringify(BH.state)))))) { ok = true; break; }
         }
         ok = await L.push(c, await L.seal(L.shared(BH.state), c.pass, env && env.salt), sha);
       }
       if (ok) {
         if (seq === startSeq) setPending(false);     // nothing new happened while sending
         setStatus("ok");
-      } else setStatus("error", "Другое устройство как раз меняет данные. Попробую ещё раз.");
+      } else { setStatus("error", "Другое устройство как раз меняет данные. Попробую ещё раз."); schedule(60 * 1000); }
     } catch (e) {
       const offline = e && (e.code === "offline" || e.code === "rate");
       setStatus(offline ? "offline" : "error", (e && e.message) || String(e));
+      // a server hiccup: try again in a couple of minutes (offline waits for the "online" event instead)
+      if (!offline && !cfgOverride && C.cfg && C.pending) schedule(2 * 60 * 1000);
       if (cfgOverride) { busy = false; throw e; }
     }
     busy = false;

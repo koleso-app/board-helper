@@ -73,6 +73,20 @@ const t = async (name, f) => { try { await f(); passed++; } catch (e) { console.
     assert.strictEqual((await call({ action: "ask", game: "nope", question: "x", gh })).statusCode, 404);
     assert.strictEqual((await call({ action: "tts", text: "x".repeat(1201), gh })).statusCode, 400);
   });
+  await t("a junk token is remembered: the second try does not even reach GitHub", async () => {
+    const bad = { owner: "Owner", repo: "koleso-data", token: "junk-token-abcdefghijklmnop" };
+    await call({ action: "tts", text: "x", gh: bad });
+    const n = calls.length;
+    const r = await call({ action: "tts", text: "x", gh: bad });
+    assert.strictEqual(r.statusCode, 403); assert.strictEqual(calls.length, n);
+  });
+  await t("a daily cap stops spending even with a valid token", async () => {
+    const gh2 = { owner: "Owner", repo: "koleso-data", token: "good-token-0123456789" };
+    let last;
+    for (let i = 0; i < 160; i++) last = await call({ action: "ask", game: "flip7", question: "можно ли заморозь на себя?", gh: gh2, speak: false });
+    assert.strictEqual(last.statusCode, 429);
+    assert.match(JSON.parse(last.body).error.message, /лимит/);
+  });
   await t("a model reply that is not clean JSON still gives an answer", async () => {
     const p = fn._test.parseAnswer('Вот ответ: {"answer":"Нет.","quote":"","page":null,"found":true}');
     assert.strictEqual(p.answer, "Нет.");

@@ -1,6 +1,6 @@
 // Offline cache for the phone version: the app's own files only.
 // Service workers run only over HTTPS (or on localhost), so offline mode needs the app hosted on HTTPS.
-const CACHE = "nastolki-v13";
+const CACHE = "nastolki-v14";
 const FONTS = ["onest-cyrillic-400", "onest-latin-400", "onest-cyrillic-500", "onest-latin-500", "onest-cyrillic-600", "onest-latin-600",
   "onest-cyrillic-700", "onest-latin-700", "unbounded-cyrillic-600", "unbounded-latin-600", "unbounded-cyrillic-700", "unbounded-latin-700"]
   .map(f => `fonts/${f}-normal.woff2`);
@@ -18,10 +18,13 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== self.location.origin) return;
   // network first so updates arrive at once; after 3 s on a weak connection the cached copy is used
+  // the app page itself may fall back to index.html; a script or a style never does (it would break the app)
+  const isPage = e.request.mode === "navigate";
   e.respondWith(new Promise(resolve => {
     let done = false;
-    const fromCache = () => caches.match(e.request).then(r => r || caches.match("index.html"));
-    const timer = setTimeout(() => fromCache().then(r => { if (r && !done) { done = true; resolve(r); } }), 3000);
+    const fromCache = () => caches.match(e.request).then(r => r || (isPage ? caches.match("index.html") : null));
+    // slow network: after 3 s use the cached copy of this exact file, if there is one; otherwise keep waiting
+    const timer = setTimeout(() => caches.match(e.request).then(r => { if (r && !done) { done = true; resolve(r); } }), 3000);
     // "no-cache": always ask the server, so a new version shows on the next opening, not 10 minutes later
     fetch(e.request, { cache: "no-cache" }).then(res => {
       if (res.ok) {

@@ -28,7 +28,8 @@
     const res = await fetch(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/nastolki-assets/${id}${EXT}`, {
       headers: { Authorization: "Bearer " + c.token, Accept: "application/vnd.github.raw", "X-GitHub-Api-Version": "2022-11-28" }, cache: "no-store",
     });
-    if (res.status === 404) { failed.add(id); return null; }
+    // missing, no access or rate-limited: do not ask again for every picture on every screen this session
+    if (res.status === 404 || res.status === 401 || res.status === 403 || res.status === 429) { failed.add(id); return null; }
     if (!res.ok) return null;
     const blob = await res.blob();
     toCache(id, blob);

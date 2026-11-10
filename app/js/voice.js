@@ -136,7 +136,7 @@
       if (!b) return a;
       const la = a.toLowerCase(), lb = b.toLowerCase();
       if (lb.startsWith(la)) return b;          // the new text already contains the old one
-      if (la.endsWith(lb) || la.includes(lb)) return a;
+      if (la.endsWith(lb)) return a;            // the same phrase again (a restart repeating the last words)
       return a + " " + b;
     };
     const text = () => join(kept, live);

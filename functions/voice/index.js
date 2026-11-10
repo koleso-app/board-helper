@@ -43,22 +43,38 @@ const reply = (status, obj, origin) => ({ statusCode: status, headers: Object.as
 const fail = (status, code, message, origin) => reply(status, { error: { code, message } }, origin);
 
 /* ---------- who is calling: a working token for the owner's private repo ---------- */
-const authCache = new Map();   // sha256(token) -> expires at
+const authCache = new Map();     // sha256(token) -> trusted until (short, so a revoked token stops soon)
+const deniedCache = new Map();   // sha256(token) -> refused until (junk tokens do not hammer GitHub)
+const usage = new Map();         // sha256(token) + day + kind -> count (a cap on spending even with a leaked token)
+const DAILY = { ask: Number(process.env.DAILY_ASKS) || 150, tts: Number(process.env.DAILY_TTS) || 300 };
+const forbidden = () => Object.assign(new Error("Нет доступа"), { status: 403, code: "forbidden" });
 async function checkCaller(gh) {
   if (!ENV.allowedRepo) throw Object.assign(new Error("Функция не настроена: нет ALLOWED_REPO"), { status: 500, code: "config" });
-  if (!gh || typeof gh.token !== "string" || gh.token.length < 20 || gh.token.length > 255) throw Object.assign(new Error("Нет доступа"), { status: 403, code: "forbidden" });
+  if (!gh || typeof gh.token !== "string" || gh.token.length < 20 || gh.token.length > 255) throw forbidden();
   const repo = `${gh.owner || ""}/${gh.repo || ""}`.toLowerCase();
-  if (repo !== ENV.allowedRepo) throw Object.assign(new Error("Нет доступа"), { status: 403, code: "forbidden" });
+  if (repo !== ENV.allowedRepo) throw forbidden();
   const key = crypto.createHash("sha256").update(gh.token).digest("hex");
-  const until = authCache.get(key);
-  if (until && until > Date.now()) return;
+  const now = Date.now();
+  if ((deniedCache.get(key) || 0) > now) throw forbidden();
+  if ((authCache.get(key) || 0) > now) return key;
   const res = await fetch(`https://api.github.com/repos/${ENV.allowedRepo}`, {
     headers: { Authorization: "Bearer " + gh.token.trim(), Accept: "application/vnd.github+json", "User-Agent": "board-helper-voice" },
   });
-  if (!res.ok) throw Object.assign(new Error("Нет доступа"), { status: 403, code: "forbidden" });
-  const info = await res.json();
-  if (!info.private || String(info.full_name).toLowerCase() !== ENV.allowedRepo) throw Object.assign(new Error("Нет доступа"), { status: 403, code: "forbidden" });
-  authCache.set(key, Date.now() + 30 * 60 * 1000);
+  const info = res.ok ? await res.json() : null;
+  if (!info || !info.private || String(info.full_name).toLowerCase() !== ENV.allowedRepo) {
+    deniedCache.set(key, now + 5 * 60 * 1000);
+    if (deniedCache.size > 5000) deniedCache.clear();
+    throw forbidden();
+  }
+  authCache.set(key, now + 10 * 60 * 1000);
+  return key;
+}
+// counts one use; over the daily cap -> 429 (per running instance: a safety net, with a budget alert in the cloud as the real cap)
+function spend(key, kind) {
+  const day = new Date().toISOString().slice(0, 10), k = key + "|" + day + "|" + kind, n = (usage.get(k) || 0) + 1;
+  if (n > DAILY[kind]) throw Object.assign(new Error("Сегодняшний лимит помощника исчерпан. Завтра снова заработает."), { status: 429, code: "quota" });
+  usage.set(k, n);
+  if (usage.size > 1000) for (const old of [...usage.keys()].filter(x => !x.includes("|" + day + "|"))) usage.delete(old);
 }
 
 /* ---------- rulebooks bundled next to this file: rules/<game>.txt ---------- */
@@ -76,7 +92,10 @@ function book(game) {
 async function askModel(iam, rules, question, extra, game) {
   const system = [
     "Ты — судья по правилам настольной игры. Отвечаешь игрокам прямо во время партии.",
-    "Используй только текст правил ниже. Если ответа в правилах нет, так и скажи (found=false) и не выдумывай.",
+    "Ниже база знаний по игре: КНИГА ПРАВИЛ, ШПАРГАЛКА (проверенный пересказ) и ЧАСТЫЕ ВОПРОСЫ игроков с ответами.",
+    "Отвечай по всей базе. Если в книге прямого ответа нет, но вопрос разобран в шпаргалке или частых вопросах — ответь по ним, это found=true (можно коротко сказать, что в книге это не описано, и что принято делать).",
+    "Делай очевидные выводы из правил: например, если у нескольких игроков 200 и больше, побеждает тот, у кого больше очков.",
+    "found=false — только если ни один раздел базы не помогает ответить. Не выдумывай правил, которых нет в базе.",
     "Ответ — по-русски, не длиннее 200 символов (1–2 коротких предложения), чтобы его было удобно прослушать. Без markdown и списков.",
     "quote — точная дословная цитата (до 300 символов), на которой основан ответ. Бери её из раздела КНИГА ПРАВИЛ; из ШПАРГАЛКИ — только если в книге этого нет. page — номер страницы из ближайшей пометки [стр. N] перед цитатой, иначе null.",
     "Если ответа в правилах нет: found=false, answer — одна фраза для игрока, например «В правилах об этом ничего не сказано.», quote — пустая строка.",
@@ -149,12 +168,13 @@ module.exports.handler = async function (event, context) {
   try { req = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body || "", "base64").toString("utf8") : event.body || "{}"); }
   catch (e) { return fail(400, "bad_json", "Тело запроса — не JSON", origin); }
   try {
-    await checkCaller(req.gh);
+    const who = await checkCaller(req.gh);
     const iam = context && context.token && context.token.access_token;
     if (!iam) return fail(500, "config", "У функции нет сервисного аккаунта", origin);
     if (req.action === "tts") {
       const text = String(req.text || "").trim();
       if (!text || text.length > LIMITS.tts) return fail(400, "text", "Текст пустой или слишком длинный", origin);
+      spend(who, "tts");
       return reply(200, { audio: await speak(iam, text, req.voice) }, origin);
     }
     if (req.action === "ask") {
@@ -162,6 +182,7 @@ module.exports.handler = async function (event, context) {
       if (!question || question.length > LIMITS.question) return fail(400, "question", "Вопрос пустой или слишком длинный", origin);
       const rules = book(req.game);
       if (!rules) return fail(404, "no_rules", "Для этой игры правила ещё не загружены", origin);
+      spend(who, "ask");
       const extra = String(req.situation || "").slice(0, 300);
       const a = await askModel(iam, rules, question, extra, req.game);
       let audio = null;

@@ -96,6 +96,15 @@ t("search by the rulebook's words", () => {
 t("every rule from the book has a page, except our own tie note", () => { for (const r of g.rules) if (r.id !== "tie") assert.ok(r.page > 0, r.id); });
 t("normalize keeps a default place", () => assert.strictEqual(BH._normalize({}).places[0].name, "Дома"));
 t("faq refs point at real sections", () => { for (const f of g.faq) if (f.ref) assert.ok(g.rules.some(r => r.id === f.ref), f.ref); });
+t("every faq topic points at real sections", () => { for (const grp of g.faqGroups || []) for (const r of grp.refs) assert.ok(g.rules.some(x => x.id === r), r); });
+t("faq sources are known and questions are not repeated", () => {
+  for (const f of g.faq) if (f.src) assert.ok(BH.FAQ_SRC[f.src], f.src);
+  assert.strictEqual(new Set(g.faq.map(f => f.q)).size, g.faq.length);
+});
+t("players' questions are found: 200 mid-round, tie", () => {
+  assert.ok(BH.searchRules(g, "набрал 200 посреди раунда").slice(0, 3).some(h => /посреди раунда/.test(h.title)));
+  assert.ok(BH.searchRules(g, "ничья").slice(0, 3).some(h => /Ничья/.test(h.title)));
+});
 
 t("one deck has only one 0 and one 1", () => {
   const w = g.calc.roundWarnings([{}, {}], [sel([0, 1, 5]), sel([0, 2, 5])], { players: 4 });

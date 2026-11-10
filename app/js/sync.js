@@ -149,7 +149,7 @@
   /* records as key -> JSON text, to notice what changed between two saves */
   function recordMap(state) {
     const m = new Map();
-    for (const [name, p] of COLLECTIONS) for (const r of (state && state[name]) || []) if (r && r.id) m.set(p + r.id, JSON.stringify(r));
+    for (const [name, p] of COLLECTIONS) for (const r of (state && state[name]) || []) if (r && r.id) m.set(p + r.id, stable(r));   // key order does not matter
     return m;
   }
   /* stamps changed records and remembers deleted ones; returns true when anything changed */

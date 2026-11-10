@@ -2,6 +2,20 @@
    Routes (hash): #/  #/new  #/s/<id>/setup|first|play|rules|done  #/games  #/games/<id>  #/players  #/stats  #/settings */
 (function () {
   "use strict";
+  // a file that failed to load (e.g. a 503 while the site publishes an update) must not leave a
+  // half-working app: check every part before anything uses it, and offer a reload
+  {
+    const W = window, B = W.BH || {};
+    const parts = [["основа", B.esc && B.ICON], ["данные", B.state && B.saveNow], ["игры", B.games && B.games.length], ["правила", B.rulesUI], ["колесо", B.wheel],
+      ["синхронизация", W.BHSync && B.cloud], ["голос", B.voice && B.speech], ["картинки", B.assets]];
+    const missing = parts.filter(x => !x[1]).map(x => x[0]);
+    if (missing.length) {
+      const m = document.getElementById("main");
+      if (m) m.innerHTML = '<div class="empty"><p>Не все части приложения загрузились (' + missing.join(", ") + '). Обычно это бывает, когда сайт как раз обновляется.</p><p style="margin-top:12px"><button class="btn primary big" id="reload-app">Обновить</button></p></div>';
+      const b = document.getElementById("reload-app"); if (b) b.addEventListener("click", () => location.reload());
+      return;
+    }
+  }
   const BH = window.BH, esc = BH.esc, I = BH.ICON;
   const main = document.getElementById("main");
   const overlayRoot = document.getElementById("overlay-root");
@@ -18,10 +32,34 @@
   }
 
   /* ---------- routing ---------- */
-  const go = h => { if (location.hash === h) render(); else location.hash = h; };
+  /* Overlays (round sheet, dialogs, voice question) add one history entry, so the phone's Back
+     closes the overlay instead of leaving the screen. Navigating from inside an overlay first
+     drops that entry, so it never lingers in the history. */
+  let ovPushed = false, pendingReplace = null;
+  const urlOf = h => location.pathname + location.search + h;
+  function ovOpen() { if (!ovPushed) { history.pushState({ ov: 1 }, ""); ovPushed = true; } }
+  function ovSync() {   // all overlays closed by a button: remove their history entry
+    if (ovPushed && !sheet && !dialog && !ask) { ovPushed = false; if (history.state && history.state.ov) history.back(); }
+  }
+  window.addEventListener("popstate", e => {
+    if (pendingReplace) { const h = pendingReplace; pendingReplace = null; location.replace(urlOf(h)); return; }
+    if (ovPushed && !(e.state && e.state.ov)) {   // Back pressed while an overlay is open: just close it
+      ovPushed = false;
+      if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; BH.voice.stopAudio(); ask = null; }
+      sheet = null; dialog = null;
+      renderOverlay();
+    }
+  });
+  const go = h => {
+    if (ovPushed) { ovPushed = false; location.replace(urlOf(h)); return; }   // takes the overlay's entry
+    if (location.hash === h) render(); else location.hash = h;
+  };
   // same, but the current screen is dropped from the history: "back" will not return to it
   // (used after a game is created, so "back" cannot bring up the form and create it twice)
-  const goReplace = h => { if (location.hash === h) render(); else location.replace(location.pathname + location.search + h); };
+  const goReplace = h => {
+    if (ovPushed) { ovPushed = false; pendingReplace = h; history.back(); return; }   // drop the overlay entry, then replace the screen
+    if (location.hash === h) render(); else location.replace(urlOf(h));
+  };
   function route() {
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
     return { a: parts[0] || "", b: parts[1] || "", c: parts[2] || "" };
@@ -35,9 +73,13 @@
   let spinToken = 0;          // a wheel spin applies its result only if nothing changed meanwhile
   let showAllDone = false;    // home: show every finished game, not only the latest
 
+  // the current copy of a game: a sync may have replaced BH.state since a dialog or a callback was set up
+  const fresh = s => (s && BH.session(s.id)) || s;
+
   function confirmDelete(s) {
+    const id = s.id;
     openDialog({ title: "Удалить партию?", text: "Она пропадёт из истории и статистики. Это нельзя отменить.", buttons: [
-      { label: "Удалить", danger: true, run: () => { S().sessions = S().sessions.filter(x => x !== s); BH.saveNow(); dialog = null; go("#/"); } },
+      { label: "Удалить", danger: true, run: () => { S().sessions = S().sessions.filter(x => x.id !== id); BH.saveNow(); dialog = null; goReplace("#/"); } },
       { label: "Отмена", run: closeDialog }] });
   }
 
@@ -82,7 +124,9 @@
     return !!(sheet || dialog || ask || spinning || typing);
   };
   const notFound = text => `<div class="empty"><p>${esc(text)}</p><p style="margin-top:12px"><a class="btn" href="#/">На главную</a></p></div>`;
-  const backLink = (href, text) => `<a class="back" href="${href}">${I.back}<span>${esc(text)}</span></a>`;
+  // a back link to the previous screen steps back in the history instead of adding an entry,
+  // so the phone's Back button does not bring the left screen up again
+  const backLink = (href, text) => `<a class="back" href="${href}" data-act="nav-back" data-href="${href}">${I.back}<span>${esc(text)}</span></a>`;
 
   /* ---------- home ---------- */
   function sessionLine(s) {
@@ -244,7 +288,8 @@
       for (const id of s.players) if (draft.final[id] !== undefined && draft.final[id] !== "") final[id] = Math.round(Number(draft.final[id])) || 0;
       let winners = draft.winners.filter(id => s.players.includes(id));
       if (!winners.length && Object.keys(final).length) {
-        const best = Math.max(...Object.values(final));
+        const low = !!(g.scoring && g.scoring.lowerWins);
+        const best = low ? Math.min(...Object.values(final)) : Math.max(...Object.values(final));
         winners = s.players.filter(id => final[id] === best);
       }
       Object.assign(s, { status: "finished", startedAt: draft.date, finishedAt: draft.date, final: Object.keys(final).length ? final : undefined, winners });
@@ -266,9 +311,15 @@
   function viewSession(s, sub) {
     const g = BH.game(s.gameId);
     if (!g) return { html: notFound("Игра этой партии больше не в каталоге.") };
-    if (!sub) sub = s.status === "setup" ? "setup" : s.status === "first" ? "first" : s.status === "playing" ? "play" : "done";
+    const home = s.status === "setup" ? "setup" : s.status === "first" ? "first" : s.status === "playing" ? "play" : "done";
+    if (!sub) sub = home;
+    // a screen reached by "Back" that the game has already moved past shows where the game really is:
+    // a finished game is only its result, a running game no longer returns to setup, the wheel or the form
+    if (s.status === "finished" && sub !== "done" && sub !== "rules") sub = "done";
+    else if (s.status !== "finished" && sub === "done") sub = home;
+    else if (s.status === "playing" && (sub === "setup" || sub === "edit" || (sub === "first" && s.rounds.length))) sub = "play";
     if (sub === "edit") {
-      if (s.status === "finished" || s.rounds.length) return { html: notFound("Партия уже идёт — её состав больше не меняется.") };
+      if (s.status === "finished" || s.status === "playing" || s.rounds.length) return { html: notFound("Партия уже идёт — её состав больше не меняется.") };
       if (!draft || draft.editId !== s.id) startDraft(null, s);
       return { html: viewNew() };
     }
@@ -548,13 +599,15 @@
   let rec = null, askCtl = null;
   function situationOf(s) {
     if (!s) return "";
-    const g = BH.game(s.gameId), lead = BH.player(BH.leaderAt(s, s.rounds.length));
-    return `раунд ${s.rounds.length + 1}, игроков ${s.players.length}${lead && g && g.rounds ? ", " + (g.rounds.leaderLabel || "ходит") + ": " + lead.name : ""}`;
+    // no player names: they do not help the answer and need not leave the phone
+    const tot = Object.values(BH.totals(s)), best = tot.length ? Math.max(...tot) : 0;
+    return `раунд ${s.rounds.length + 1}, игроков ${s.players.length}, лучший счёт ${best}`;
   }
   function openAsk(gameId, sid) {
     BH.speech.stop();
     BH.clearToast();
     ask = { gameId, sid, phase: "idle", text: "", result: null, error: "" };
+    ovOpen();
     if (!BH.voice.ready()) { ask.phase = "error"; ask.error = BH.voice.why(); renderOverlay(); return; }
     renderOverlay();
     if (BH.voice.canListen) startListening(); else { ask.phase = "type"; renderOverlay(); }
@@ -744,13 +797,13 @@
       const f = overlayRoot.querySelector(".btn.primary") || overlayRoot.querySelector(".btn"); if (f) f.focus();
       return;
     }
-    if (!sheet) { overlayRoot.innerHTML = ""; return; }
+    if (!sheet) { overlayRoot.innerHTML = ""; setTimeout(ovSync, 0); return; }   // after a navigation in the same tick, ovSync sees nothing to undo
     const scroll = overlayRoot.querySelector(".sheet-body");
     const top = scroll ? scroll.scrollTop : 0;
     overlayRoot.innerHTML = sheetHTML();
     const body = overlayRoot.querySelector(".sheet-body"); if (body) body.scrollTop = top;
   }
-  const openDialog = d => { dialog = d; BH.clearToast(); renderOverlay(); };
+  const openDialog = d => { dialog = d; BH.clearToast(); ovOpen(); renderOverlay(); };
   const closeDialog = () => { dialog = null; renderOverlay(); };
 
   function openSheet(s, index) {
@@ -764,6 +817,7 @@
     }
     sheet = { sid: s.id, index: editing ? index : null, entries, open: g.calc ? s.players[0] : null };
     BH.clearToast();
+    ovOpen();
     renderOverlay();
     const first = overlayRoot.querySelector(".sheet-body button, .sheet-body input"); if (first) first.focus({ preventScroll: true });
   }
@@ -832,7 +886,8 @@
     for (const id of s.players) {
       const e = sheet.entries[id], res = entryResult(g, s, e);
       round.scores[id] = res.score;
-      round.detail[id] = e;
+      // stored the way normalize stores it (manual as a number), so a sync sees no false difference
+      round.detail[id] = { sel: e.sel, manual: e.manual === null || e.manual === undefined || e.manual === "" ? null : Math.round(Number(e.manual)) || 0 };
       round.flags[id] = { bust: !!res.bust, flip7: !!res.flip7 };
     }
     const isNew = sheet.index === null;
@@ -846,6 +901,7 @@
   // A single leader at the target always ends the game. A tie asks once per round count:
   // after "play another round" the question comes back only when a later round is still tied.
   function afterRoundChange(s, isNew) {
+    s = fresh(s);
     const g = BH.game(s.gameId), end = BH.checkEnd(s);
     if (s.continueTie && (!end.over || s.rounds.length < s.continueTie)) delete s.continueTie;
     if (end.over && !end.tie) { finish(s, end.winners); return; }
@@ -854,8 +910,8 @@
       openDialog({
         title: "Ничья", text: ((g.scoring && g.scoring.tieNote) || "Сразу несколько игроков с лучшим счётом.") + " Сейчас поровну у: " + end.winners.map(id => (BH.player(id) || {}).name).join(", ") + ".",
         buttons: [
-          { label: "Сыграть ещё раунд", primary: true, run: () => { s.continueTie = s.rounds.length; BH.saveNow(); closeDialog(); render(); } },
-          { label: "Записать ничью", run: () => { closeDialog(); finish(s, end.winners); } },
+          { label: "Сыграть ещё раунд", primary: true, run: () => { const c = fresh(s); c.continueTie = c.rounds.length; BH.saveNow(); closeDialog(); render(); } },
+          { label: "Записать ничью", run: () => { closeDialog(); finish(fresh(s), end.winners); } },
         ],
       });
       return;
@@ -874,13 +930,14 @@
   }
 
   function finish(s, winners) {
+    s = fresh(s);
     s.status = "finished";
     s.finishedAt = Date.now();
     s.winners = winners;
     delete s.continueTie;
     BH.clearToast();
     BH.saveNow();
-    go("#/s/" + s.id + "/done");
+    goReplace("#/s/" + s.id + "/done");   // "Back" from the result must not reopen the game screen
   }
 
   /* ---------- events ---------- */
@@ -914,7 +971,7 @@
         render();
         break;
       }
-      case "setup-next": BH.speech.stop(); s.status = s.status === "setup" ? "first" : s.status; BH.saveNow(); go("#/s/" + s.id + "/first"); break;
+      case "setup-next": BH.speech.stop(); s.status = s.status === "setup" ? "first" : s.status; BH.saveNow(); goReplace("#/s/" + s.id + "/first"); break;
 
       /* first player */
       case "spin": {
@@ -928,7 +985,7 @@
           spinning = false;
           if (my !== spinToken) return;            // the user picked someone else or left the screen meanwhile
           BH.$$('[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = false; });
-          s.first = pl[i]; BH.saveNow();
+          const cur = fresh(s); cur.first = pl[i]; BH.saveNow();
           const p = BH.player(pl[i]);
           // re-render only the controls, keep the disc where it stopped
           if (res) res.textContent = p ? p.name : "";
@@ -945,13 +1002,16 @@
         spinToken++;
         if (!s.first) s.first = s.players[0];
         if (s.status !== "playing") { s.status = "playing"; s.startedAt = Date.now(); }
-        BH.saveNow(); BH.wheel.reset(); go("#/s/" + s.id + "/play"); break;
+        BH.saveNow(); BH.wheel.reset();
+        // opened from the game screen ("Первый"): step back to it; from setup: the wheel leaves the history
+        if (prevHash === "#/s/" + s.id + "/play") history.back(); else goReplace("#/s/" + s.id + "/play");
+        break;
 
       /* play */
       case "new-round": openSheet(s, null); break;
       case "edit-round": openSheet(s, +el.dataset.i); break;
       case "undo-round": openDialog({ title: "Отменить раунд " + s.rounds.length + "?", text: "Очки этого раунда удалятся.", buttons: [
-        { label: "Отменить раунд", danger: true, run: () => { s.rounds.pop(); BH.saveNow(); dialog = null; afterRoundChange(s, false); } }, { label: "Оставить", run: closeDialog }] }); break;
+        { label: "Отменить раунд", danger: true, run: () => { const c = fresh(s); c.rounds.pop(); BH.saveNow(); dialog = null; afterRoundChange(c, false); } }, { label: "Оставить", run: closeDialog }] }); break;
       case "finish-menu": {
         const st = BH.standings(s), best = st.length ? st[0].total : 0, w = st.filter(x => x.total === best).map(x => x.id);
         openDialog({ title: "Завершить партию?", text: s.rounds.length ? "Победителем запишется тот, у кого сейчас больше всех очков: " + w.map(id => (BH.player(id) || {}).name).join(", ") + "." : "Ещё не записано ни одного раунда.",
@@ -982,18 +1042,30 @@
       case "flag": { const en = sheet.entries[el.dataset.p]; en.sel.flags[el.dataset.f] = !en.sel.flags[el.dataset.f]; if (en.sel.flags.bust) en.manual = null; renderOverlay(); break; }
       case "save-round": saveRound(); break;
       case "delete-round": { const i = sheet.index; openDialog({ title: "Удалить раунд " + (i + 1) + "?", text: "Остальные раунды сохранятся, сдающие сдвинутся.", buttons: [
-        { label: "Удалить", danger: true, run: () => { s.rounds.splice(i, 1); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(s, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
+        { label: "Удалить", danger: true, run: () => { const c = fresh(s); c.rounds.splice(i, 1); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(c, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
       case "dlg": { const b = dialog && dialog.buttons[+el.dataset.i]; if (b) b.run(); break; }
 
       /* done */
-      case "rematch": { startDraft(s.gameId); Object.assign(draft, { exp: s.exp.slice(), placeId: s.placeId, players: s.players.slice(), opts: Object.assign({}, s.opts) }); saveDraft(); break; }
-      case "reopen": s.status = "playing"; s.winners = []; delete s.finishedAt; BH.saveNow(); go("#/s/" + s.id + "/play"); break;
+      case "rematch": { if (el.disabled) break; el.disabled = true;   // a double tap must not create two games
+        startDraft(s.gameId); Object.assign(draft, { exp: s.exp.slice(), placeId: s.placeId, players: s.players.slice(), opts: Object.assign({}, s.opts) }); saveDraft(); break; }
+      case "reopen": s.status = "playing"; s.winners = []; delete s.finishedAt; BH.saveNow(); goReplace("#/s/" + s.id + "/play"); break;
       case "delete-session": confirmDelete(s); break;
       case "show-all": showAllDone = true; render(); break;
 
       /* rules */
       case "say-rule": { const g = BH.game(s ? s.gameId : r.b); if (g) BH.rulesUI.say(g, el.dataset.id); break; }
-      case "goto-rule": { const g = BH.game(s ? s.gameId : r.b); const inp = BH.$("#rules-q"); if (inp) { inp.value = ""; } const out = BH.$("#rules-out"); if (out && g) { out.innerHTML = BH.rulesUI.full(g, {}); const n = BH.$("#rule-" + el.dataset.id); if (n) { n.classList.add("hit"); n.scrollIntoView({ block: "center", behavior: "smooth" }); } } break; }
+      case "goto-rule": {
+        const g = BH.game(s ? s.gameId : r.b);
+        let n = BH.$("details#rule-" + el.dataset.id);
+        if (!n) {   // shown as a search result or in the compact panel: bring up the full rules first
+          const inp = BH.$("#rules-q"); if (inp) inp.value = "";
+          const out = BH.$("#rules-out"); if (out && g) { out.innerHTML = BH.rulesUI.full(g, {}); BH.assets.hydrate(out); }
+          n = BH.$("details#rule-" + el.dataset.id);
+        }
+        if (n) { n.open = true; n.classList.add("hit"); n.scrollIntoView({ block: "start", behavior: "smooth" }); }
+        break;
+      }
+      case "fold-all": { const box = document.getElementById(el.dataset.in); if (box) box.querySelectorAll("details.fold").forEach(d => { d.open = el.dataset.open === "1"; }); break; }
 
       /* players */
       case "edit-player": editPlayer = el.dataset.id || null; render(); break;
@@ -1011,6 +1083,12 @@
       case "say-test": BH.speech.speak("Привет! Я буду читать подготовку к игре и правила."); break;
       case "export": BH.exportData(); break;
       case "reload": location.reload(); break;
+      case "nav-back": {
+        const href = el.dataset.href;
+        const same = prevHash === href || (href === "#/" && (prevHash === "" || prevHash === "#/" || prevHash === "#"));
+        if (same && history.length > 1) { e.preventDefault(); history.back(); }
+        break;   // otherwise the link works as a normal link
+      }
       case "sync-now": BH.cloud.syncNow(); break;
       case "sync-off": openDialog({ title: "Отключить синхронизацию?", text: "Только на этом устройстве. Данные останутся и здесь, и в GitHub; изменения перестанут отправляться, пока не подключите снова.", buttons: [
         { label: "Отключить", danger: true, run: () => { BH.cloud.disconnect(); dialog = null; render(); BH.toast("Синхронизация на этом устройстве отключена"); } },
@@ -1153,7 +1231,7 @@
     if (rt.a !== "new" && !(rt.a === "s" && rt.c === "edit" && draft && draft.editId === rt.b)) draft = null;
     if (route().a !== "") showAllDone = false;
     if (route().a !== "players") editPlayer = null;
-    sheet = null; dialog = null;
+    sheet = null; dialog = null; ovPushed = false;
     if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; ask = null; }
     render();
     window.scrollTo(0, 0);
@@ -1161,14 +1239,9 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.6.2";
+  BH.version = "0.7.0";
   applyTheme();
   // a file that failed to load (e.g. a 503 while the site publishes an update) must not leave a half-working app
-  const missing = [["игры", BH.games && BH.games.length], ["правила", BH.rulesUI], ["колесо", BH.wheel], ["синхронизация", window.BHSync && BH.cloud], ["голос", BH.voice], ["картинки", BH.assets]].filter(x => !x[1]).map(x => x[0]);
-  if (missing.length) {
-    main.innerHTML = `<div class="empty"><p>Не все части приложения загрузились (${esc(missing.join(", "))}). Обычно это бывает, когда сайт как раз обновляется.</p><p style="margin-top:12px"><button class="btn primary big" data-act="reload">Обновить</button></p></div>`;
-    return;
-  }
   if (route().a === "new") startDraft();
   render();
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname)) {

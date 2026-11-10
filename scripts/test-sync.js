@@ -160,6 +160,19 @@ async function t(name, fn) { try { await fn(); passed++; } catch (e) { console.e
     assert.strictEqual(A.BH.cloud.pending, false);
     await B.BH.cloud.syncNow();
   });
+  await t("a sync of one's own changes does not swap the data or announce remote changes", async () => {
+    let swaps = 0; A.BH.onRemoteData = news => { if (news) swaps++; };
+    const before = A.BH.state;
+    const p = A.BH.addPlayer("Дима"); A.BH.saveNow();
+    A.BH.state.sessions.unshift({ id: "own1", gameId: "flip7", players: [p.id], exp: [], placeId: "home", created: Date.now(), status: "playing", setupDone: {}, first: p.id, winners: [], opts: {},
+      rounds: [{ at: Date.now(), leader: p.id, scores: { [p.id]: 7 }, flags: { [p.id]: { bust: false, flip7: false } }, detail: { [p.id]: { sel: { picks: {}, flags: {} }, manual: 7 } } }] });
+    A.BH.saveNow();
+    await A.BH.cloud.syncNow();
+    assert.strictEqual(swaps, 0, "no 'changes from another device' after our own sync");
+    assert.strictEqual(A.BH.state, before, "BH.state is the same object, so open screens keep working");
+    delete A.BH.onRemoteData;
+    await B.BH.cloud.syncNow();
+  });
   await t("nothing to send means no write", async () => {
     await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();
     const w = gh.writes;
@@ -171,7 +184,7 @@ async function t(name, fn) { try { await fn(); passed++; } catch (e) { console.e
     const w = W.BH.cloud.wheelCfg();
     assert.strictEqual(w.repo, "koleso-data"); assert.strictEqual(w.pass, CFG.pass);
     await W.BH.cloud.connect(w);
-    assert.strictEqual(names(W), "Аннушка,Боря,Глеб");
+    assert.strictEqual(names(W), "Аннушка,Боря,Глеб,Дима");
   });
   console.log(`sync: ${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
 })();

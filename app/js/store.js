@@ -58,6 +58,7 @@
       const rounds = arr(x.rounds).filter(isObj).map(r => {
         const sc = isObj(r.scores) ? r.scores : {}, fl = isObj(r.flags) ? r.flags : {}, de = isObj(r.detail) ? r.detail : {};
         const out = { at: time(r.at) || 0, scores: {}, flags: {}, detail: {} };
+        if (typeof r.leader === "string" && allowed.has(r.leader)) out.leader = r.leader;
         for (const id of pl) {
           out.scores[id] = num(sc[id]);
           out.flags[id] = { bust: !!(isObj(fl[id]) && fl[id].bust), flip7: !!(isObj(fl[id]) && fl[id].flip7) };
@@ -141,7 +142,7 @@
 
   BH.addPlayer = (name, color) => {
     const used = new Set(BH.state.players.map(p => p.color));
-    const p = { id: BH.uid(), name: String(name).trim().slice(0, 40), color: color || BH.COLORS.find(c => !used.has(c)) || BH.COLORS[BH.state.players.length % BH.COLORS.length], created: Date.now() };
+    const p = { id: BH.uid(), name: String(name).trim().slice(0, 40), color: color || BH.COLORS.find(c => !used.has(c)) || BH.COLORS[BH.state.players.length % BH.COLORS.length], created: Date.now(), hidden: false };
     BH.state.players.push(p);
     BH.save();
     return p;

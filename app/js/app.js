@@ -516,6 +516,7 @@
       ask.phase = "answer"; ask.result = r;
       renderOverlay();
       if (r.audio) { BH.voice.remember(r.answer, r.audio); BH.voice.play(r.audio).catch(() => {}); }
+      else if (r.answer) BH.speech.speak(r.answer);   // e.g. "nothing in the rules": spoken once, then from the device cache
     } catch (e) {
       if (!ask || ctl !== askCtl || (e && e.name === "AbortError")) return;
       // no connection: fall back to the cheat sheet on the device
@@ -534,8 +535,9 @@
     else if (a.phase === "thinking") body = `<div class="ask-live"><p class="ask-q">«${esc(a.text)}»</p><p class="muted">Ищу в правилах…</p></div>`;
     else if (a.phase === "answer") body = `<p class="ask-q">«${esc(a.text)}»</p>
         <div class="ask-answer ${r.found ? "" : "nf"}">${esc(r.answer)}</div>
-        ${r.quote ? `<blockquote class="ask-quote">${esc(r.quote)}${r.page ? `<cite>Книга правил, стр. ${esc(r.page)}</cite>` : ""}</blockquote>` : ""}
-        ${r.ttsError ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}`;
+        ${r.quote ? `<details class="small"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Где это в правилах${r.page ? `: стр. ${esc(r.page)}` : ""}</summary><blockquote class="ask-quote" style="margin-top:8px">${esc(r.quote)}${r.page ? `<cite>Книга правил, стр. ${esc(r.page)}</cite>` : ""}</blockquote></details>` : ""}
+        ${r.ttsError ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}
+        ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали — ответ взят с телефона, бесплатно.</p>` : ""}`;
     else if (a.phase === "error") body = `${a.text ? `<p class="ask-q">«${esc(a.text)}»</p>` : ""}<div class="note">${esc(a.error)}</div>
         ${a.local && a.local.length ? `<p class="small muted">Нашёл в шпаргалке на телефоне:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true)).join("")}` : ""}`;
     const typing = a.phase === "type" || a.phase === "answer" || (a.phase === "error" && BH.voice.ready());
@@ -1066,7 +1068,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.4.0";
+  BH.version = "0.4.1";
   applyTheme();
   if (route().a === "new") startDraft();
   render();

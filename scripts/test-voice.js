@@ -77,6 +77,9 @@ const t = async (name, f) => { try { await f(); passed++; } catch (e) { console.
     const p = fn._test.parseAnswer('Вот ответ: {"answer":"Нет.","quote":"","page":null,"found":true}');
     assert.strictEqual(p.answer, "Нет.");
     assert.strictEqual(fn._test.parseAnswer("Просто текст").answer, "Просто текст");
+    const nf = fn._test.parseAnswer('{"answer":"found=false, в правилах нет информации","quote":"x","page":3,"found":false}');
+    assert.strictEqual(nf.answer, "В правилах об этом ничего не сказано."); assert.strictEqual(nf.quote, ""); assert.strictEqual(nf.page, null);
+    assert.strictEqual(fn._test.parseAnswer('{"answer":"Да, можно. found=true","quote":"q","page":6,"found":true}').answer, "Да, можно.");
   });
   fs.rmSync(rulesDir, { recursive: true, force: true });
   console.log(`voice: ${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

@@ -7,7 +7,7 @@
   "use strict";
   const BH = window.BH;
   const LS_URL = "board-helper-voice-url", LS_VOICE = "board-helper-voice-name";
-  const DEFAULT_URL = "";   // filled in after the function is deployed
+  const DEFAULT_URL = "https://functions.yandexcloud.net/d4e11kuh0hsmrngs99ig";   // the owner's function; it answers only with the owner's token
   const CACHE = "nastolki-tts-v1";
   const read = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const write = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} };
@@ -39,8 +39,27 @@
     return j;
   }
 
-  /* ---------- ask ---------- */
-  V.ask = (game, question, situation, signal) => call({ action: "ask", game, question, situation }, signal);
+  /* ---------- ask: the same question again is answered from the device, for free ---------- */
+  const LS_ANSWERS = "board-helper-answers";
+  const norm = q => String(q).toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9×+ ]+/gi, " ").replace(/\s+/g, " ").trim();
+  const answers = () => { try { return JSON.parse(read(LS_ANSWERS) || "{}") || {}; } catch (e) { return {}; } };
+  V.ask = async (game, question, situation, signal) => {
+    const k = game + "|" + norm(question), saved = answers()[k];
+    if (saved) {
+      const audio = await cached(saved.answer);
+      return Object.assign({}, saved, { audio, fromDevice: true });
+    }
+    const r = await call({ action: "ask", game, question, situation }, signal);
+    if (r && r.found && r.answer) {
+      const all = answers();
+      all[k] = { answer: r.answer, quote: r.quote, page: r.page, found: true, at: Date.now() };
+      const keys = Object.keys(all).sort((a, b) => all[b].at - all[a].at);
+      for (const old of keys.slice(150)) delete all[old];     // keep the latest 150
+      write(LS_ANSWERS, JSON.stringify(all));
+    }
+    return r;
+  };
+  V.forget = () => write(LS_ANSWERS, null);   // after a rules update
 
   /* ---------- speech: cached mp3 per (voice, text) ---------- */
   async function key(text) {

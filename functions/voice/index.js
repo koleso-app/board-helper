@@ -25,6 +25,7 @@ const ENV = {
   allowOrigin: process.env.ALLOW_ORIGIN || "https://koleso-app.github.io",
 };
 const LIMITS = { question: 400, tts: 1200, answerTokens: 700 };
+const NOT_FOUND = "В правилах об этом ничего не сказано.";   // spoken by the app from its own cache, not paid again
 const VOICES = { marina: ["neutral", "friendly", "whisper"], dasha: ["neutral", "good", "friendly"], jane: ["neutral", "good"], julia: ["neutral", "strict"], lera: ["neutral", "friendly"], masha: ["good", "strict", "friendly"], omazh: ["neutral"], filipp: [], ermil: ["neutral", "good"], zahar: ["neutral", "good"], alexander: ["neutral", "good"], kirill: ["neutral", "good"], anton: ["neutral", "good"] };
 
 /* ---------- http helpers ---------- */
@@ -72,12 +73,13 @@ function book(game) {
 }
 
 /* ---------- Yandex AI Studio: chat completions (OpenAI-compatible) ---------- */
-async function askModel(iam, rules, question, extra) {
+async function askModel(iam, rules, question, extra, game) {
   const system = [
     "Ты — судья по правилам настольной игры. Отвечаешь игрокам прямо во время партии.",
     "Используй только текст правил ниже. Если ответа в правилах нет, так и скажи (found=false) и не выдумывай.",
-    "Ответ — по-русски, 1–3 коротких предложения, чтобы его было удобно прослушать. Без markdown и списков.",
-    "quote — точная дословная цитата из книги правил (до 300 символов), на которой основан ответ; page — номер страницы из пометки [стр. N] перед этим местом, иначе null.",
+    "Ответ — по-русски, не длиннее 200 символов (1–2 коротких предложения), чтобы его было удобно прослушать. Без markdown и списков.",
+    "quote — точная дословная цитата (до 300 символов), на которой основан ответ. Бери её из раздела КНИГА ПРАВИЛ; из ШПАРГАЛКИ — только если в книге этого нет. page — номер страницы из ближайшей пометки [стр. N] перед цитатой, иначе null.",
+    "Если ответа в правилах нет: found=false, answer — одна фраза для игрока, например «В правилах об этом ничего не сказано.», quote — пустая строка.",
     "Верни только JSON вида {\"answer\": string, \"quote\": string, \"page\": number|null, \"found\": boolean}.",
     "",
     rules,
@@ -92,6 +94,7 @@ async function askModel(iam, rules, question, extra) {
       temperature: 0.1,
       max_completion_tokens: LIMITS.answerTokens,
       response_format: { type: "json_object" },
+      // note: prompt_cache_key is rejected here ("Unsupported parameter"), so it is not sent
     }),
   });
   const text = await res.text();
@@ -106,7 +109,11 @@ function parseAnswer(content) {
   try { j = JSON.parse(m ? m[0] : content); } catch (e) {}
   if (!j || typeof j.answer !== "string") return { answer: String(content).trim().slice(0, 600), quote: "", page: null, found: true };
   const page = Number.isInteger(j.page) && j.page > 0 && j.page < 500 ? j.page : null;
-  return { answer: j.answer.trim().slice(0, 600), quote: String(j.quote || "").trim().slice(0, 400), page, found: j.found !== false };
+  const found = j.found !== false;
+  // models sometimes echo the JSON fields into the sentence ("found=false, ...")
+  let answer = j.answer.replace(/\b(found|quote|page)\s*[=:]\s*\S+[,.;]?\s*/gi, "").trim();
+  if (!found || !answer) answer = NOT_FOUND;
+  return { answer: answer.slice(0, 600), quote: found ? String(j.quote || "").trim().slice(0, 400) : "", page: found ? page : null, found };
 }
 
 /* ---------- SpeechKit v3: text -> mp3 ---------- */
@@ -156,9 +163,9 @@ module.exports.handler = async function (event, context) {
       const rules = book(req.game);
       if (!rules) return fail(404, "no_rules", "Для этой игры правила ещё не загружены", origin);
       const extra = String(req.situation || "").slice(0, 300);
-      const a = await askModel(iam, rules, question, extra);
+      const a = await askModel(iam, rules, question, extra, req.game);
       let audio = null;
-      if (req.speak !== false && a.answer) { try { audio = await speak(iam, a.answer.slice(0, LIMITS.tts), req.voice); } catch (e) { a.ttsError = e.message; } }
+      if (req.speak !== false && a.answer && a.found) { try { audio = await speak(iam, a.answer.slice(0, LIMITS.tts), req.voice); } catch (e) { a.ttsError = e.message; } }
       return reply(200, Object.assign(a, { audio }), origin);
     }
     return fail(400, "action", "Неизвестное действие", origin);

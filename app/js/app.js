@@ -434,7 +434,7 @@
     const st = S().settings;
     const seg = (key, val, label) => `<button type="button" data-act="set" data-k="${key}" data-v="${val}" aria-pressed="${String(st[key]) === String(val)}">${label}</button>`;
     return `<div class="stack">
-      <div>${backLink("#/", "Партии")}<div class="page-head"><div><h1>Настройки</h1></div></div></div>
+      <div>${backLink("#/", "Партии")}<div class="page-head"><div><h1>Настройки</h1><p class="sub">Версия ${esc(BH.version)}</p></div></div></div>
       ${viewSync()}
       <section class="panel stack">
         <div class="spread"><span>Тема</span><div class="seg">${seg("theme", "auto", "Как в системе")}${seg("theme", "light", "Светлая")}${seg("theme", "dark", "Тёмная")}</div></div>
@@ -474,7 +474,6 @@
         <label class="field">Репозиторий<input class="input" name="repo" required value="${esc(w ? w.repo : "koleso-data")}" autocapitalize="off" spellcheck="false"></label>
         <label class="field">Токен доступа<input class="input" name="token" type="password" required placeholder="github_pat_…" autocomplete="off"></label>
         ${w && w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" data-target="own-pass-m" checked> Тот же пароль шифрования, что в колесе</label>` : ""}
-        ${w && wheelTokenBad ? `<label class="check" style="font-weight:500"><input type="checkbox" name="fixwheel" checked> Обновить токен и в «Колесе недели» на этом устройстве</label>` : ""}
         <div class="stack" id="own-pass-m" ${w && w.pass ? "hidden" : ""}>
           <label class="field">Пароль шифрования<input class="input" name="pass" type="password" minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
           <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
@@ -543,7 +542,7 @@
       if (err && err.code === "auth" && form.dataset.form === "sync-wheel") {
         // the wheel's own token is dead, so the wheel on this phone is not syncing either
         wheelTokenBad = true;
-        syncMsg = "GitHub не принял токен, сохранённый в «Колесе недели» на этом устройстве: он истёк, отозван или заменён новым. Колесо здесь сейчас тоже не синхронизируется. Создайте новый токен (как — в подсказке ниже) и вставьте его в форму. Имя и репозиторий уже подставлены.";
+        syncMsg = "GitHub не принял токен из найденного подключения «Колеса недели». Если колесо у вас работает, это старая запись с его прежнего адреса, а сейчас колесо живёт на другом сайте, и его настоящее подключение отсюда не видно. Вставьте рабочий токен в форму ниже: имя и репозиторий уже подставлены.";
         render();
         return;
       }
@@ -945,7 +944,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.1.0";
+  BH.version = "0.2.2";
   applyTheme();
   if (route().a === "new") startDraft();
   render();

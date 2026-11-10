@@ -135,6 +135,12 @@ async function t(name, fn) { try { await fn(); passed++; } catch (e) { console.e
     assert.strictEqual(A.BH.player(id).name, "Аннушка");
     assert.strictEqual(B.BH.player(id).name, "Аннушка");
   });
+  await t("saved voice answers travel to the other device", async () => {
+    A.BH.state.answers.unshift({ id: "aq1", game: "flip7", q: "можно ли заморозь на себя", answer: "Да.", quote: "", page: 6, at: Date.now() });
+    A.BH.saveNow();
+    await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();
+    assert.ok(B.BH.state.answers.some(a => a.id === "aq1" && a.page === 6));
+  });
   await t("device settings stay on the device", async () => {
     A.BH.state.settings.theme = "dark"; A.BH.saveNow();
     await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();

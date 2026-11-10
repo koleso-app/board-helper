@@ -75,11 +75,16 @@
         status, setupDone, rounds,
         first: typeof x.first === "string" && allowed.has(x.first) ? x.first : null,
         winners: ids(x.winners, allowed),
+        opts: (() => { const o = {}; for (const [k, v] of Object.entries(isObj(x.opts) ? x.opts : {})) if (ID.test(k)) o[k] = !!v; return o; })(),
+        final: (() => { if (!isObj(x.final)) return undefined; const f = {}; for (const id of pl) if (x.final[id] !== undefined && x.final[id] !== null && x.final[id] !== "") f[id] = num(x.final[id]); return Object.keys(f).length ? f : undefined; })(),
         continueTie: Number.isInteger(x.continueTie) && x.continueTie > 0 ? x.continueTie : undefined,
       });
     }
+    // answers of the voice assistant, kept so the same question costs nothing again (synced too)
+    out.answers = arr(s.answers).filter(a => isObj(a) && typeof a.id === "string" && ID.test(a.id) && typeof a.game === "string" && ID.test(a.game) && typeof a.answer === "string")
+      .map(a => ({ id: a.id, game: a.game, q: str(a.q, 400), answer: str(a.answer, 600), quote: str(a.quote, 400), page: Number.isInteger(a.page) && a.page > 0 && a.page < 500 ? a.page : null, at: time(a.at) || 0 }));
     // sync stamps: when each record last changed / was deleted (see js/sync.js)
-    const META_KEY = /^(p|pl|s):[A-Za-z0-9_-]{1,40}$/;
+    const META_KEY = /^(p|pl|s|q):[A-Za-z0-9_-]{1,40}$/;
     const m = isObj(s.meta) ? s.meta : {};
     out.meta = { u: {}, del: {} };
     for (const part of ["u", "del"]) for (const [k, t] of Object.entries(isObj(m[part]) ? m[part] : {}))

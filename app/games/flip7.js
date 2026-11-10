@@ -36,8 +36,9 @@
       A.dashedSlot(202, 112, 46, 64) + A.dashedSlot(252, 112, 46, 64) +
       A.label(160, 206, "числа — в линию, модификаторы — над ней")),
     goal: () => A.svg(`<text x="160" y="132" text-anchor="middle" style="font-family:var(--f-display);font-weight:700;font-size:72px;fill:var(--accent)">200</text>` + A.label(160, 172, "очков — и игра заканчивается в конце раунда")),
-    challenge: () => A.svg(`<text x="160" y="118" text-anchor="middle" style="font-family:var(--f-display);font-weight:700;font-size:56px;fill:var(--accent)">200</text>` +
-      `<text x="160" y="160" text-anchor="middle" style="font-family:var(--f-display);font-weight:600;font-size:22px;fill:var(--ink)">меньше чем за 5 раундов</text>`),
+    challenge: () => A.svg(`<text x="160" y="104" text-anchor="middle" style="font-family:var(--f-display);font-weight:700;font-size:56px;fill:var(--accent)">200</text>` +
+      `<text x="160" y="146" text-anchor="middle" style="font-family:var(--f-display);font-weight:600;font-size:19px;fill:var(--ink)">меньше чем</text>` +
+      `<text x="160" y="172" text-anchor="middle" style="font-family:var(--f-display);font-weight:600;font-size:19px;fill:var(--ink)">за 5 раундов</text>`),
   };
 
   BH.registerGame({
@@ -65,9 +66,9 @@
         text: "Положите колоду рубашкой вверх в центр. Рядом оставьте место: туда откладывают карты сыгранных раундов, в колоду их не замешивают." },
       { id: "space", title: "Место для линии карт", art: art.space,
         text: c => (c.players > 1 ? `Каждому из ${c.players} игроков` : "Вам") + " нужно место перед собой: числовые карты выкладываются в одну линию, а модификаторы и карты действий — над ней. Бумага для счёта не нужна, очки считает приложение." },
-      { id: "challenge", title: "Вызов: 200 меньше чем за 5 раундов", art: art.challenge, when: c => c.players <= 2,
-        text: "Вдвоём или в одиночку попробуйте набрать 200 очков меньше чем за 5 раундов. Приложение посчитает раунды и в конце скажет, получилось ли." },
-      { id: "goal", title: "Цель — 200 очков", art: art.goal, when: c => c.players > 2,
+      { id: "challenge", title: "Вызов: 200 меньше чем за 5 раундов", art: art.challenge, when: c => c.players <= 2 && c.opt("challenge"),
+        text: "Попробуйте набрать 200 очков меньше чем за 5 раундов. Приложение посчитает раунды и в конце скажет, получилось ли." },
+      { id: "goal", title: "Цель — 200 очков", art: art.goal, when: c => !(c.players <= 2 && c.opt("challenge")),
         text: "Очки копятся от раунда к раунду. Когда у кого-то становится 200 или больше, раунд доигрывают, и побеждает тот, у кого больше всех." },
     ],
 
@@ -87,8 +88,12 @@
     scoring: { type: "rounds", target: 200, tieNote: "Что делать при ничьей, в правилах не сказано. Можно сыграть ещё один раунд или записать ничью." },
 
     // shown on the finish screen
+    options: [
+      { id: "challenge", label: "Играть с вызовом: 200 очков меньше чем за 5 раундов", when: c => c.players <= 2, default: true },
+    ],
+
     finishNote(s) {
-      if (s.players.length > 2) return "";
+      if (s.players.length > 2 || !(s.opts && s.opts.challenge) || BH.hasFinal(s)) return "";
       const n = s.rounds.length;
       return n < 5 ? `Вызов выполнен: 200 очков за ${n} ${BH.plural(n, "раунд", "раунда", "раундов")}.` : `Вызов не выполнен: понадобилось ${n} ${BH.plural(n, "раунд", "раунда", "раундов")}, а нужно меньше пяти.`;
     },

@@ -17,7 +17,13 @@
   BH.game = id => BH.games.find(g => g.id === id) || null;
 
   /* context handed to a game's conditions: how many players, which expansions */
-  BH.ctxOf = s => ({ players: s.players.length, exp: new Set(s.exp), has: id => s.exp.includes(id) });
+  BH.ctxOf = s => ({ players: s.players.length, exp: new Set(s.exp), has: id => s.exp.includes(id), opt: id => !!(s.opts && s.opts[id]) });
+
+  /* game options offered when creating a game (e.g. Flip 7's solo challenge): the ones that apply now */
+  BH.gameOptions = (g, ctx) => (g.options || []).filter(o => !o.when || o.when(ctx));
+
+  /* totals: from the rounds, or the final scores typed in for a game recorded afterwards */
+  BH.hasFinal = s => !!(s.final && Object.keys(s.final).length);
 
   BH.setupSteps = s => {
     const g = BH.game(s.gameId); if (!g) return [];
@@ -40,6 +46,7 @@
 
   BH.totals = s => {
     const t = Object.fromEntries(s.players.map(id => [id, 0]));
+    if (BH.hasFinal(s)) { for (const id of s.players) t[id] = Number(s.final[id]) || 0; return t; }
     for (const r of s.rounds) for (const id of s.players) t[id] += Number(r.scores[id]) || 0;
     return t;
   };

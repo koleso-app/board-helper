@@ -61,15 +61,32 @@ t("search: x2", () => assert.ok(BH.searchRules(g, "удваивает ли x2 м
 t("search: freeze on myself", () => assert.ok(BH.searchRules(g, "можно ли freeze на себя").slice(0, 3).some(h => /Freeze/.test(h.title))));
 t("search: running out of cards", () => assert.ok(BH.searchRules(g, "закончилась колода").slice(0, 3).some(h => /Колода закончилась|Колода закончилась посреди/.test(h.title))));
 t("search: dealer next round", () => assert.ok(BH.searchRules(g, "кто сдаёт следующим").length > 0));
-t("solo / two players get the 5-round challenge", () => {
-  assert.ok(BH.setupSteps(mk(2)).some(x => x.id === "challenge"));
-  assert.ok(!BH.setupSteps(mk(2)).some(x => x.id === "goal"));
-  assert.ok(!BH.setupSteps(mk(4)).some(x => x.id === "challenge"));
-  const s = mk(1); s.rounds = [1, 2, 3, 4].map(() => ({ scores: { p0: 50 } }));
+const withOpt = (n, on) => Object.assign(mk(n), { opts: { challenge: on } });
+t("the 5-round challenge is an option for 1-2 players", () => {
+  assert.strictEqual(BH.gameOptions(g, BH.ctxOf(mk(2))).length, 1);
+  assert.strictEqual(BH.gameOptions(g, BH.ctxOf(mk(3))).length, 0);
+  assert.ok(BH.setupSteps(withOpt(2, true)).some(x => x.id === "challenge"));
+  assert.ok(!BH.setupSteps(withOpt(2, true)).some(x => x.id === "goal"));
+  assert.ok(!BH.setupSteps(withOpt(2, false)).some(x => x.id === "challenge"));
+  assert.ok(BH.setupSteps(withOpt(2, false)).some(x => x.id === "goal"));
+  const s = withOpt(1, true); s.rounds = [1, 2, 3, 4].map(() => ({ scores: { p0: 50 } }));
   assert.ok(g.finishNote(s).startsWith("Вызов выполнен"));
   s.rounds.push({ scores: { p0: 1 } });
   assert.ok(g.finishNote(s).startsWith("Вызов не выполнен"));
+  assert.strictEqual(g.finishNote(Object.assign(withOpt(1, false), { rounds: s.rounds })), "");
   assert.strictEqual(g.finishNote(mk(3)), "");
+});
+t("a game recorded afterwards counts its final scores", () => {
+  const s = Object.assign(mk(3), { final: { p0: 120, p1: 205, p2: 90 } });
+  assert.strictEqual(BH.totals(s).p1, 205);
+  assert.strictEqual(BH.standings(s)[0].id, "p1");
+});
+t("answers and game options survive normalize", () => {
+  const n = BH._normalize({ players: [{ id: "a1", name: "Аня" }], answers: [{ id: "abc", game: "flip7", q: "?", answer: "Да.", page: 6 }, { id: "bad id", game: "flip7", answer: "x" }],
+    sessions: [{ id: "s1", gameId: "flip7", players: ["a1"], opts: { challenge: 1 }, final: { a1: "150", ghost: 3 } }] });
+  assert.strictEqual(n.answers.length, 1);
+  assert.strictEqual(n.sessions[0].opts.challenge, true);
+  assert.strictEqual(JSON.stringify(n.sessions[0].final), '{"a1":150}');
 });
 t("search by the rulebook's words", () => {
   assert.ok(BH.searchRules(g, "что такое хит").slice(0, 2).some(h => /Хит/.test(h.title)));

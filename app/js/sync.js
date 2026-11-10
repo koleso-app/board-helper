@@ -113,7 +113,7 @@
    * keys: p:<player>  pl:<place>  s:<session>
    * Equal stamps: the remote copy wins, so every device ends with the same data.
    * Settings (theme, voice speed) belong to the device and are never synced. */
-  const COLLECTIONS = [["players", "p:"], ["places", "pl:"], ["sessions", "s:"]];
+  const COLLECTIONS = [["players", "p:"], ["places", "pl:"], ["sessions", "s:"], ["answers", "q:"]];
   function merge(L, R) {
     L = L || {}; R = R || {};
     const u = {}, del = {};
@@ -142,6 +142,7 @@
     out.players.sort((a, b) => (a.created || 0) - (b.created || 0) || byId(a, b));
     out.places.sort((a, b) => (a.id === "home" ? -1 : b.id === "home" ? 1 : byId(a, b)));
     out.sessions.sort((a, b) => (b.created || 0) - (a.created || 0) || byId(a, b));
+    out.answers.sort((a, b) => (b.at || 0) - (a.at || 0) || byId(a, b));
     return out;
   }
 
@@ -172,7 +173,7 @@
     return JSON.stringify(v);
   }
   /* what travels: everything but this device's own settings */
-  const shared = s => ({ v: 1, players: s.players || [], places: s.places || [], sessions: s.sessions || [], meta: s.meta || { u: {}, del: {} } });
+  const shared = s => ({ v: 1, players: s.players || [], places: s.places || [], sessions: s.sessions || [], answers: s.answers || [], meta: s.meta || { u: {}, del: {} } });
 
   const lib = { FILE, FORMAT, ITER, seal, open, checkRepo, pull, push, merge, recordMap, stampChanges, stable, shared, SyncError };
   if (typeof module === "object" && module.exports) module.exports = lib;

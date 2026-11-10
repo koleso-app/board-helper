@@ -40,26 +40,27 @@
   }
 
   /* ---------- ask: the same question again is answered from the device, for free ---------- */
-  const LS_ANSWERS = "board-helper-answers";
+  // answers live in the app data (BH.state.answers), so they sync through GitHub to every device
   const norm = q => String(q).toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9×+ ]+/gi, " ").replace(/\s+/g, " ").trim();
-  const answers = () => { try { return JSON.parse(read(LS_ANSWERS) || "{}") || {}; } catch (e) { return {}; } };
+  const fnv = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36); };
+  V.answerId = (game, question) => "a" + fnv(game + "|" + norm(question)) + fnv(norm(question) + "|" + game);
   V.ask = async (game, question, situation, signal) => {
-    const k = game + "|" + norm(question), saved = answers()[k];
+    const id = V.answerId(game, question);
+    const saved = (BH.state.answers || []).find(a => a.id === id);
     if (saved) {
       const audio = await cached(saved.answer);
-      return Object.assign({}, saved, { audio, fromDevice: true });
+      return { answer: saved.answer, quote: saved.quote, page: saved.page, found: true, audio, fromDevice: true };
     }
     const r = await call({ action: "ask", game, question, situation }, signal);
     if (r && r.found && r.answer) {
-      const all = answers();
-      all[k] = { answer: r.answer, quote: r.quote, page: r.page, found: true, at: Date.now() };
-      const keys = Object.keys(all).sort((a, b) => all[b].at - all[a].at);
-      for (const old of keys.slice(150)) delete all[old];     // keep the latest 150
-      write(LS_ANSWERS, JSON.stringify(all));
+      const list = BH.state.answers = (BH.state.answers || []).filter(a => a.id !== id);
+      list.unshift({ id, game, q: String(question).slice(0, 400), answer: r.answer, quote: r.quote || "", page: r.page || null, at: Date.now() });
+      if (list.length > 300) list.length = 300;           // keep the latest 300
+      BH.saveNow();
     }
     return r;
   };
-  V.forget = () => write(LS_ANSWERS, null);   // after a rules update
+  V.forget = game => { BH.state.answers = (BH.state.answers || []).filter(a => game && a.game !== game); BH.saveNow(); };   // after a rules update
 
   /* ---------- speech: cached mp3 per (voice, text) ---------- */
   async function key(text) {
@@ -118,26 +119,45 @@
   };
 
   /* ---------- listening ---------- */
+  /* Listens until the player presses "send": pauses while thinking do not end the question.
+     Chrome stops recognition by itself after a silence, so it is restarted and the text kept.
+     Returns { finish(), abort() }; handlers: partial(text), done(text), error(message). */
   V.listen = handlers => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { handlers.error && handlers.error("Этот браузер не умеет распознавать речь — напишите вопрос текстом."); return null; }
-    const rec = new SR();
-    rec.lang = "ru-RU"; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
-    let final = "";
-    rec.onresult = e => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += t; else interim += t;
-      }
-      handlers.partial && handlers.partial((final + " " + interim).trim());
+    let kept = "", live = "", finished = false, stopped = false, rec = null, restarts = 0;
+    const text = () => (kept + " " + live).replace(/\s+/g, " ").trim();
+    const fatal = { "not-allowed": "Нет доступа к микрофону. Разрешите его для сайта в настройках Chrome.", "service-not-allowed": "Нет доступа к микрофону.", network: "Для распознавания речи нужен интернет.", "audio-capture": "Микрофон не найден." };
+    function start() {
+      rec = new SR();
+      rec.lang = "ru-RU"; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = true;
+      let finals = "";
+      rec.onresult = e => {
+        let interim = ""; finals = "";
+        for (let i = 0; i < e.results.length; i++) {
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finals += t + " "; else interim += t;
+        }
+        live = finals + interim;
+        handlers.partial && handlers.partial(text());
+      };
+      rec.onerror = e => {
+        if (fatal[e.error]) { stopped = true; handlers.error && handlers.error(fatal[e.error]); }
+        // "no-speech" and "aborted" just mean a silence: keep listening
+      };
+      rec.onend = () => {
+        kept = text(); live = "";
+        if (stopped) return;
+        if (finished) { stopped = true; handlers.done && handlers.done(kept); return; }
+        if (++restarts > 40) { stopped = true; handlers.done && handlers.done(kept); return; }   // about a few minutes of silence
+        try { start(); } catch (err) { stopped = true; handlers.done && handlers.done(kept); }
+      };
+      rec.start();
+    }
+    try { start(); } catch (e) { handlers.error && handlers.error("Не получилось включить микрофон."); return null; }
+    return {
+      finish() { finished = true; try { rec.stop(); } catch (e) { stopped = true; handlers.done && handlers.done(text()); } },
+      abort() { stopped = true; try { rec.abort(); } catch (e) {} },
     };
-    rec.onerror = e => {
-      const m = { "not-allowed": "Нет доступа к микрофону. Разрешите его для сайта в настройках Chrome.", "service-not-allowed": "Нет доступа к микрофону.", "no-speech": "Ничего не услышал. Попробуйте ещё раз.", network: "Для распознавания речи нужен интернет.", "audio-capture": "Микрофон не найден." };
-      if (e.error !== "aborted") handlers.error && handlers.error(m[e.error] || "Не получилось распознать речь (" + e.error + ").");
-    };
-    rec.onend = () => handlers.done && handlers.done(final.trim());
-    try { rec.start(); } catch (e) { handlers.error && handlers.error("Не получилось включить микрофон."); return null; }
-    return rec;
   };
 })();

@@ -119,78 +119,136 @@
     </div>`;
   }
 
-  /* ---------- new game wizard ---------- */
-  function startDraft(gameId) {
+  /* ---------- new game: one page with sections (date, game, expansions, place, players) ----------
+     The same page edits a game that has not started yet (#/s/<id>/edit). A date in the past turns it
+     into "record a game you already played": final scores and the winner, straight to the history. */
+  const PAST_MS = 3 * 3600 * 1000;
+  function startDraft(gameId, from) {
+    if (from) {
+      draft = { editId: from.id, date: from.created, gameId: from.gameId, exp: from.exp.slice(), placeId: from.placeId, players: from.players.slice(), opts: Object.assign({}, from.opts), final: {}, winners: [], pickGame: false };
+      return;
+    }
     const last = S().sessions[0];
     const lastSame = gameId ? S().sessions.find(s => s.gameId === gameId) : null;
     const src = lastSame || last;
+    const gid = gameId || (src && BH.game(src.gameId) ? src.gameId : (BH.games.length === 1 ? BH.games[0].id : null));
     draft = {
-      step: gameId ? 1 : 0,
-      gameId: gameId || (BH.games.length === 1 ? BH.games[0].id : null),
+      date: Date.now(),
+      gameId: gid,
       exp: lastSame ? lastSame.exp.slice() : [],
       placeId: (src && BH.place(src.placeId) ? src.placeId : (S().places[0] || {}).id) || null,
       players: src ? src.players.filter(id => { const p = BH.player(id); return p && !p.hidden; }) : [],
+      opts: {}, final: {}, winners: [], pickGame: !gid, gameQuery: "",
     };
-    if (draft.gameId && !gameId) draft.step = 0;
   }
-  const WIZ = ["Игра", "Дополнения", "Место", "Игроки"];
-  function wizSteps() {
-    const g = BH.game(draft.gameId);
-    return [0, 1, 2, 3].filter(i => i !== 1 || (g && g.expansions.length));
+  const draftCtx = () => ({ players: draft.players.length, exp: new Set(draft.exp), has: id => draft.exp.includes(id), opt: id => !!draft.opts[id] });
+  const draftPast = () => !draft.editId && draft.date < Date.now() - PAST_MS;
+  const localInput = ts => { const d = new Date(ts), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+  // options default to their "default" the first time they apply
+  function draftOptions(g) {
+    const list = BH.gameOptions(g, draftCtx());
+    for (const o of list) if (!(o.id in draft.opts)) draft.opts[o.id] = !!o.default;
+    return list;
   }
 
   function viewNew() {
     if (!draft) startDraft();
     const g = BH.game(draft.gameId);
-    const steps = wizSteps();
-    if (!steps.includes(draft.step)) draft.step = steps.find(i => i > draft.step) ?? 3;
-    const pos = steps.indexOf(draft.step);
-    const bar = `<div class="steps-bar" aria-hidden="true">${steps.map((_, i) => `<i class="${i <= pos ? "on" : ""}"></i>`).join("")}</div>`;
-    let body = "", canNext = true, nextLabel = "Дальше";
+    const past = draftPast();
+    let n = 0;
+    const sec = (title, sub, body) => `<section class="panel form-sec"><div class="sec-head"><span class="sec-n">${++n}</span><div><h2>${esc(title)}</h2>${sub ? `<p class="small muted">${sub}</p>` : ""}</div></div>${body}</section>`;
 
-    if (draft.step === 0) {
-      body = `<div class="games">${BH.games.map(x => `<button class="game" data-act="pick-game" data-id="${x.id}" aria-pressed="${x.id === draft.gameId}">
-          <span class="cover">${x.cover || ""}</span><span><b>${esc(x.name)}</b><span>от ${esc(x.players.recommendedMin || x.players.min)} игроков · ${esc(x.time || "")}</span></span></button>`).join("")}</div>
-        <p class="muted small" style="margin-top:12px">Следующей добавим «Ики» с дополнением — там пригодится выбор дополнений.</p>`;
-      canNext = !!g;
-    } else if (draft.step === 1) {
-      body = `<p class="muted">Отметьте, с чем играете. От этого зависят подготовка и правила.</p>
-        <div class="chips">${g.expansions.map(e => `<button class="chip" data-act="toggle-exp" data-id="${e.id}" aria-pressed="${draft.exp.includes(e.id)}">${esc(e.name)}</button>`).join("")}</div>
-        <p class="muted small">Без отметок — базовая игра.</p>`;
-    } else if (draft.step === 2) {
-      body = `<p class="muted">Где играете? Это нужно для статистики.</p>
-        <div class="chips">${S().places.map(p => `<button class="chip" data-act="pick-place" data-id="${p.id}" aria-pressed="${p.id === draft.placeId}">${esc(p.name)}</button>`).join("")}
-          <button class="chip" data-act="pick-place" data-id="" aria-pressed="${!draft.placeId}">Не указывать</button></div>
-        <form class="row" data-form="add-place" style="max-width:420px"><input class="input" name="name" placeholder="Новое место: у Саши, в клубе…" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>`;
+    const dateSec = sec("Дата игры", past ? "Партия в прошлом: запишете сразу итог, без подготовки и раундов." : "", `<input class="input" type="datetime-local" data-act="draft-date" value="${localInput(draft.date)}" max="${localInput(Date.now() + 86400000)}" aria-label="Дата и время игры">`);
+
+    let gameBody;
+    if (g && !draft.pickGame) {
+      gameBody = `<div class="row"><span class="game-mini">${g.cover || ""}</span><div class="grow"><b>${esc(g.name)}</b><div class="small muted">от ${esc(g.players.recommendedMin || g.players.min)} игроков · ${esc(g.time || "")}</div></div>${draft.editId ? "" : `<button class="btn sm" data-act="change-game">Изменить</button>`}</div>`;
     } else {
-      const pmin = g.players.min, pmax = g.players.max, n = draft.players.length;
-      const pool = S().players.filter(p => !p.hidden);
-      body = `<p class="muted">Отметьте, кто играет. Порядок ниже — как сидите за столом, по часовой стрелке.</p>
-        <div class="chips">${pool.map(p => `<button class="chip" data-act="toggle-player" data-id="${p.id}" aria-pressed="${draft.players.includes(p.id)}"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</button>`).join("")}</div>
-        <form class="row" data-form="add-player" style="max-width:420px"><input class="input" name="name" placeholder="Имя нового игрока" maxlength="40" aria-label="Имя нового игрока" ${pool.length ? "" : "autofocus"}><button class="btn" type="submit">Добавить</button></form>
-        ${n ? `<section class="panel"><div class="label" style="margin-bottom:4px">За столом</div>${draft.players.map((id, i) => { const p = BH.player(id); return `<div class="seat"><span class="n">${i + 1}</span>${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
-            <span class="mv"><button class="icon-btn" data-act="seat-up" data-i="${i}" aria-label="Выше" ${i ? "" : "disabled"}>${I.up}</button><button class="icon-btn" data-act="seat-down" data-i="${i}" aria-label="Ниже" ${i < n - 1 ? "" : "disabled"}>${I.down}</button><button class="icon-btn" data-act="toggle-player" data-id="${id}" aria-label="Убрать">${I.x}</button></span></div>`; }).join("")}</section>` : ""}
-        ${n && n < pmin ? `<div class="note">Для ${esc(g.name)} нужно минимум ${pmin} ${BH.plural(pmin, "игрок", "игрока", "игроков")}.</div>` : ""}
-        ${n >= pmin && g.players.recommendedMin && n < g.players.recommendedMin ? `<div class="note">${esc(g.playersNote || `По правилам ${g.name} рассчитан на ${g.players.recommendedMin} и больше игроков.`)}</div>` : ""}
-        ${n > pmax ? `<div class="note">Для ${esc(g.name)} не больше ${pmax} игроков.</div>` : ""}`;
-      canNext = n >= pmin && n <= pmax;
-      nextLabel = "Создать партию";
+      const q = (draft.gameQuery || "").toLowerCase();
+      const list = BH.games.filter(x => !q || x.name.toLowerCase().includes(q));
+      gameBody = `${BH.games.length > 6 ? `<div class="search">${I.search}<input class="input" data-act="game-q" value="${esc(draft.gameQuery || "")}" placeholder="Найти игру" aria-label="Найти игру"></div>` : ""}
+        <div class="games" style="margin-top:8px">${list.map(x => `<button class="game" data-act="pick-game" data-id="${x.id}" aria-pressed="${x.id === draft.gameId}">
+          <span class="cover">${x.cover || ""}</span><span><b>${esc(x.name)}</b><span>от ${esc(x.players.recommendedMin || x.players.min)} игроков · ${esc(x.time || "")}</span></span></button>`).join("")}</div>`;
+    }
+    const gameSec = sec("Игра", "", gameBody);
+
+    const expSec = g && g.expansions.length ? sec("Дополнения", "От них зависят подготовка и правила. Без отметок — базовая игра.",
+      `<div class="chips">${g.expansions.map(e => `<button class="chip" data-act="toggle-exp" data-id="${e.id}" aria-pressed="${draft.exp.includes(e.id)}">${esc(e.name)}</button>`).join("")}</div>`) : "";
+
+    const placeSec = sec("Место", "", `<div class="chips">${S().places.map(p => `<button class="chip" data-act="pick-place" data-id="${p.id}" aria-pressed="${p.id === draft.placeId}">${esc(p.name)}</button>`).join("")}
+        <button class="chip" data-act="pick-place" data-id="" aria-pressed="${!draft.placeId}">Не указывать</button></div>
+      <form class="row" data-form="add-place" style="margin-top:10px"><input class="input" name="name" placeholder="Новое место: у Саши, в клубе…" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>`);
+
+    let playersBody = "", ok = !!g;
+    if (g) {
+      const pmin = g.players.min, pmax = g.players.max, cnt = draft.players.length;
+      const pool = S().players.filter(p => !p.hidden || draft.players.includes(p.id));
+      const opts = draftOptions(g);
+      playersBody = `<div class="chips">${pool.map(p => `<button class="chip" data-act="toggle-player" data-id="${p.id}" aria-pressed="${draft.players.includes(p.id)}"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</button>`).join("")}</div>
+        <form class="row" data-form="add-player" style="margin-top:10px"><input class="input" name="name" placeholder="Имя нового игрока" maxlength="40" aria-label="Имя нового игрока"><button class="btn" type="submit">Добавить</button></form>
+        ${cnt ? `<div style="margin-top:10px"><div class="label" style="margin-bottom:2px">За столом, по часовой стрелке</div>${draft.players.map((id, i) => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="seat"><span class="n">${i + 1}</span>${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
+            <span class="mv"><button class="icon-btn" data-act="seat-up" data-i="${i}" aria-label="Выше" ${i ? "" : "disabled"}>${I.up}</button><button class="icon-btn" data-act="seat-down" data-i="${i}" aria-label="Ниже" ${i < cnt - 1 ? "" : "disabled"}>${I.down}</button><button class="icon-btn" data-act="toggle-player" data-id="${id}" aria-label="Убрать">${I.x}</button></span></div>`; }).join("")}</div>` : ""}
+        ${cnt && cnt < pmin ? `<div class="note" style="margin-top:10px">Для ${esc(g.name)} нужно минимум ${pmin} ${BH.plural(pmin, "игрок", "игрока", "игроков")}.</div>` : ""}
+        ${cnt >= pmin && g.players.recommendedMin && cnt < g.players.recommendedMin ? `<div class="note info" style="margin-top:10px">${esc(g.playersNote || `По правилам ${g.name} рассчитан на ${g.players.recommendedMin} и больше игроков.`)}</div>` : ""}
+        ${cnt > pmax ? `<div class="note" style="margin-top:10px">Для ${esc(g.name)} не больше ${pmax} игроков.</div>` : ""}
+        ${!past && opts.length ? `<div class="stack" style="margin-top:12px;gap:6px">${opts.map(o => `<label class="check" style="font-weight:500"><input type="checkbox" data-act="draft-opt" data-id="${esc(o.id)}" ${draft.opts[o.id] ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}</div>` : ""}`;
+      ok = cnt >= pmin && cnt <= pmax;
+    }
+    const playersSec = sec("Игроки", "", playersBody);
+
+    let resultSec = "";
+    if (past && g && draft.players.length) {
+      resultSec = sec("Итог", "Очки можно не вписывать. Победитель выберется по очкам, или отметьте его сами.",
+        `${draft.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="seat" style="grid-template-columns:auto minmax(0,1fr) auto">${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
+          <input class="input score-in" type="number" inputmode="numeric" data-act="draft-final" data-p="${id}" value="${draft.final[id] ?? ""}" placeholder="очки" aria-label="Очки: ${esc(p.name)}"></div>`; }).join("")}
+        <div class="label" style="margin:12px 0 6px">Победитель</div>
+        <div class="chips">${draft.players.map(id => { const p = BH.player(id) || { name: "?" }; return `<button class="chip" data-act="draft-winner" data-id="${id}" aria-pressed="${draft.winners.includes(id)}">${esc(p.name)}</button>`; }).join("")}</div>`);
     }
 
+    const label = draft.editId ? "Сохранить" : past ? "Записать сыгранную партию" : "Создать партию";
+    const back = draft.editId ? backLink("#/s/" + draft.editId + "/setup", "Подготовка") : backLink("#/", "Отмена");
     return `<div class="stack">
-      <div>${draft.step === steps[0] ? backLink("#/", "Отмена") : `<button class="back" data-act="wiz-back">${I.back}<span>Назад</span></button>`}
-        <div class="page-head"><div><span class="label">Новая партия · ${pos + 1} из ${steps.length}</span><h1>${WIZ[draft.step]}${g && draft.step ? ": " + esc(g.name) : ""}</h1></div></div>${bar}</div>
-      ${body}
-      <div class="sticky-foot"><button class="btn primary big block" data-act="wiz-next" ${canNext ? "" : "disabled"}>${nextLabel}</button></div>
+      <div>${back}<div class="page-head"><div><h1>${draft.editId ? "Партия" : past ? "Сыгранная партия" : "Новая партия"}</h1></div></div></div>
+      ${dateSec}${gameSec}${expSec}${placeSec}${playersSec}${resultSec}
+      <div class="sticky-foot"><button class="btn primary big block" data-act="draft-save" ${ok ? "" : "disabled"}>${label}</button></div>
     </div>`;
   }
 
-  function createSession() {
+  function saveDraft() {
     const g = BH.game(draft.gameId);
+    if (!g) return;
+    const opts = {};
+    for (const o of BH.gameOptions(g, draftCtx())) opts[o.id] = !!draft.opts[o.id];
+    if (draft.editId) {
+      const s = BH.session(draft.editId);
+      if (!s) { draft = null; go("#/"); return; }
+      Object.assign(s, { gameId: g.id, exp: draft.exp.slice(), placeId: draft.placeId || null, players: draft.players.slice(), opts, created: draft.date });
+      if (s.first && !s.players.includes(s.first)) s.first = null;
+      BH.saveNow(); draft = null;
+      go("#/s/" + s.id + "/setup");
+      BH.toast("Партия обновлена");
+      return;
+    }
     const s = {
-      id: BH.uid(), gameId: g.id, exp: draft.exp.slice(), placeId: draft.placeId || null, players: draft.players.slice(),
-      created: Date.now(), status: "setup", setupDone: {}, first: null, rounds: [], winners: [],
+      id: BH.uid(), gameId: g.id, exp: draft.exp.slice(), placeId: draft.placeId || null, players: draft.players.slice(), opts,
+      created: draft.date, status: "setup", setupDone: {}, first: null, rounds: [], winners: [],
     };
+    if (draftPast()) {
+      const final = {};
+      for (const id of s.players) if (draft.final[id] !== undefined && draft.final[id] !== "") final[id] = Math.round(Number(draft.final[id])) || 0;
+      let winners = draft.winners.filter(id => s.players.includes(id));
+      if (!winners.length && Object.keys(final).length) {
+        const best = Math.max(...Object.values(final));
+        winners = s.players.filter(id => final[id] === best);
+      }
+      Object.assign(s, { status: "finished", startedAt: draft.date, finishedAt: draft.date, final: Object.keys(final).length ? final : undefined, winners });
+      S().sessions.push(s);
+      S().sessions.sort((a, b) => (b.created || 0) - (a.created || 0));
+      BH.saveNow(); draft = null;
+      go("#/s/" + s.id + "/done");
+      BH.toast("Партия записана в историю");
+      return;
+    }
     if (!BH.setupSteps(s).length) s.status = "first";
     S().sessions.unshift(s);
     BH.saveNow();
@@ -203,6 +261,11 @@
     const g = BH.game(s.gameId);
     if (!g) return { html: notFound("Игра этой партии больше не в каталоге.") };
     if (!sub) sub = s.status === "setup" ? "setup" : s.status === "first" ? "first" : s.status === "playing" ? "play" : "done";
+    if (sub === "edit") {
+      if (s.status === "finished" || s.rounds.length) return { html: notFound("Партия уже идёт — её состав больше не меняется.") };
+      if (!draft || draft.editId !== s.id) startDraft(null, s);
+      return { html: viewNew() };
+    }
     if (sub === "setup") return { html: viewSetup(s, g) };
     if (sub === "first") return { html: viewFirst(s, g) };
     if (sub === "play") return { html: viewPlay(s, g), after: () => BH.rulesUI.bind(main, g, { compact: true }) };
@@ -221,7 +284,7 @@
     const done = steps.filter(st => s.setupDone[st.id]).length;
     const speakAll = "";   // voice is only for players' questions
     return `<div class="stack">
-      <div>${backLink("#/", "Партии")}
+      <div>${backLink("#/s/" + s.id + "/edit", "Игра, место, игроки")}
         <div class="page-head"><div>${sessionTitle(s, g)}<h1>Подготовка</h1><p class="sub">${done} из ${steps.length} готово</p></div><div class="row">${speakAll}<button class="icon-btn" data-act="delete-session" aria-label="Удалить партию" title="Удалить партию">${I.trash}</button></div></div></div>
       <div class="progress" aria-hidden="true"><i style="width:${steps.length ? 100 * done / steps.length : 100}%"></i></div>
       ${steps.map((st, i) => `<section class="panel setup-step ${s.setupDone[st.id] ? "done" : ""}" id="step-${esc(st.id)}">
@@ -326,7 +389,7 @@
         ${crown}
         ${sessionTitle(s, g)}
         <h1>${w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена"}</h1>
-        <p class="muted">${s.rounds.length} ${BH.plural(s.rounds.length, "раунд", "раунда", "раундов")}${dur ? " · " + dur : ""} · ${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""}</p>
+        <p class="muted">${s.rounds.length ? `${s.rounds.length} ${BH.plural(s.rounds.length, "раунд", "раунда", "раундов")}` : "записана после игры"}${dur && s.rounds.length ? " · " + dur : ""} · ${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""}</p>
         ${g.finishNote && g.finishNote(s) ? `<p class="badge ${s.rounds.length < 5 ? "good" : "warn"}" style="font-size:14px;padding:6px 12px">${esc(g.finishNote(s))}</p>` : ""}
       </section>
       <section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
@@ -334,7 +397,7 @@
       </section>
       <div class="actions">
         <button class="btn primary big" data-act="rematch">${I.plus}Ещё партию теми же</button>
-        <button class="btn big" data-act="reopen">Вернуться к партии</button>
+        ${s.rounds.length ? `<button class="btn big" data-act="reopen">Вернуться к партии</button>` : ""}
         <button class="btn ghost big" data-act="delete-session">${I.trash}Удалить</button>
       </div>
     </div>`;
@@ -530,17 +593,17 @@
     const a = ask, r = a.result;
     const mic = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
     let body = "";
-    if (a.phase === "listening") body = `<div class="ask-live"><span class="ask-pulse" aria-hidden="true">${mic}</span><p id="ask-heard" class="ask-heard">${esc(a.text || "Слушаю…")}</p><p class="tiny muted">Говорите вопрос, например: «можно ли сыграть заморозь на себя?»</p></div>`;
+    if (a.phase === "listening") body = `<div class="ask-live"><span class="ask-pulse" aria-hidden="true">${mic}</span><p id="ask-heard" class="ask-heard">${esc(a.text || "Слушаю…")}</p><p class="tiny muted">Говорите спокойно, паузы не страшны. Когда закончите, нажмите «Отправить». Например: «можно ли сыграть заморозь на себя?»</p></div>`;
     else if (a.phase === "thinking") body = `<div class="ask-live"><p class="ask-q">«${esc(a.text)}»</p><p class="muted">Ищу в правилах…</p></div>`;
     else if (a.phase === "answer") body = `<p class="ask-q">«${esc(a.text)}»</p>
         <div class="ask-answer ${r.found ? "" : "nf"}">${esc(r.answer)}</div>
         ${r.quote ? `<details class="small"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Где это в правилах${r.page ? `: стр. ${esc(r.page)}` : ""}</summary><blockquote class="ask-quote" style="margin-top:8px">${esc(r.quote)}${r.page ? `<cite>Книга правил, стр. ${esc(r.page)}</cite>` : ""}</blockquote></details>` : ""}
         ${r.ttsError ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}
-        ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали — ответ взят с телефона, бесплатно.</p>` : ""}`;
+        ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали — ответ сохранён, бесплатно.</p>` : ""}`;
     else if (a.phase === "error") body = `${a.text ? `<p class="ask-q">«${esc(a.text)}»</p>` : ""}<div class="note">${esc(a.error)}</div>
         ${a.local && a.local.length ? `<p class="small muted">Нашёл в шпаргалке на телефоне:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true)).join("")}` : ""}`;
     const typing = a.phase === "type" || a.phase === "answer" || (a.phase === "error" && BH.voice.ready());
-    const foot = (a.phase === "listening" ? `<button class="btn big block" data-act="ask-stop">Готово</button>` : "") +
+    const foot = (a.phase === "listening" ? `<button class="btn big" data-act="ask-close">Отмена</button><button class="btn primary big" data-act="ask-stop">${I.check}Отправить</button>` : "") +
       (a.phase === "answer" && r.audio ? `<button class="btn big" data-act="ask-replay" aria-label="Прослушать ещё раз">${I.speak}</button>` : "") +
       (BH.voice.ready() && BH.voice.canListen && a.phase !== "listening" && a.phase !== "thinking" ? `<button class="btn primary big" data-act="ask-again">${mic}${a.phase === "answer" ? "Ещё вопрос" : "Сказать"}</button>` : "");
     return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ask-h">
@@ -819,13 +882,15 @@
 
     switch (act) {
       /* wizard */
-      case "pick-game": draft.gameId = el.dataset.id; draft.exp = []; render(); break;
+      case "pick-game": draft.gameId = el.dataset.id; draft.exp = []; draft.opts = {}; draft.pickGame = false; render(); break;
+      case "change-game": draft.pickGame = true; render(); break;
+      case "draft-winner": { const i = draft.winners.indexOf(el.dataset.id); i >= 0 ? draft.winners.splice(i, 1) : draft.winners.push(el.dataset.id); render(); break; }
+      case "draft-save": saveDraft(); break;
+      case "draft-opt": break; // handled on change
       case "toggle-exp": { const i = draft.exp.indexOf(el.dataset.id); i >= 0 ? draft.exp.splice(i, 1) : draft.exp.push(el.dataset.id); render(); break; }
       case "pick-place": draft.placeId = el.dataset.id || null; render(); break;
       case "toggle-player": { const i = draft.players.indexOf(el.dataset.id); i >= 0 ? draft.players.splice(i, 1) : draft.players.push(el.dataset.id); render(); break; }
       case "seat-up": case "seat-down": { const i = +el.dataset.i, j = act === "seat-up" ? i - 1 : i + 1; const a = draft.players; [a[i], a[j]] = [a[j], a[i]]; render(); break; }
-      case "wiz-back": { const st = wizSteps(), pos = st.indexOf(draft.step); draft.step = st[Math.max(0, pos - 1)]; render(); break; }
-      case "wiz-next": { const st = wizSteps(), pos = st.indexOf(draft.step); if (pos === st.length - 1) createSession(); else { draft.step = st[pos + 1]; render(); main.focus({ preventScroll: true }); window.scrollTo(0, 0); } break; }
       case "new-with": startDraft(el.dataset.id); go("#/new"); break;
 
       /* setup */
@@ -891,7 +956,7 @@
       /* voice questions */
       case "ask-open": openAsk(el.dataset.game || (s && s.gameId), s ? s.id : null); break;
       case "ask-close": closeAsk(); break;
-      case "ask-stop": if (rec) { try { rec.stop(); } catch (err) {} } break;
+      case "ask-stop": if (rec) rec.finish(); break;
       case "ask-again": BH.voice.stopAudio(); startListening(); break;
       case "ask-replay": if (ask && ask.result && ask.result.audio) BH.voice.play(ask.result.audio).catch(() => {}); break;
       case "open-entry": sheet.open = el.dataset.p || null; renderOverlay(); { const n = overlayRoot.querySelector(`[data-entry="${el.dataset.p}"]`); if (n) n.scrollIntoView({ block: "nearest" }); } break;
@@ -911,7 +976,7 @@
       case "dlg": { const b = dialog && dialog.buttons[+el.dataset.i]; if (b) b.run(); break; }
 
       /* done */
-      case "rematch": { startDraft(s.gameId); draft.exp = s.exp.slice(); draft.placeId = s.placeId; draft.players = s.players.slice(); createSession(); break; }
+      case "rematch": { startDraft(s.gameId); Object.assign(draft, { exp: s.exp.slice(), placeId: s.placeId, players: s.players.slice(), opts: Object.assign({}, s.opts) }); saveDraft(); break; }
       case "reopen": s.status = "playing"; s.winners = []; delete s.finishedAt; BH.saveNow(); go("#/s/" + s.id + "/play"); break;
       case "delete-session": confirmDelete(s); break;
       case "show-all": showAllDone = true; render(); break;
@@ -954,6 +1019,8 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
+    if (el.dataset.act === "draft-date" && draft) { const t = new Date(el.value).getTime(); if (Number.isFinite(t)) { draft.date = t; render(); } }
+    if (el.dataset.act === "draft-opt" && draft) { draft.opts[el.dataset.id] = el.checked; }
     if (el.dataset.act === "voice-name") { BH.voice.setVoice(el.value); BH.toast("Голос: " + el.options[el.selectedIndex].text); }
     if (el.dataset.act === "sync-same") { const own = document.getElementById(el.dataset.target || "own-pass"); if (own) own.hidden = el.checked; }
     if (el.dataset.act === "import" && el.files && el.files[0]) {
@@ -974,6 +1041,13 @@
 
   document.addEventListener("input", e => {
     const el = e.target;
+    if (el.dataset.act === "draft-final" && draft) { draft.final[el.dataset.p] = el.value; return; }
+    if (el.dataset.act === "game-q" && draft) {
+      draft.gameQuery = el.value;
+      const pos = el.selectionStart; render();
+      const inp = BH.$('[data-act="game-q"]'); if (inp) { inp.focus(); try { inp.setSelectionRange(pos, pos); } catch (e) {} }
+      return;
+    }
     if (el.dataset.act === "manual" && sheet) {
       const en = sheet.entries[el.dataset.p];
       en.manual = el.value === "" ? null : el.value;
@@ -1056,7 +1130,8 @@
   window.addEventListener("hashchange", () => {
     spinToken++; spinning = false;
     if (route().a !== "settings") { syncMsg = ""; wheelTokenBad = false; }
-    if (route().a !== "new") draft = null;
+    const rt = route();
+    if (rt.a !== "new" && !(rt.a === "s" && rt.c === "edit" && draft && draft.editId === rt.b)) draft = null;
     if (route().a !== "") showAllDone = false;
     if (route().a !== "players") editPlayer = null;
     sheet = null; dialog = null;
@@ -1067,7 +1142,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.4.2";
+  BH.version = "0.5.0";
   applyTheme();
   if (route().a === "new") startDraft();
   render();

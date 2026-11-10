@@ -47,6 +47,15 @@
     return c && c.owner && c.repo && c.token ? { owner: String(c.owner), repo: String(c.repo), token: String(c.token), pass: typeof c.pass === "string" ? c.pass : "" } : null;
   };
 
+  /* after a new token worked here, put it into the wheel's connection too (only the token changes) */
+  C.updateWheelToken = token => {
+    const c = parse(read(WHEEL_CFG));
+    if (!c || !c.owner || !c.repo) return false;
+    c.token = token;
+    write(WHEEL_CFG, JSON.stringify(c));
+    return true;
+  };
+
   C.syncNow = async cfgOverride => {
     const c = cfgOverride || C.cfg;
     if (!c) return false;

@@ -453,6 +453,7 @@
 
   /* ---------- sync ---------- */
   let syncMsg = "";   // result of the last connect attempt, shown under the form
+  let wheelTokenBad = false;   // the token taken from «Колесо недели» was refused: ask for a new one
   function viewSync() {
     const C = BH.cloud, c = C.cfg;
     if (c) return `<section class="panel stack" id="sync-panel">
@@ -466,14 +467,18 @@
         <details class="small"><summary style="cursor:pointer;font-weight:600">Как подготовить GitHub</summary>
           <ol style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
             <li>Нужен закрытый (Private) репозиторий. Подойдёт тот же <b>koleso-data</b>, что у «Колеса недели»: данные помощника лягут в отдельный файл.</li>
-            <li>Нужен токен: github.com → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b>. Repository access — только этот репозиторий, Permissions → <b>Contents: Read and write</b>. Подойдёт и токен от «Колеса недели».</li>
+            <li>Нужен токен: <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">создать на GitHub</a> (Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b>). Repository access — <b>Only select repositories</b> → этот репозиторий, Permissions → <b>Contents: Read and write</b>, срок — например, год. Подойдёт и рабочий токен от «Колеса недели».</li>
             <li>На всех устройствах — один репозиторий и один пароль шифрования.</li>
           </ol></details>
-        <label class="field">Имя на GitHub<input class="input" name="owner" required placeholder="например, PlayWithMao" autocapitalize="off" spellcheck="false"></label>
-        <label class="field">Репозиторий<input class="input" name="repo" required value="koleso-data" autocapitalize="off" spellcheck="false"></label>
+        <label class="field">Имя на GitHub<input class="input" name="owner" required placeholder="например, PlayWithMao" value="${esc(w ? w.owner : "")}" autocapitalize="off" spellcheck="false"></label>
+        <label class="field">Репозиторий<input class="input" name="repo" required value="${esc(w ? w.repo : "koleso-data")}" autocapitalize="off" spellcheck="false"></label>
         <label class="field">Токен доступа<input class="input" name="token" type="password" required placeholder="github_pat_…" autocomplete="off"></label>
-        <label class="field">Пароль шифрования<input class="input" name="pass" type="password" required minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
-        <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
+        ${w && w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" data-target="own-pass-m" checked> Тот же пароль шифрования, что в колесе</label>` : ""}
+        ${w && wheelTokenBad ? `<label class="check" style="font-weight:500"><input type="checkbox" name="fixwheel" checked> Обновить токен и в «Колесе недели» на этом устройстве</label>` : ""}
+        <div class="stack" id="own-pass-m" ${w && w.pass ? "hidden" : ""}>
+          <label class="field">Пароль шифрования<input class="input" name="pass" type="password" minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
+          <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
+        </div>
         <div><button class="btn primary" type="submit">Подключить</button></div>
       </form>`;
     return `<section class="panel stack" id="sync-panel">
@@ -481,14 +486,14 @@
       <p class="small muted">Партии и игроки шифруются на устройстве вашим паролем и хранятся в закрытом репозитории на GitHub. Без интернета всё сохраняется на устройстве и отправляется само, когда связь появится. Так данные видны и на телефоне, и на ПК.</p>
       ${w ? `<form class="stack" data-form="sync-wheel" autocomplete="off">
           <div class="note good">На этом устройстве подключено «Колесо недели»: <b>${esc(w.owner)}/${esc(w.repo)}</b>. Можно взять это подключение — новый токен не нужен.</div>
-          ${w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" checked> Тот же пароль шифрования, что в колесе</label>` : ""}
+          ${w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" data-target="own-pass" checked> Тот же пароль шифрования, что в колесе</label>` : ""}
           <div class="stack" id="own-pass" ${w.pass ? "hidden" : ""}>
             <label class="field">Пароль шифрования для настолок<input class="input" name="pass" type="password" minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
             <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
           </div>
           <div><button class="btn primary" type="submit">Подключить</button></div>
         </form>
-        <details><summary class="small" style="cursor:pointer;font-weight:600">Подключить другой репозиторий</summary><div style="margin-top:12px">${manual}</div></details>` : manual}
+        <details ${wheelTokenBad ? "open" : ""}><summary class="small" style="cursor:pointer;font-weight:600">${wheelTokenBad ? "Ввести новый токен" : "Подключить другой репозиторий или токен"}</summary><div style="margin-top:12px">${manual}</div></details>` : manual}
       <p class="small" id="sync-status" role="status">${esc(syncMsg)}</p>
       <p class="tiny muted">Токен и пароль хранятся только на этом устройстве. Пароль запомните: без него данные не расшифровать, восстановить его нельзя.</p>
     </section>`;
@@ -526,13 +531,22 @@
     if (btn) btn.disabled = true;
     syncMsg = "Проверяю репозиторий и пароль…";
     const el = document.getElementById("sync-status"); if (el) el.textContent = syncMsg;
+    const fixWheel = cfg.fixWheel; delete cfg.fixWheel;
     try {
       const r = await BH.cloud.connect(cfg, pass2);
-      syncMsg = "";
+      const fixed = fixWheel && BH.cloud.updateWheelToken(cfg.token);
+      syncMsg = ""; wheelTokenBad = false;
       render();
-      BH.toast(r.firstDevice ? "Синхронизация включена. Это первое устройство — данные отправлены." : "Синхронизация включена, данные объединены");
+      BH.toast((r.firstDevice ? "Синхронизация включена, данные отправлены" : "Синхронизация включена, данные объединены") + (fixed ? ". Токен в колесе тоже обновлён" : ""));
     } catch (err) {
       syncMsg = "Не получилось: " + ((err && err.message) || String(err));
+      if (err && err.code === "auth" && form.dataset.form === "sync-wheel") {
+        // the wheel's own token is dead, so the wheel on this phone is not syncing either
+        wheelTokenBad = true;
+        syncMsg = "GitHub не принял токен, сохранённый в «Колесе недели» на этом устройстве: он истёк, отозван или заменён новым. Колесо здесь сейчас тоже не синхронизируется. Создайте новый токен (как — в подсказке ниже) и вставьте его в форму. Имя и репозиторий уже подставлены.";
+        render();
+        return;
+      }
       if (btn) btn.disabled = false;
       const e2 = document.getElementById("sync-status"); if (e2) e2.textContent = syncMsg;
     }
@@ -826,7 +840,7 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
-    if (el.dataset.act === "sync-same") { const own = BH.$("#own-pass"); if (own) own.hidden = el.checked; }
+    if (el.dataset.act === "sync-same") { const own = document.getElementById(el.dataset.target || "own-pass"); if (own) own.hidden = el.checked; }
     if (el.dataset.act === "import" && el.files && el.files[0]) {
       const file = el.files[0];
       el.value = "";
@@ -868,9 +882,11 @@
       const fd = new FormData(f), val = k => String(fd.get(k) || "");
       let cfg, pass2;
       if (form === "sync") {
-        cfg = { owner: val("owner").trim(), repo: val("repo").trim(), token: val("token").trim(), pass: val("pass") };
-        pass2 = val("pass2");
+        const w = BH.cloud.wheelCfg(), same = w && w.pass && fd.get("same") === "on";
+        cfg = { owner: val("owner").trim(), repo: val("repo").trim(), token: val("token").trim(), pass: same ? w.pass : val("pass") };
+        pass2 = same ? undefined : val("pass2");
         if (!cfg.owner || !cfg.repo || !cfg.token) { syncMsg = "Заполните имя, репозиторий и токен."; render(); return; }
+        cfg.fixWheel = !!(w && fd.get("fixwheel") === "on" && w.owner === cfg.owner && w.repo === cfg.repo);
       } else {
         const w = BH.cloud.wheelCfg(); if (!w) return;
         const same = w.pass && fd.get("same") === "on";
@@ -918,7 +934,7 @@
 
   window.addEventListener("hashchange", () => {
     spinToken++; spinning = false;
-    if (route().a !== "settings") syncMsg = "";
+    if (route().a !== "settings") { syncMsg = ""; wheelTokenBad = false; }
     if (route().a !== "new") draft = null;
     if (route().a !== "") showAllDone = false;
     if (route().a !== "players") editPlayer = null;

@@ -4,7 +4,7 @@
 колесо первого игрока, раунды и очки, шпаргалка по правилам с поиском, история и статистика.
 Одно веб-приложение в `app/`: на ПК оно работает внутри Electron, на телефоне — в браузере (PWA).
 
-**Телефон:** https://playwithmao.github.io/board-helper/ — каждый push в `main` публикуется сам (`.github/workflows/pages.yml`).
+**Телефон:** https://koleso-app.github.io/board-helper/ (тот же сайт, что у «Колеса недели», поэтому видно его подключение к GitHub) — каждый push в `main` публикуется сам (`.github/workflows/pages.yml`).
 
 ## Запуск
 

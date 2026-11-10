@@ -593,13 +593,14 @@
     const seg = (key, val, label) => `<button type="button" data-act="set" data-k="${key}" data-v="${val}" aria-pressed="${String(st[key]) === String(val)}">${label}</button>`;
     return `<section class="panel stack" id="voice-panel">
       <div class="spread"><h2>Голосовой помощник</h2>${ready ? '<span class="badge good">работает</span>' : '<span class="badge">не подключён</span>'}</div>
-      <p class="small muted">Спросите голосом во время партии: помощник найдёт ответ в книге правил, покажет цитату со страницей и прочитает ответ живым голосом. Работает через ваш Yandex Cloud и только для вас: доступ даёт подключённая выше синхронизация.</p>
+      <p class="small muted">Спросите голосом во время партии: помощник найдёт ответ в книге правил, покажет короткий ответ и цитату со страницей, а если хотите — ещё и прочитает ответ вслух. Работает через ваш Yandex Cloud и только для вас: доступ даёт подключённая выше синхронизация.</p>
       ${ready ? "" : `<p class="note info small">${esc(V.why())}</p>`}
-      <label class="field">Голос
+      <div class="spread"><span class="small"><b>Озвучивать ответы</b><br><span class="muted">${st.speakAnswers ? "Ответ звучит вслух и виден на экране." : "Ответ только на экране — так дешевле и тише."}</span></span><div class="seg">${seg("speakAnswers", true, "Вкл")}${seg("speakAnswers", false, "Выкл")}</div></div>
+      ${st.speakAnswers ? `<label class="field">Голос
         <select class="input" data-act="voice-name">${V.VOICES.map(([id, name]) => `<option value="${id}" ${id === V.voice() ? "selected" : ""}>${name}</option>`).join("")}</select></label>
       <div class="actions"><button class="btn sm" data-act="say-test">${I.speak}Проверить голос</button></div>
       ${ready ? "" : `<p class="tiny muted">Пока помощник не подключён, ответы читает голос телефона${BH.speech.supported ? (BH.speech.hasRussian ? " (русский голос найден)" : " (русского голоса в системе нет)") : " — но этот браузер не умеет читать вслух"}.</p>
-        <div class="spread"><span class="small">Скорость голоса телефона</span><div class="seg">${seg("voiceRate", 0.85, "Медленно")}${seg("voiceRate", 1, "Обычно")}${seg("voiceRate", 1.2, "Быстро")}</div></div>`}
+        <div class="spread"><span class="small">Скорость голоса телефона</span><div class="seg">${seg("voiceRate", 0.85, "Медленно")}${seg("voiceRate", 1, "Обычно")}${seg("voiceRate", 1.2, "Быстро")}</div></div>`}` : ""}
       <details class="small"><summary style="cursor:pointer;font-weight:600">Адрес функции</summary>
         <form class="row" data-form="voice-url" style="margin-top:8px"><input class="input" name="url" value="${esc(V.url())}" placeholder="https://functions.yandexcloud.net/…" autocapitalize="off" spellcheck="false" aria-label="Адрес функции"><button class="btn sm" type="submit">Сохранить</button></form>
       </details>
@@ -651,6 +652,7 @@
       if (!ask || ctl !== askCtl) return;
       ask.phase = "answer"; ask.result = r;
       renderOverlay();
+      if (!BH.voice.speaks()) return;                  // reading aloud is off in the settings: text only
       if (r.audio) { BH.voice.remember(r.answer, r.audio); BH.voice.play(r.audio).catch(() => {}); }
       else if (r.answer) BH.speech.speak(r.answer);   // e.g. "nothing in the rules": spoken once, then from the device cache
     } catch (e) {
@@ -672,7 +674,7 @@
     else if (a.phase === "answer") body = `<p class="ask-q">«${esc(a.text)}»</p>
         <div class="ask-answer ${r.found ? "" : "nf"}">${esc(r.answer)}</div>
         ${r.quote ? `<details class="small"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Где это в правилах${r.page ? `: стр. ${esc(r.page)}` : ""}</summary><blockquote class="ask-quote" style="margin-top:8px">${esc(r.quote)}${r.page ? `<cite>Книга правил, стр. ${esc(r.page)}</cite>` : ""}</blockquote></details>` : ""}
-        ${r.ttsError ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}
+        ${r.ttsError && BH.voice.speaks() ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}
         ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали — ответ сохранён, бесплатно.</p>` : ""}`;
     else if (a.phase === "error") body = `${a.text ? `<p class="ask-q">«${esc(a.text)}»</p>` : ""}<div class="note">${esc(a.error)}</div>
         ${a.local && a.local.length ? `<p class="small muted">Нашёл в шпаргалке на телефоне:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true, BH.game(a.gameId))).join("")}` : ""}`;
@@ -1094,8 +1096,19 @@
       case "del-place": S().places = S().places.filter(x => x.id !== el.dataset.id); BH.saveNow(); render(); break;
 
       /* settings */
-      case "set": { const k = el.dataset.k; let v = el.dataset.v; if (k === "voiceRate") v = Number(v); S().settings[k] = v; BH.saveNow(); applyTheme(); render(); break; }
-      case "say-test": BH.speech.speak("Привет! Я буду читать подготовку к игре и правила."); break;
+      case "set": {
+        const k = el.dataset.k; let v = el.dataset.v;
+        if (k === "voiceRate") v = Number(v);
+        if (k === "speakAnswers") { v = v === "true"; if (!v) { BH.voice.stopAudio(); BH.speech.stop(); } }
+        S().settings[k] = v; BH.saveNow(); applyTheme(); render(); break;
+      }
+      case "say-test": {
+        // the chosen assistant voice when it is connected (cached after the first time), else the phone's own
+        const hello = "Привет! Так будут звучать ответы на вопросы по правилам.";
+        if (BH.voice.ready()) BH.voice.say(hello, () => false).catch(e => BH.toast("Не получилось озвучить: " + (e.message || "ошибка")));
+        else BH.speech.speak(hello);
+        break;
+      }
       case "export": BH.exportData(); break;
       case "reload": location.reload(); break;
       case "nav-back": {
@@ -1256,7 +1269,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.7.2";
+  BH.version = "0.7.3";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

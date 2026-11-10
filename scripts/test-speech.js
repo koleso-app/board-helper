@@ -60,5 +60,19 @@ const t = async (name, f) => { try { await f(); passed++; } catch (e) { console.
     const r = await listen([[[["можно ли сыграть заморозь", true]]], [[["заморозь на себя", true]]]], 2);
     assert.strictEqual(r.text, "можно ли сыграть заморозь на себя");
   });
+  await t("reading aloud off: the function is not asked for sound", async () => {
+    const sent = [];
+    const ctx = { console, setTimeout, clearTimeout, Math, JSON, Array, Object, String, Number, Promise, Map, Set, Error, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, document: { addEventListener() {} }, addEventListener() {} };
+    ctx.window = ctx;
+    ctx.fetch = async (url, init) => { sent.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ answer: "Да.", quote: "", page: 6, found: true, audio: null }) }; };
+    vm.createContext(ctx);
+    vm.runInContext("window.BH = { state: { settings: { speakAnswers: false }, answers: [] }, cloud: { cfg: { owner: 'o', repo: 'r', token: 't' } }, saveNow() {} };", ctx);
+    vm.runInContext(fs.readFileSync(path.join(APP, "js", "voice.js"), "utf8"), ctx);
+    await ctx.BH.voice.ask("flip7", "можно ли заморозь на себя", "");
+    assert.strictEqual(sent[0].speak, false);
+    ctx.BH.state.settings.speakAnswers = true;
+    await ctx.BH.voice.ask("flip7", "другой вопрос", "");
+    assert.strictEqual(sent[1].speak, true);
+  });
   console.log(`speech: ${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
 })();

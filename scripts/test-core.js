@@ -95,6 +95,11 @@ t("search by the rulebook's words", () => {
 });
 t("every rule from the book has a page, except our own tie note", () => { for (const r of g.rules) if (r.id !== "tie") assert.ok(r.page > 0, r.id); });
 t("normalize keeps a default place", () => assert.strictEqual(BH._normalize({}).places[0].name, "Дома"));
+t("reading answers aloud is on by default and can be turned off", () => {
+  assert.strictEqual(BH._normalize({}).settings.speakAnswers, true);
+  assert.strictEqual(BH._normalize({ settings: { speakAnswers: false } }).settings.speakAnswers, false);
+  assert.strictEqual(BH._normalize({ settings: { speakAnswers: "мусор" } }).settings.speakAnswers, true);
+});
 t("faq refs point at real sections", () => { for (const f of g.faq) if (f.ref) assert.ok(g.rules.some(r => r.id === f.ref), f.ref); });
 t("every faq topic points at real sections", () => { for (const grp of g.faqGroups || []) for (const r of grp.refs) assert.ok(g.rules.some(x => x.id === r), r); });
 t("every rule is in exactly one topic", () => {

@@ -22,6 +22,8 @@
     ready: () => !!(V.url() && BH.cloud && BH.cloud.cfg),
     why: () => !V.url() ? "Голосовой помощник ещё не подключён: нет адреса функции." : !(BH.cloud && BH.cloud.cfg) ? "Подключите синхронизацию с GitHub в настройках: она же даёт доступ к голосовому помощнику." : "",
     canListen: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    // answers read aloud? Off: the function is not even asked for sound, so speech costs nothing
+    speaks: () => !(BH.state && BH.state.settings && BH.state.settings.speakAnswers === false),
   };
 
   async function call(body, signal) {
@@ -48,10 +50,10 @@
     const id = V.answerId(game, question);
     const saved = (BH.state.answers || []).find(a => a.id === id);
     if (saved) {
-      const audio = await cached(saved.answer);
+      const audio = V.speaks() ? await cached(saved.answer) : null;
       return { answer: saved.answer, quote: saved.quote, page: saved.page, found: true, audio, fromDevice: true };
     }
-    const r = await call({ action: "ask", game, question, situation }, signal);
+    const r = await call({ action: "ask", game, question, situation, speak: V.speaks() }, signal);
     if (r && r.found && r.answer) {
       const list = BH.state.answers = (BH.state.answers || []).filter(a => a.id !== id);
       list.unshift({ id, game, q: String(question).slice(0, 400), answer: r.answer, quote: r.quote || "", page: r.page || null, at: Date.now() });

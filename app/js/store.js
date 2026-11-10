@@ -45,6 +45,7 @@
       settings: {
         theme: ["auto", "light", "dark"].includes(st.theme) ? st.theme : "auto",
         voiceRate: [0.85, 1, 1.2].includes(Number(st.voiceRate)) ? Number(st.voiceRate) : 1,
+        speakAnswers: st.speakAnswers !== false,   // read the assistant's answers aloud (this device only)
       },
       placesTouched: true,
     };

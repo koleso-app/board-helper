@@ -52,6 +52,12 @@
     players: { min: 1, max: 30, recommendedMin: 3 },
     playersNote: "По правилам играют от 3 человек. Вдвоём или в одиночку книга предлагает вызов: набрать 200 очков меньше чем за 5 раундов.",
     cover,
+    // pictures from the rulebook, kept in the owner's private repo (see js/assets.js)
+    images: {
+      cover: "cover-square",
+      steps: { deck: ["numbers", "specials"], space: ["line"], challenge: ["solo"] },
+      rules: { deck: ["numbers", "specials"], example: ["line"], freeze: ["freeze@card"], flip3: ["flip3@card"], second: ["second@card"], mods: ["modifiers"], target: ["actions"], solo: ["solo"] },
+    },
     expansions: [],
     source: "Книга правил Flip 7, перевод Serco, версия 3.1",
 

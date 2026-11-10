@@ -68,6 +68,7 @@
     if (after) after();
     renderOverlay();
     updateSync();
+    BH.assets.hydrate(main);
   }
   // the sync waits while the user is in the middle of something
   let spinning = false;
@@ -162,13 +163,13 @@
 
     let gameBody;
     if (g && !draft.pickGame) {
-      gameBody = `<div class="row"><span class="game-mini">${g.cover || ""}</span><div class="grow"><b>${esc(g.name)}</b><div class="small muted">от ${esc(g.players.recommendedMin || g.players.min)} игроков · ${esc(g.time || "")}</div></div>${draft.editId ? "" : `<button class="btn sm" data-act="change-game">Изменить</button>`}</div>`;
+      gameBody = `<div class="row"><span class="game-mini"${BH.assets.cover(g)}>${g.cover || ""}</span><div class="grow"><b>${esc(g.name)}</b><div class="small muted">от ${esc(g.players.recommendedMin || g.players.min)} игроков · ${esc(g.time || "")}</div></div>${draft.editId ? "" : `<button class="btn sm" data-act="change-game">Изменить</button>`}</div>`;
     } else {
       const q = (draft.gameQuery || "").toLowerCase();
       const list = BH.games.filter(x => !q || x.name.toLowerCase().includes(q));
       gameBody = `${BH.games.length > 6 ? `<div class="search">${I.search}<input class="input" data-act="game-q" value="${esc(draft.gameQuery || "")}" placeholder="Найти игру" aria-label="Найти игру"></div>` : ""}
         <div class="games" style="margin-top:8px">${list.map(x => `<button class="game" data-act="pick-game" data-id="${x.id}" aria-pressed="${x.id === draft.gameId}">
-          <span class="cover">${x.cover || ""}</span><span><b>${esc(x.name)}</b><span>от ${esc(x.players.recommendedMin || x.players.min)} игроков · ${esc(x.time || "")}</span></span></button>`).join("")}</div>`;
+          <span class="cover"${BH.assets.cover(x)}>${x.cover || ""}</span><span><b>${esc(x.name)}</b><span>от ${esc(x.players.recommendedMin || x.players.min)} игроков · ${esc(x.time || "")}</span></span></button>`).join("")}</div>`;
     }
     const gameSec = sec("Игра", "", gameBody);
 
@@ -288,7 +289,7 @@
         <div class="page-head"><div>${sessionTitle(s, g)}<h1>Подготовка</h1><p class="sub">${done} из ${steps.length} готово</p></div><div class="row">${speakAll}<button class="icon-btn" data-act="delete-session" aria-label="Удалить партию" title="Удалить партию">${I.trash}</button></div></div></div>
       <div class="progress" aria-hidden="true"><i style="width:${steps.length ? 100 * done / steps.length : 100}%"></i></div>
       ${steps.map((st, i) => `<section class="panel setup-step ${s.setupDone[st.id] ? "done" : ""}" id="step-${esc(st.id)}">
-          <div class="art">${st.art || ""}</div>
+          <div class="art"${BH.assets.attr(g.id, ((g.images || {}).steps || {})[st.id])}>${st.art || ""}</div>
           <div class="body">
             <span class="label">Шаг ${i + 1}</span>
             <h2>${esc(st.title)}</h2>
@@ -409,7 +410,7 @@
       <div class="page-head"><div><h1>Игры</h1><p class="sub">Подготовка, правила и подсчёт очков для каждой игры.</p></div></div>
       <div class="games">${BH.games.map(g => {
         const n = S().sessions.filter(s => s.gameId === g.id && s.status === "finished").length;
-        return `<a class="game" href="#/games/${g.id}"><span class="cover">${g.cover || ""}</span><span><b>${esc(g.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли"} · ${esc(g.time || "")}</span></span></a>`;
+        return `<a class="game" href="#/games/${g.id}"><span class="cover"${BH.assets.cover(g)}>${g.cover || ""}</span><span><b>${esc(g.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли"} · ${esc(g.time || "")}</span></span></a>`;
       }).join("")}</div>
       <div class="note info">Каталог будет расти: следующая на очереди — «Ики» с дополнением. Для новой игры понадобятся её правила, чтобы составить подготовку и шпаргалку.</div>
     </div>`;
@@ -417,7 +418,7 @@
   function viewGame(g) {
     return `<div class="stack">
       <div>${backLink("#/games", "Игры")}
-        <div class="game" style="cursor:default;border:none;padding:0;background:none"><span class="cover" style="width:80px;height:80px">${g.cover || ""}</span>
+        <div class="game" style="cursor:default;border:none;padding:0;background:none"><span class="cover" style="width:80px;height:80px"${BH.assets.cover(g)}>${g.cover || ""}</span>
           <span><h1>${esc(g.name)}</h1><span>${esc(g.publisher || "")}${g.year ? ", " + g.year : ""} · от ${g.players.recommendedMin || g.players.min} игроков · ${esc(g.time || "")} · ${esc(g.age || "")}</span></span></div></div>
       ${g.tagline ? `<p>${esc(g.tagline)}</p>` : ""}
       <div class="actions"><button class="btn primary big" data-act="new-with" data-id="${g.id}">${I.plus}Новая партия</button>${askButton(g, true)}</div>
@@ -601,7 +602,7 @@
         ${r.ttsError ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}
         ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали — ответ сохранён, бесплатно.</p>` : ""}`;
     else if (a.phase === "error") body = `${a.text ? `<p class="ask-q">«${esc(a.text)}»</p>` : ""}<div class="note">${esc(a.error)}</div>
-        ${a.local && a.local.length ? `<p class="small muted">Нашёл в шпаргалке на телефоне:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true)).join("")}` : ""}`;
+        ${a.local && a.local.length ? `<p class="small muted">Нашёл в шпаргалке на телефоне:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true, BH.game(a.gameId))).join("")}` : ""}`;
     const typing = a.phase === "type" || a.phase === "answer" || (a.phase === "error" && BH.voice.ready());
     const foot = (a.phase === "listening" ? `<button class="btn big" data-act="ask-close">Отмена</button><button class="btn primary big" data-act="ask-stop">${I.check}Отправить</button>` : "") +
       (a.phase === "answer" && r.audio ? `<button class="btn big" data-act="ask-replay" aria-label="Прослушать ещё раз">${I.speak}</button>` : "") +
@@ -723,6 +724,7 @@
       const scroll = overlayRoot.querySelector(".sheet-body"), top = scroll ? scroll.scrollTop : 0;
       overlayRoot.innerHTML = askHTML();
       const body = overlayRoot.querySelector(".sheet-body"); if (body) body.scrollTop = top;
+      BH.assets.hydrate(overlayRoot);
       return;
     }
     if (dialog) {
@@ -1142,7 +1144,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.5.0";
+  BH.version = "0.6.0";
   applyTheme();
   if (route().a === "new") startDraft();
   render();

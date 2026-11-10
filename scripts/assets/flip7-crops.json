@@ -1,0 +1,12 @@
+[
+  { "name": "cover", "page": 1, "box": [110, 265, 820, 688], "width": 640 },
+  { "name": "numbers", "page": 3, "box": [25, 535, 862, 1085], "width": 720 },
+  { "name": "specials", "page": 4, "box": [25, 130, 845, 610], "width": 720 },
+  { "name": "modifiers", "page": 4, "box": [25, 130, 845, 305], "width": 720 },
+  { "name": "actions", "page": 4, "box": [25, 435, 480, 605], "width": 560 },
+  { "name": "freeze", "page": 4, "box": [30, 437, 138, 603], "width": 200 },
+  { "name": "flip3", "page": 4, "box": [193, 437, 301, 603], "width": 200 },
+  { "name": "second", "page": 4, "box": [357, 437, 465, 603], "width": 200 },
+  { "name": "line", "page": 6, "box": [25, 30, 862, 495], "width": 720 },
+  { "name": "solo", "page": 13, "box": [255, 925, 610, 1108], "width": 420 }
+]

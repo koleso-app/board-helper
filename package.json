@@ -45,7 +45,9 @@
   "devDependencies": {
     "@fontsource/onest": "^5.3.1",
     "@fontsource/unbounded": "^5.2.8",
+    "@napi-rs/canvas": "^0.1.65",
     "electron": "^45.2.3",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "pdfjs-dist": "^4.10.38"
   }
 }

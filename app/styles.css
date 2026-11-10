@@ -83,6 +83,8 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .page-head .sub{color:var(--muted);font-size:15px;margin-top:4px}
 .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;margin-bottom:6px;background:none;border:none;padding:0;cursor:pointer}
 .back:hover{color:var(--ink)}
+.back svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.back span{white-space:nowrap}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 18px;border-radius:999px;
   border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:600;font-size:15px;line-height:1.2;text-decoration:none;color:var(--ink);white-space:nowrap}
@@ -179,6 +181,14 @@ input[type="datetime-local"].input{min-height:48px}
 .art{background:var(--sunk);border-radius:12px;aspect-ratio:4/3;display:grid;place-items:center;overflow:hidden}
 .art svg{width:100%;height:100%;display:block}
 .setup-step .body{display:flex;flex-direction:column;gap:10px}
+/* rulebook pictures (private, see js/assets.js) replace the drawn schematic when available */
+.art.has-img{aspect-ratio:auto;display:flex;flex-direction:column;gap:6px;padding:6px;background:#FDF6E3}
+.art.has-img img,.rule-img img.a-wide{width:100%;height:auto;display:block;border-radius:8px}
+.cover.has-img img,.game-mini.has-img img{width:100%;height:100%;object-fit:cover;display:block}
+.rule-img{display:flex;flex-wrap:wrap;gap:8px}
+.rule-img:empty{display:none}
+.rule-img img.a-card{width:96px;height:auto;border-radius:8px;display:block}
+.rule-img img.a-wide{max-width:520px}
 .setup-step .body p{max-width:60ch}
 .setup-step.done{opacity:.62}
 .setup-step.done .art{filter:saturate(.4)}

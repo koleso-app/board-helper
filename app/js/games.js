@@ -141,6 +141,29 @@
     };
   };
 
+  /* everything a place's page shows about the finished sessions played there (narrowed to a period) */
+  BH.placeStats = (placeId, sessions) => {
+    const mine = (sessions || []).filter(s => s.status === "finished" && s.placeId === placeId).sort((a, b) => BH.sessionDate(a) - BH.sessionDate(b));
+    const dur = s => (s.finishedAt && s.startedAt && s.finishedAt > s.startedAt ? s.finishedAt - s.startedAt : 0);
+    const games = new Map(), people = new Map();
+    for (const s of mine) {
+      const e = games.get(s.gameId) || { gameId: s.gameId, n: 0, last: 0 };
+      e.n++; e.last = Math.max(e.last, BH.sessionDate(s)); games.set(s.gameId, e);
+      for (const id of s.players) {
+        const x = people.get(id) || { id, n: 0, wins: 0 };
+        x.n++; if (s.winners.includes(id)) x.wins++; people.set(id, x);
+      }
+    }
+    return {
+      played: mine.length,
+      games: [...games.values()].sort((a, b) => b.n - a.n || b.last - a.last),
+      players: [...people.values()].map(x => Object.assign(x, { rate: x.n ? x.wins / x.n : 0 })).sort((a, b) => b.wins - a.wins || b.rate - a.rate || b.n - a.n),
+      time: mine.reduce((a, s) => a + dur(s), 0),
+      first: mine.length ? BH.sessionDate(mine[0]) : 0, last: mine.length ? BH.sessionDate(mine[mine.length - 1]) : 0,
+      sessions: mine.slice().reverse(),
+    };
+  };
+
   /* players sorted best first, with shared places for equal totals */
   BH.standings = s => {
     const g = BH.game(s.gameId), t = BH.totals(s), high = !(g && g.scoring && g.scoring.lowerWins);

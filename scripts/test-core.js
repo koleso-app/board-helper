@@ -177,6 +177,16 @@ t("game stats: players, records, average win, rounds, time, table size", () => {
   assert.strictEqual(st.favPlace.id, "home"); assert.strictEqual(st.sessions[0].id, "s3");
   assert.strictEqual(BH.gameStats("nope", ss).played, 0);
 });
+t("place stats: games by plays, players by wins, time, only that place", () => {
+  const day = d => Date.UTC(2026, 9, d, 18);
+  const mk = (id, d, gameId, place, players, winners, min) => ({ id, gameId, placeId: place, players, winners, status: "finished", rounds: [], created: day(d), startedAt: day(d), finishedAt: day(d) + (min || 0) * 60000 });
+  const ss = [mk("s1", 1, "flip7", "dacha", ["a", "b"], ["a"], 30), mk("s2", 2, "other", "dacha", ["a", "b", "c"], ["b"], 20), mk("s3", 3, "flip7", "dacha", ["a", "c"], ["a"]), mk("s4", 4, "flip7", "home", ["a", "b"], ["b"], 60)];
+  const st = BH.placeStats("dacha", ss);
+  assert.strictEqual(st.played, 3); assert.strictEqual(st.games[0].gameId, "flip7"); assert.strictEqual(st.games[0].n, 2);
+  assert.strictEqual(st.players[0].id, "a"); assert.strictEqual(st.players[0].wins, 2); assert.strictEqual(st.players[0].n, 3);
+  assert.strictEqual(st.time, 50 * 60000); assert.strictEqual(st.sessions[0].id, "s3");
+  assert.strictEqual(BH.placeStats("nowhere", ss).played, 0);
+});
 t("one deck has only one 0 and one 1", () => {
   const w = g.calc.roundWarnings([{}, {}], [sel([0, 1, 5]), sel([0, 2, 5])], { players: 4 });
   assert.strictEqual(w.length, 1); assert.ok(w[0].includes("«0»")); assert.ok(!w[0].includes("«5»"));

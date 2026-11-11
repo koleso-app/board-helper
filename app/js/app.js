@@ -133,6 +133,11 @@
       else if (r.a === "new") { html = viewNew(); nav = "sessions"; inGame = true; }
       else if (r.a === "sessions") { html = viewSessions(); nav = "sessions"; }
       else if (r.a === "menu") { html = viewMenu(); nav = "menu"; }
+      else if (r.a === "places" && r.b) {
+        const pl = BH.place(r.b); nav = "menu";
+        if (!pl && backOf() !== null && !ovPushed) { history.back(); html = ""; }   // a deleted place, reached with Back / Forward
+        else html = pl ? viewPlace(pl) : notFound("Такого места нет.");
+      }
       else if (r.a === "places") { html = viewPlaces(); nav = "menu"; }
       else if (r.a === "s") {
         const s = BH.session(r.b);
@@ -192,6 +197,7 @@
     if (seg[0] === "sessions") return { href: b, label: "Партии" };
     if (seg[0] === "games") { const g = seg[1] && BH.game(seg[1]); return { href: b, label: g ? g.name : "Игры" }; }
     if (seg[0] === "players") { const q = seg[1] && BH.player(seg[1]); return { href: b, label: q ? q.name : "Игроки" }; }
+    if (seg[0] === "places") { const q = seg[1] && BH.place(seg[1]); return { href: b, label: q ? q.name : "Места" }; }
     return { href: "#/", label: "Главная" };
   }
   const backToOrigin = label => { const o = originOf(); return backLink(o.href, label || o.label); };
@@ -206,6 +212,8 @@
       if (seg[0] === "menu") return backLink(b, "Меню");
       if (seg[0] === "s" && BH.session(seg[1])) return backLink(b, "Партия");
       if (seg[0] === "players" && !seg[1]) return backLink(b, "Игроки");
+      if (seg[0] === "places" && !seg[1]) return backLink(b, "Места");
+      if (seg[0] === "games" && seg[1] && !(route().a === "games" && route().b === seg[1])) { const q = BH.game(seg[1]); if (q) return backLink(b, q.name); }
       if (seg[0] === "players" && seg[1] && route().a === "players" && route().b && seg[1] !== route().b) { const q = BH.player(seg[1]); if (q) return backLink(b, q.name); }
     }
     return backLink(href, label);
@@ -828,6 +836,20 @@
       ${body}
     </div>`;
   }
+  // players with their games and wins, a bar of the win rate, and (for a game) best / average score on the right
+  function playersRateList(list, withScores) {
+    const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
+    return list.map(e => {
+      const q = BH.player(e.id); if (!q) return "";
+      const pct = Math.round(100 * e.rate);
+      return `<a class="item pr-row" href="#/players/${esc(q.id)}">${BH.avatar(q)}
+        <div class="t"><b>${esc(q.name)}</b><span>${parties(e.n)} · ${e.wins} ${BH.plural(e.wins, "победа", "победы", "побед")}</span>
+          <div class="pr-bar" role="img" aria-label="${pct}% побед"><i style="width:${pct}%;background:${esc(q.color)}"></i></div></div>
+        <span class="pr-pct">${pct}%</span>
+        ${withScores ? `<span class="pl-best" title="Лучший счёт · средний"><b>${e.best}</b><small>ср. ${e.avg}</small></span>` : ""}
+      </a>`;
+    }).join("");
+  }
   // "3,4 раунда" but "5 раундов": a fraction takes the genitive singular
   const avgWord = (n, one, few, many) => Number.isInteger(n) ? BH.plural(n, one, few, many) : few;
   function gameStatsHTML(g, st) {
@@ -849,15 +871,15 @@
       </div>
       <section class="panel">
         <h2 style="margin-bottom:6px">Рекорды</h2>
-        ${line("Лучший счёт", best ? `${best.v} · ${name(best.id)}, ${BH.fmtDate(best.at)}` : "")}
+        ${line("Лучший счёт", best && (best.v || lowerWins(g)) ? `${best.v} · ${name(best.id)}, ${BH.fmtDate(best.at)}` : "")}
         ${line("Лучший раунд", bestR ? `${bestR.v} · ${name(bestR.id)}` : "")}
-        ${line("Средний счёт победителя", st.avgWin !== null ? String(st.avgWin) : "")}
+        ${line("Средний счёт победителя", st.avgWin || (st.avgWin === 0 && lowerWins(g)) ? String(st.avgWin) : "")}
         ${line("Чаще всех побеждает", top && top.wins ? `${name(top.id)} · ${top.wins} ${BH.plural(top.wins, "победа", "победы", "побед")}` : "")}
-        ${line("Где играют", place ? `${esc(place.name)} · ${parties(st.favPlace.n)}` : "")}
+        ${line("Где играют", place ? `<a href="#/places/${esc(place.id)}">${esc(place.name)}</a> · ${parties(st.favPlace.n)}` : "")}
         ${line("Первая партия", BH.fmtDate(st.first))}
         ${line("Последняя партия", BH.fmtDate(st.last))}
       </section>
-      <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">лучший счёт · средний</span></div><div class="list">${st.players.map(e => { const q = BH.player(e.id); return q ? `<a class="item" href="#/players/${esc(q.id)}">${BH.avatar(q)}<div class="t"><b>${esc(q.name)}</b><span>${parties(e.n)} · ${e.wins} ${BH.plural(e.wins, "победа", "победы", "побед")} · ${Math.round(100 * e.rate)}%</span></div><span class="pl-best" title="Лучший счёт · средний"><b>${e.best}</b><small>ср. ${e.avg}</small></span></a>` : ""; }).join("")}</div></section>`;
+      <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">% побед · лучший · средний</span></div><div class="list">${playersRateList(st.players, true)}</div></section>`;
   }
 
   /* ---------- players & places ---------- */
@@ -998,9 +1020,66 @@
     return `<div class="stack">
       <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Места</h1><p class="sub">Где вы играете — для статистики.</p></div></div></div>
       <section class="panel">
-        <div class="list">${S().places.length ? S().places.map(p => { const n = fin.filter(s => s.placeId === p.id).length; return `<div class="item"><div class="t"><b>${esc(p.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли"}</span></div>${n ? "" : `<button class="icon-btn" data-act="del-place" data-id="${p.id}" aria-label="Удалить место ${esc(p.name)}">${I.trash}</button>`}</div>`; }).join("") : `<p class="muted small" style="padding:8px 0">Мест пока нет.</p>`}</div>
+        <div class="list">${S().places.length ? S().places.slice().sort((a, b) => fin.filter(x => x.placeId === b.id).length - fin.filter(x => x.placeId === a.id).length).map(p => { const n = fin.filter(x => x.placeId === p.id).length; return `<a class="item menu-row" href="#/places/${esc(p.id)}"><span class="menu-ic">${IC.pin}</span><div class="t"><b>${esc(p.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли"}</span></div><span class="menu-chev">${IC.chev}</span></a>`; }).join("") : `<p class="muted small" style="padding:8px 0">Мест пока нет.</p>`}</div>
         <form class="row" data-form="add-place" style="margin-top:8px"><input class="input" name="name" placeholder="Новое место" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>
       </section>
+    </div>`;
+  }
+
+  /* a place's page: its numbers, the games played there, the sessions; rename or delete it */
+  let plcard = { id: null, tab: "stats", period: "all" }, editPlace = null;
+  function viewPlace(pl) {
+    const fin = finishedSessions().filter(x => x.placeId === pl.id);
+    if (plcard.id !== pl.id) plcard = { id: pl.id, tab: fin.length ? "stats" : "sessions", period: plcard.period };
+    const years = [...new Set(fin.map(x => new Date(BH.sessionDate(x)).getFullYear()))].sort((a, b) => b - a);
+    const opts = Object.assign({}, PERIODS); for (const y of years) opts["y" + y] = y + " год";
+    if (!(plcard.period in opts)) plcard.period = "all";
+    const st = BH.placeStats(pl.id, fin.filter(x => inPeriod(x, plcard.period)));
+    const live = S().sessions.filter(x => x.placeId === pl.id && x.status !== "finished");
+    const used = S().sessions.some(x => x.placeId === pl.id);
+    const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
+    const tabs = [["stats", "Статистика"], ["games", "Игры"], ["sessions", "Партии" + (fin.length ? " · " + fin.length : "")]];
+    const period = fin.length ? `<label class="small muted pc-sort">Период<select class="input" data-act="pl-period" aria-label="Период">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === plcard.period ? "selected" : ""}>${v}</option>`).join("")}</select></label>` : "";
+    const none = `<p class="muted small">${fin.length ? "За этот период партий нет." : "Здесь ещё не играли."}</p>`;
+    let body;
+    if (plcard.tab === "games") body = period + (st.games.length ? `<div class="pc-games">${st.games.map((e, i) => { const g = BH.game(e.gameId); return `<a class="pc-game" href="${g ? "#/games/" + esc(g.id) : "#/games"}">${coverOf(g)}
+        <span class="t"><span class="pc-g1"><i class="rank">${i + 1}</i><b>${esc(g ? g.name : e.gameId)}</b><span class="badge">${parties(e.n)}</span></span>
+          <span class="pc-g2"><span>последняя: ${BH.fmtDate(e.last)}</span></span></span></a>`; }).join("")}</div>` : none);
+    else if (plcard.tab === "sessions") body = (live.length ? `<section class="panel"><h2 style="margin-bottom:4px">Идут сейчас</h2><div class="list">${live.map(sessionLine).join("")}</div></section>` : "")
+      + period + (st.sessions.length ? `<section class="panel"><div class="list">${st.sessions.map(sessionLine).join("")}</div></section>` : none);
+    else body = period + (st.played ? (() => {
+      const top = st.players[0], fav = st.games[0], fg = fav && BH.game(fav.gameId);
+      const kpi = (v, label) => `<div class="kpi"><b>${v}</b><span>${label}</span></div>`;
+      const line = (label, v) => v ? `<div class="pc-line"><span>${label}</span><b>${v}</b></div>` : "";
+      const hours = ms => ms >= 3600000 ? (ms / 3600000).toFixed(1).replace(".", ",") + " ч" : BH.fmtDuration(ms);
+      return `<div class="kpis">
+          ${kpi(st.played, BH.plural(st.played, "партия", "партии", "партий"))}
+          ${kpi(st.games.length, BH.plural(st.games.length, "игра", "игры", "игр"))}
+          ${kpi(st.players.length, BH.plural(st.players.length, "игрок", "игрока", "игроков"))}
+          ${st.time ? kpi(hours(st.time), "за столом") : ""}
+        </div>
+        <section class="panel">
+          ${line("Любимая игра здесь", fav ? `${esc(fg ? fg.name : fav.gameId)} · ${parties(fav.n)}` : "")}
+          ${line("Чаще всех побеждает", top && top.wins ? `${esc((BH.player(top.id) || { name: "?" }).name)} · ${top.wins} ${BH.plural(top.wins, "победа", "победы", "побед")}` : "")}
+          ${line("Первая партия", BH.fmtDate(st.first))}
+          ${line("Последняя партия", BH.fmtDate(st.last))}
+        </section>
+        <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">% побед</span></div><div class="list">${playersRateList(st.players, false)}</div></section>`;
+    })() : none);
+    return `<div class="stack">
+      <div>${backSmart("#/places", "Места")}</div>
+      <section class="place-head">
+        <span class="place-ic">${IC.pin}</span>
+        <div class="place-t"><h1>${esc(pl.name)}</h1><p class="sub">${fin.length ? parties(fin.length) + " · с " + BH.fmtDate(BH.placeStats(pl.id, fin).first) : "Здесь ещё не играли"}</p></div>
+        ${editPlace === pl.id ? "" : `<button class="btn ghost sm" data-act="edit-place" data-id="${esc(pl.id)}">${I.edit}Изменить</button>`}
+      </section>
+      ${editPlace === pl.id ? `<form class="panel stack" data-form="edit-place" data-id="${esc(pl.id)}">
+          <label class="field">Название<input class="input" name="name" value="${esc(pl.name)}" maxlength="40" required></label>
+          <div class="actions"><button class="btn primary" type="submit">Сохранить</button><button class="btn" type="button" data-act="edit-place" data-id="">Отмена</button>
+            ${used ? `<span class="small muted">Место есть в партиях, поэтому его не удалить.</span>` : `<button class="btn ghost" type="button" data-act="del-place" data-id="${esc(pl.id)}">${I.trash}Удалить</button>`}</div>
+        </form>` : ""}
+      <div class="seg pc-tabs" role="group" aria-label="Разделы места">${tabs.map(([k, v]) => `<button type="button" data-act="pl-tab" data-tab="${k}" aria-pressed="${plcard.tab === k}">${v}</button>`).join("")}</div>
+      ${body}
     </div>`;
   }
 
@@ -1613,7 +1692,15 @@
         else render();
         break;
       }
-      case "del-place": S().places = S().places.filter(x => x.id !== el.dataset.id); BH.saveNow(); render(); break;
+      case "del-place": {
+        const id = el.dataset.id;
+        if (S().sessions.some(x => x.placeId === id)) break;   // a place in the history stays
+        S().places = S().places.filter(x => x.id !== id); editPlace = null; BH.saveNow();
+        if (r.a === "places" && r.b === id) goReplace("#/places"); else render();
+        break;
+      }
+      case "edit-place": editPlace = el.dataset.id || null; render(); break;
+      case "pl-tab": plcard.tab = el.dataset.tab; render(); refocus('[data-act="pl-tab"][data-tab="' + plcard.tab + '"]'); break;
 
       /* settings */
       case "set": {
@@ -1655,6 +1742,7 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
+    if (el.dataset.act === "pl-period") { plcard.period = el.value; render(); refocus('[data-act="pl-period"]'); }
     if (el.dataset.act === "gc-period") { gcard.period = el.value; render(); refocus('[data-act="gc-period"]'); }
     if (el.dataset.act === "pc-period") { pcard.period = el.value; render(); refocus('[data-act="pc-period"]'); }
     if (el.dataset.act === "pc-sort") { pcard.sort = el.value; render(); refocus('[data-act="pc-sort"]'); }
@@ -1770,6 +1858,11 @@
       const p = S().places.find(x => x.name.toLowerCase() === name.toLowerCase()) || BH.addPlace(name);
       if (draft) draft.placeId = p.id;
       render();
+    } else if (form === "edit-place") {
+      const pl = BH.place(f.dataset.id);
+      if (pl && name && !S().places.some(x => x !== pl && x.name.toLowerCase() === name.toLowerCase())) { pl.name = name.slice(0, 40); BH.saveNow(); }
+      else if (pl && name) { BH.toast("Такое место уже есть"); return; }
+      editPlace = null; render();
     } else if (form === "edit-player") {
       const p = BH.player(f.dataset.id);
       if (p && name) {
@@ -1819,7 +1912,7 @@
     if (route().a !== "settings") { syncMsg = ""; wheelTokenBad = false; }
     const rt = route();
     if (rt.a !== "new" && !(rt.a === "s" && rt.c === "edit" && draft && draft.editId === rt.b)) draft = null;
-    editPlayer = null; editKeep = null;   // an open player form closes on any move
+    editPlayer = null; editKeep = null; editPlace = null;   // an open player / place form closes on any move
     sheet = null; dialog = null; ovPushed = false; quiet();
     if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; ask = null; }
     render();
@@ -1828,7 +1921,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.12.0";
+  BH.version = "0.13.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

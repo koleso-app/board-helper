@@ -125,7 +125,11 @@
       }
       else if (r.a === "games" && r.b) { const g = BH.game(r.b); nav = "games"; if (g) { html = viewGame(g); after = () => BH.rulesUI.bind(main, g); } else html = notFound("Такой игры нет в каталоге."); }
       else if (r.a === "games") { html = viewGames(); nav = "games"; }
-      else if (r.a === "players" && r.b) { const p = BH.player(r.b); html = p ? viewPlayer(p) : notFound("Такого игрока нет."); nav = "menu"; }
+      else if (r.a === "players" && r.b) {
+        const p = BH.player(r.b); nav = "menu";
+        if (!p && backOf() !== null && !ovPushed) { history.back(); html = ""; }   // a deleted player, reached with Back / Forward
+        else html = p ? viewPlayer(p) : notFound("Такого игрока нет.");
+      }
       else if (r.a === "players") { html = viewPlayers(); nav = "menu"; }
       else if (r.a === "stats") { html = viewStats(); nav = "menu"; }
       else if (r.a === "settings") { html = viewSettings(r.b); nav = "menu"; }
@@ -160,6 +164,7 @@
     const b = originState() || backOf(), seg = b ? normHash(b).replace(/^#\/?/, "").split("/") : [];
     if (seg[0] === "sessions") return { href: b, label: "Партии" };
     if (seg[0] === "games") { const g = seg[1] && BH.game(seg[1]); return { href: b, label: g ? g.name : "Игры" }; }
+    if (seg[0] === "players") { const q = seg[1] && BH.player(seg[1]); return { href: b, label: q ? q.name : "Игроки" }; }
     return { href: "#/", label: "Главная" };
   }
   const backToOrigin = label => { const o = originOf(); return backLink(o.href, label || o.label); };
@@ -173,7 +178,7 @@
       if (seg[0] === "sessions") return backLink(b, "Партии");
       if (seg[0] === "menu") return backLink(b, "Меню");
       if (seg[0] === "players" && !seg[1]) return backLink(b, "Игроки");
-      if (seg[0] === "players" && seg[1] && seg[1] !== route().b) { const q = BH.player(seg[1]); if (q) return backLink(b, q.name); }
+      if (seg[0] === "players" && seg[1] && route().a === "players" && route().b && seg[1] !== route().b) { const q = BH.player(seg[1]); if (q) return backLink(b, q.name); }
     }
     return backLink(href, label);
   }
@@ -668,18 +673,23 @@
     const kept = editKeep && editKeep.id === p.id ? editKeep : null;
     return `<form class="panel stack" data-form="edit-player" data-id="${p.id}">
       <label class="field">Имя<input class="input" name="name" value="${esc(kept ? kept.name : p.name)}" maxlength="40" required></label>
-      <div class="field">Цвет<div class="swatches">${BH.COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-act="pick-color" data-id="${p.id}" data-c="${c}" aria-pressed="${p.color === c}" aria-label="Цвет ${c}"></button>`).join("")}</div></div>
+      <div class="field">Цвет<div class="swatches">${BH.COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-act="pick-color" data-id="${p.id}" data-c="${c}" aria-pressed="${(kept && kept.color ? kept.color : p.color) === c}" aria-label="Цвет ${c}"></button>`).join("")}</div></div>
       <label class="check" style="font-weight:500"><input type="checkbox" name="me" ${(kept ? kept.me : BH.meId() === p.id) ? "checked" : ""}> Это я — мой профиль и статистика на главной</label>
       <div class="actions"><button class="btn primary" type="submit">Сохранить</button><button class="btn" type="button" data-act="edit-player" data-id="">Отмена</button>
         <button class="btn ghost" type="button" data-act="hide-player" data-id="${p.id}">${p.hidden ? "Вернуть в список" : played ? "Скрыть из выбора" : "Удалить"}</button></div>
     </form>`;
   }
+  // a redraw replaces the page: give the keyboard focus back to the control that caused it
+  const refocus = sel => { const n = BH.$(sel); if (n) n.focus({ preventScroll: true }); };
+  // dark or light text on a player's colour, whichever reads better
+  const inkOn = hex => { const n = parseInt(String(hex).slice(1), 16), lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const L = 0.2126 * lin(n >> 16 & 255) + 0.7152 * lin(n >> 8 & 255) + 0.0722 * lin(n & 255); return L > 0.2 ? "#1E1B16" : "#FFFFFF"; };
   const STAR = '<span class="me-star" title="Это вы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg></span>';
 
   /* players: a grid of faces, most played first (or by name), tap one for the player's card */
   let playersSort = "plays";
   function viewPlayers() {
-    const fin = finishedSessions(), meId = BH.meId();
+    const fin = finishedSessions(), meId = BH.me() ? BH.meId() : null;
     const count = id => fin.filter(s => s.players.includes(id)).length;
     const list = S().players.map(p => ({ p, n: count(p.id) }))
       .sort((a, b) => (a.p.hidden - b.p.hidden) || (playersSort === "name" ? 0 : b.n - a.n) || a.p.name.localeCompare(b.p.name, "ru"));
@@ -734,16 +744,16 @@
       ${editPlayer === p.id ? playerEditForm(p) : ""}
       <section class="panel pc-sum">
         <div class="pc-top">
-          <div class="pc-rate" style="--pc:${esc(p.color)}"><b>${pct}%</b><span>побед</span></div>
+          <div class="pc-rate" style="--pc:${esc(p.color)};--pc-ink:${inkOn(p.color)}"><b>${pct}%</b><span>побед</span></div>
           <div class="pc-top-t">
             <label class="small muted">Период<select class="input" data-act="pc-period" aria-label="Период">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === pcard.period ? "selected" : ""}>${v}</option>`).join("")}</select></label>
             <span class="badge" title="Сколько игр сыграно хотя бы столько же раз">H-индекс: ${st.hIndex}</span>
           </div>
         </div>
-        <div class="pc-bar" role="img" aria-label="${st.wins} побед из ${st.played} партий"><i style="width:${st.played ? pct : 0}%"></i>
-          <span>${st.wins} ${BH.plural(st.wins, "победа", "победы", "побед")}</span><span>${st.played} ${BH.plural(st.played, "партия", "партии", "партий")}</span></div>
+        <div class="pc-bar" role="img" aria-label="${st.wins} ${BH.plural(st.wins, "победа", "победы", "побед")} из ${st.played} ${BH.plural(st.played, "партии", "партий", "партий")}"><i style="width:${st.played ? pct : 0}%"></i></div>
+        <div class="pc-bar-t" aria-hidden="true"><span><b>${st.wins}</b> ${BH.plural(st.wins, "победа", "победы", "побед")}</span><span><b>${st.played}</b> ${BH.plural(st.played, "партия", "партии", "партий")}</span></div>
       </section>
-      <div class="seg pc-tabs" role="tablist">${tabs.map(([k, v]) => `<button type="button" role="tab" data-act="pc-tab" data-tab="${k}" aria-pressed="${pcard.tab === k}" aria-selected="${pcard.tab === k}">${v}</button>`).join("")}</div>
+      <div class="seg pc-tabs" role="group" aria-label="Разделы карточки">${tabs.map(([k, v]) => `<button type="button" data-act="pc-tab" data-tab="${k}" aria-pressed="${pcard.tab === k}">${v}</button>`).join("")}</div>
       ${body}
     </div>`;
   }
@@ -751,7 +761,7 @@
     if (!st.played) return `<p class="muted small">За этот период у игрока нет сыгранных партий.</p>`;
     const name = id => { const g = BH.game(id); return g ? g.name : id; };
     const fav = st.games.slice().sort((a, b) => b.n - a.n)[0];
-    const best = st.games.filter(e => e.n >= 3).sort((a, b) => b.rate - a.rate || b.n - a.n)[0];
+    const best = st.games.filter(e => e.n >= 3 && e.wins > 0).sort((a, b) => b.rate - a.rate || b.n - a.n)[0];
     const place = st.favPlace && BH.place(st.favPlace.id);
     const kpi = (v, label) => `<div class="kpi"><b>${v}</b><span>${label}</span></div>`;
     const line = (label, v) => v ? `<div class="pc-line"><span>${label}</span><b>${v}</b></div>` : "";
@@ -761,7 +771,7 @@
         ${kpi(st.played, BH.plural(st.played, "партия", "партии", "партий"))}
         ${kpi(st.wins, BH.plural(st.wins, "победа", "победы", "побед"))}
         ${kpi(st.games.length, BH.plural(st.games.length, "игра", "игры", "игр"))}
-        ${st.time ? kpi((st.time / 3600000).toFixed(1).replace(".", ",") + " ч", "за столом") : ""}
+        ${st.time ? kpi(st.time >= 3600000 ? (st.time / 3600000).toFixed(1).replace(".", ",") + " ч" : BH.fmtDuration(st.time), "за столом") : ""}
         ${kpi(st.longestStreak, "лучшая серия побед")}
         ${kpi(st.currentStreak, "побед подряд сейчас")}
       </div>
@@ -808,7 +818,7 @@
     const ppl = S().players.map(p => {
       const mine = fin.filter(s => s.players.includes(p.id));
       const wins = mine.filter(s => s.winners.includes(p.id)).length;
-      const best = mine.reduce((m, s) => Math.max(m, BH.totals(s)[p.id] || 0), 0);
+      const g0 = statsGame ? BH.playerStats(p.id, fin).games[0] : null, best = g0 ? g0.best : 0;   // one game: lowest wins where it should
       return { p, played: mine.length, wins, rate: mine.length ? wins / mine.length : 0, best };
     }).filter(x => x.played).sort((a, b) => b.wins - a.wins || b.rate - a.rate || b.played - a.played);
     const byGame = BH.games.map(g => ({ g, n: fin.filter(s => s.gameId === g.id).length, last: fin.filter(s => s.gameId === g.id).reduce((m, s) => Math.max(m, s.finishedAt || 0), 0) })).filter(x => x.n);
@@ -1366,11 +1376,11 @@
       /* players */
       case "edit-player": editPlayer = el.dataset.id || null; editKeep = null; render(); break;
       case "players-sort": playersSort = playersSort === "name" ? "plays" : "name"; render(); break;
-      case "pc-tab": pcard.tab = el.dataset.tab; render(); break;
+      case "pc-tab": pcard.tab = el.dataset.tab; render(); refocus('[data-act="pc-tab"][data-tab="' + pcard.tab + '"]'); break;
       case "pick-color": {
         const p = BH.player(el.dataset.id), f = el.closest("form");
-        if (f && f.elements.name) editKeep = { id: el.dataset.id, name: f.elements.name.value, me: !!(f.elements.me && f.elements.me.checked) };   // the redraw keeps what was typed
-        if (p) { p.color = el.dataset.c; BH.save(); render(); }
+        // the colour is applied on "Сохранить" ("Отмена" leaves the old one); the redraw keeps what was typed
+        if (p && f && f.elements.name) { editKeep = { id: p.id, name: f.elements.name.value, me: !!(f.elements.me && f.elements.me.checked), color: el.dataset.c }; render(); }
         break;
       }
       case "hide-player": {
@@ -1424,8 +1434,8 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
-    if (el.dataset.act === "pc-period") { pcard.period = el.value; render(); }
-    if (el.dataset.act === "pc-sort") { pcard.sort = el.value; render(); }
+    if (el.dataset.act === "pc-period") { pcard.period = el.value; render(); refocus('[data-act="pc-period"]'); }
+    if (el.dataset.act === "pc-sort") { pcard.sort = el.value; render(); refocus('[data-act="pc-sort"]'); }
     if (el.dataset.act === "draft-date" && draft) { const t = new Date(el.value).getTime(); if (Number.isFinite(t)) { draft.date = t; render(); } }
     if (el.dataset.act === "draft-opt" && draft) { draft.opts[el.dataset.id] = el.checked; }
     if (el.dataset.act === "voice-name") { BH.voice.setVoice(el.value); BH.toast("Голос: " + el.options[el.selectedIndex].text); }
@@ -1451,7 +1461,7 @@
     if (el.dataset.act === "draft-final" && draft) { draft.final[el.dataset.p] = el.value; return; }
     if (el.dataset.act === "players-q") {   // players grid: filter in place
       const q = el.value.trim().toLowerCase(); let any = false;
-      BH.$(".pgrid .pcell").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
+      BH.$$(".pgrid .pcell").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
       const none = BH.$("#players-none"); if (none) none.hidden = any;
       return;
     }
@@ -1529,6 +1539,7 @@
       const p = BH.player(f.dataset.id);
       if (p && name) {
         p.name = name.slice(0, 40);
+        if (editKeep && editKeep.id === p.id && editKeep.color) p.color = editKeep.color;
         const me = !!(f.elements.me && f.elements.me.checked);
         if (me) BH.setMe(p.id); else if (BH.meId() === p.id) BH.setMe(null);
         BH.saveNow();
@@ -1573,7 +1584,7 @@
     if (route().a !== "settings") { syncMsg = ""; wheelTokenBad = false; }
     const rt = route();
     if (rt.a !== "new" && !(rt.a === "s" && rt.c === "edit" && draft && draft.editId === rt.b)) draft = null;
-    if (route().a !== "players") editPlayer = null;
+    editPlayer = null; editKeep = null;   // an open player form closes on any move
     sheet = null; dialog = null; ovPushed = false;
     if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; ask = null; }
     render();
@@ -1582,7 +1593,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.9.0";
+  BH.version = "0.9.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

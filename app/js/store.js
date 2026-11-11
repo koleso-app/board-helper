@@ -90,7 +90,8 @@
     // "this is me": which player is the owner of the app (home screen profile). A record of its own,
     // synced with its own stamp: the latest choice wins, and a device that does not know it cannot erase it
     const meRec = arr(s.profile).find(r => isObj(r) && r.id === "me" && typeof r.player === "string" && ID.test(r.player));
-    out.profile = meRec ? [{ id: "me", player: meRec.player }] : oldMe ? [{ id: "me", player: oldMe }] : [];
+    const meId = meRec ? meRec.player : oldMe;
+    out.profile = meId && seen.has(meId) ? [{ id: "me", player: meId }] : [];   // never points at a player that is gone
     // sync stamps: when each record last changed / was deleted (see js/sync.js)
     const META_KEY = /^(p|pl|s|q|pr):[A-Za-z0-9_-]{1,40}$/;
     const m = isObj(s.meta) ? s.meta : {};

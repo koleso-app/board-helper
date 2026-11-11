@@ -56,7 +56,8 @@
 
   /* everything the player card shows, from the finished games the player took part in.
      sessions: the games to count (already narrowed to a period by the caller). */
-  BH.sessionDate = s => s.finishedAt || s.created || 0;
+  // the day a game was played: when it was started (as on the calendar and in the lists)
+  BH.sessionDate = s => s.created || s.finishedAt || 0;
   BH.playerStats = (pid, sessions) => {
     const mine = (sessions || []).filter(s => s.status === "finished" && s.players.includes(pid)).sort((a, b) => BH.sessionDate(a) - BH.sessionDate(b));
     const isWin = s => s.winners.includes(pid);
@@ -65,7 +66,7 @@
     let longest = 0, run = 0;
     for (const s of mine) {
       const g = BH.game(s.gameId), lower = !!(g && g.scoring && g.scoring.lowerWins);
-      const e = games.get(s.gameId) || { gameId: s.gameId, n: 0, wins: 0, time: 0, sum: 0, best: null, last: 0, lower };
+      const e = games.get(s.gameId) || { gameId: s.gameId, n: 0, wins: 0, time: 0, sum: 0, best: null, last: 0 };
       const score = BH.totals(s)[pid];
       e.n++; e.time += dur(s); e.sum += score; e.last = Math.max(e.last, BH.sessionDate(s));
       if (isWin(s)) e.wins++;

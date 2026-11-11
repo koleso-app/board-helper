@@ -103,6 +103,12 @@ t("'this is me' is one record of its own; the old flag on a player is moved into
   assert.strictEqual(JSON.stringify(n.profile), '[{"id":"me","player":"a1"}]');
   assert.strictEqual(JSON.stringify(BH._normalize(JSON.parse(JSON.stringify(n)))), JSON.stringify(n), "stable");
   assert.strictEqual(JSON.stringify(BH._normalize({}).profile), "[]");
+  const gone = BH._normalize({ players: [{ id: "a1", name: "Аня" }], profile: [{ id: "me", player: "zz" }] });
+  assert.strictEqual(JSON.stringify(gone.profile), "[]", "'me' never points at a player that is gone");
+});
+t("a game belongs to the day it was started (a game past midnight stays on its day)", () => {
+  const s = { created: new Date(2025, 11, 31, 23, 30).getTime(), finishedAt: new Date(2026, 0, 1, 0, 40).getTime() };
+  assert.strictEqual(new Date(BH.sessionDate(s)).getFullYear(), 2025);
 });
 t("reading answers aloud is on by default and can be turned off", () => {
   assert.strictEqual(BH._normalize({}).settings.speakAnswers, true);

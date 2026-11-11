@@ -1396,7 +1396,8 @@
   function entryResult(g, s, e) {
     const ctx = BH.ctxOf(s);
     const calc = BH.calcScore(g, e.sel, ctx);
-    if (e.sel.flags && e.sel.flags.bust) return Object.assign({}, calc, { score: 0, bust: true });   // a bust is 0 whatever was typed
+    // a bust is 0 whatever was typed (a game may score a bust otherwise, e.g. the brutal mode of Flip 7: With A Vengeance)
+    if (e.sel.flags && e.sel.flags.bust) return Object.assign({}, calc, { score: calc.bustScore !== undefined ? calc.bustScore : 0, bust: true });
     if (e.manual !== null && e.manual !== undefined && e.manual !== "") return { score: Math.round(Number(e.manual)) || 0, manual: true, notes: ["введено вручную"] };
     return calc;
   }
@@ -1424,7 +1425,7 @@
           }).join("")}</div></div>`;
         }).join("")}</div>`;
       }
-      const flags = g.calc && g.calc.flags ? g.calc.flags.map(f => `<button type="button" class="flag" data-act="flag" data-p="${id}" data-f="${f.id}" aria-pressed="${!!(e.sel.flags && e.sel.flags[f.id])}">${esc(f.label)}</button>`).join("") : "";
+      const flags = g.calc && g.calc.flags ? g.calc.flags.filter(f => !f.when || f.when(ctx)).map(f => `<button type="button" class="flag" data-act="flag" data-p="${id}" data-f="${f.id}" aria-pressed="${!!(e.sel.flags && e.sel.flags[f.id])}">${esc(f.label)}</button>`).join("") : "";
       return `<div class="entry ${open ? "open" : ""}" data-entry="${id}">
         <div class="entry-head">${BH.avatar(p, "sm")}
           <button type="button" class="nm" data-act="open-entry" data-p="${id}" style="background:none;border:none;padding:0;text-align:left;cursor:${g.calc ? "pointer" : "default"}">${esc(p.name)}${res.flip7 ? ' <span class="badge good">Flip 7</span>' : ""}${res.bust ? ' <span class="badge bad">перебор</span>' : ""}</button>
@@ -1921,7 +1922,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.13.1";
+  BH.version = "0.14.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

@@ -22,13 +22,18 @@ function rulebook(file) {
   return fs.readFileSync(file, "utf8").replace(/===== СТРАНИЦА (\d+) =====/g, (m, n) => (n === "1" ? "[обложка]" : `[стр. ${n - 1}]`));
 }
 
-const games = [{ js: "games/flip7.js", book: path.join(root, "sources", "flip7-rules-ru.txt"), title: "Flip 7" }];
+const games = [
+  { js: "games/flip7.js", book: path.join(root, "sources", "flip7-rules-ru.txt"), title: "Flip 7",
+    bookNote: "основной источник; часть страниц со схемами подсчёта распознана с ошибками — там сверяйся со шпаргалкой" },
+  { js: "games/flip7v.js", book: path.join(root, "sources", "flip7v-rules-en.txt"), title: "Flip 7: With A Vengeance",
+    bookNote: "на английском, основной источник; отвечай по-русски и называй карты так, как в шпаргалке" },
+];
 const files = [["index.js", fs.readFileSync(path.join(root, "functions", "voice", "index.js"))]];
 for (const g of games) {
   const sheet = cheatSheet(g.js), bookText = rulebook(g.book);
   if (!bookText) console.warn(`! нет книги правил для ${g.title}: ${g.book} — в функцию попадёт только шпаргалка`);
   const text = `ИГРА: ${g.title}\n\n` +
-    (bookText ? `КНИГА ПРАВИЛ (основной источник; часть страниц со схемами подсчёта распознана с ошибками — там сверяйся со шпаргалкой)\n${bookText}\n\n` : "") +
+    (bookText ? `КНИГА ПРАВИЛ (${g.bookNote})\n${bookText}\n\n` : "") +
     `ШПАРГАЛКА (проверенный пересказ правил; номера страниц — по книге)\n${sheet.text}\n`;
   files.push([`rules/${sheet.id}.txt`, Buffer.from(text, "utf8")]);
   console.log(`${sheet.id}: ${text.length} символов`);

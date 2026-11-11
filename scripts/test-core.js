@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -239,3 +239,57 @@ t("normalize keeps good data intact", () => {
 });
 
 console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
+
+/* ---------- Flip 7: With A Vengeance ---------- */
+{
+  const v = BH.game("flip7v");
+  const ctxOf = (n, brutal) => ({ players: n, exp: new Set(), has: () => false, opt: id => id === "brutal" ? !!brutal : false });
+  const sel = (picks, flags) => ({ picks: picks || {}, flags: flags || {} });
+  const score = (picks, flags, brutal) => BH.calcScore(v, sel(picks, flags), ctxOf(3, brutal));
+  t("vengeance: the book's example — 48, ÷2 = 24, −4 = 20, seven numbers +15 = 35", () => {
+    const r = score({ num: [3, 11, 5, 7, 10, 8, 4], div: ["d2"], minus: [4] });
+    assert.strictEqual(r.score, 35); assert.strictEqual(r.flip7, true);
+  });
+  t("vengeance: ÷2 rounds down, minus never below zero (normal) but can (brutal)", () => {
+    assert.strictEqual(score({ num: [5, 2], div: ["d2"] }).score, 3);
+    assert.strictEqual(score({ num: [3], minus: [10] }).score, 0);
+    assert.strictEqual(score({ num: [3], minus: [10] }, {}, true).score, -7);
+  });
+  t("vengeance: the Zero scores nothing without seven numbers, counts toward them with", () => {
+    assert.strictEqual(score({ num: [12, 11], special: ["zero"] }).score, 0);
+    const r = score({ num: [1, 2, 3, 4, 5, 6], special: ["zero"] });
+    assert.strictEqual(r.flip7, true); assert.strictEqual(r.score, 21 + 15);
+  });
+  t("vengeance: Lucky 13 lets a second 13 count, both toward seven numbers", () => {
+    const r = score({ num: [13, 1, 2, 3, 4, 5], special: ["l13"] });
+    assert.strictEqual(r.flip7, true); assert.strictEqual(r.score, 13 + 15 + 13 + 15);
+  });
+  t("vengeance: a bust is 0, or minus the modifiers given in the brutal mode; −15 flags", () => {
+    const shim = (picks, flags, brutal) => { const c = score(picks, flags, brutal); return flags.bust ? c.bustScore : c.score; };
+    assert.strictEqual(shim({ num: [5], minus: [6] }, { bust: true }, false), 0);
+    assert.strictEqual(shim({ num: [5], minus: [6] }, { bust: true }, true), -6);
+    assert.strictEqual(score({ num: [1, 2, 3, 4, 5, 6, 7] }, { gave15: true }, true).score, 28);
+    assert.strictEqual(score({ num: [10] }, { minus15: true }, true).score, -5);
+    assert.strictEqual(score({ num: [10] }, { minus15: true }, false).score, 10, "the −15 exists only in the brutal mode");
+  });
+  t("vengeance: warnings — Unlucky 7 with a 7, too many cards of a number", () => {
+    const w = v.calc.roundWarnings([{}, {}], [sel({ num: [7], special: ["u7"] }), sel({ num: [1] })], ctxOf(2));
+    assert.ok(w.some(x => x.includes("Несчастливая 7")));
+    const two = v.calc.roundWarnings([{}, {}], [sel({ num: [1] }), sel({ num: [1] })], ctxOf(2));
+    assert.ok(two.some(x => x.includes("обычных «1» 1 шт.")));
+  });
+  t("vengeance: every faq points at a rule, every rule is in one topic, pages from the book", () => {
+    for (const f of v.faq) { assert.ok(v.rules.some(r => r.id === f.ref), f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], f.src); }
+    const ids = v.ruleGroups.flatMap(grp => grp.ids);
+    for (const r of v.rules) assert.strictEqual(ids.filter(x => x === r.id).length, 1, r.id);
+    for (const r of v.rules) if (r.id !== "tie") assert.ok(r.page > 0 && r.page <= 12, r.id);
+    for (const grp of v.faqGroups) for (const r of grp.refs) assert.ok(v.rules.some(x => x.id === r), r);
+    for (const k of Object.keys(v.images.rules)) assert.ok(v.rules.some(r => r.id === k), "image for " + k);
+  });
+  t("vengeance: setup — brutal and challenge steps only when chosen", () => {
+    const s = { gameId: "flip7v", players: ["a", "b"], exp: [], opts: {} };
+    assert.ok(!BH.setupSteps(s).some(x => x.id === "brutal"));
+    assert.ok(BH.setupSteps(Object.assign({}, s, { opts: { brutal: true, challenge: true } })).some(x => x.id === "brutal" || x.id === "challenge"));
+  });
+  console.log(`${passed} passed (with Flip 7: With A Vengeance)${process.exitCode ? ", some FAILED" : ""}`);
+}

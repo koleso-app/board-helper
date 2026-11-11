@@ -1,0 +1,17 @@
+[
+  { "name": "cover", "page": 1, "box": [75, 147, 800, 872], "width": 640 },
+  { "name": "numbers", "page": 3, "box": [13, 547, 848, 1093], "width": 720 },
+  { "name": "specials", "page": 3, "box": [540, 912, 820, 1093], "width": 360 },
+  { "name": "modifiers", "page": 4, "box": [13, 107, 848, 267], "width": 720 },
+  { "name": "actions", "page": 4, "box": [13, 387, 848, 573], "width": 720 },
+  { "name": "example", "page": 7, "box": [21, 470, 848, 604], "width": 720 },
+  { "name": "solo", "page": 8, "box": [196, 312, 684, 456], "width": 420 },
+  { "name": "zero", "page": 9, "box": [32, 395, 152, 578], "width": 200 },
+  { "name": "unlucky7", "page": 9, "box": [32, 763, 152, 952], "width": 200 },
+  { "name": "lucky13", "page": 10, "box": [32, 27, 152, 210], "width": 200 },
+  { "name": "justonemore", "page": 11, "box": [27, 22, 144, 197], "width": 200 },
+  { "name": "swap", "page": 11, "box": [27, 235, 144, 410], "width": 200 },
+  { "name": "steal", "page": 11, "box": [27, 443, 144, 618], "width": 200 },
+  { "name": "discard", "page": 11, "box": [27, 648, 144, 826], "width": 200 },
+  { "name": "flip4", "page": 11, "box": [27, 854, 144, 1040], "width": 200 }
+]

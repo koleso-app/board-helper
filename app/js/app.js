@@ -251,14 +251,15 @@
     const finished = s.status === "finished";
     const w = finished ? s.winners.map(BH.player).filter(Boolean) : [];
     const rest = s.players.filter(id => !finished || !s.winners.includes(id)).map(BH.player).filter(Boolean);
-    const faces = list => list.slice(0, 6).map(p => BH.avatar(p, "sm")).join("") + (list.length > 6 ? `<span class="more">+${list.length - 6}</span>` : "");
+    const faces = list => list.slice(0, 3).map(p => BH.avatar(p, "sm")).join("") + (list.length > 3 ? `<span class="more">+${list.length - 3}</span>` : "");
     const names = list => esc(list.map(p => p.name).join(", "));
     return `<div class="sl-people">
       ${w.length ? `<span class="sl-win" title="${w.length > 1 ? "Ничья" : "Победа"}: ${names(w)}">${IC.trophy}<span class="faces">${faces(w)}</span></span>` : ""}
       ${rest.length ? `<span class="sl-rest" title="${finished ? "Играли" : "За столом"}: ${names(rest)}">${IC.people}<span class="faces">${faces(rest)}</span></span>` : ""}
     </div>`;
   }
-  // one game session as a list row: cover, game, date · place, who played (and who won), the stage of a game still going
+  // one game session as a list row: cover, game, date · place; on the right the stage of a game still going,
+  // the winners with a cup and the others (kept to the right, so the row does not grow taller)
   function sessionLine(s) {
     const g = BH.game(s.gameId), place = BH.place(s.placeId);
     let right = "";
@@ -267,8 +268,8 @@
     else if (s.status === "playing") right = `<span class="badge accent">раунд ${s.rounds.length + 1}</span>`;
     return `<a class="item sline" href="#/s/${s.id}">
       ${coverOf(g, "mini")}
-      <div class="t"><b>${esc(g ? g.name : s.gameId)}</b><span>${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""}</span>${tablePeople(s)}</div>
-      ${right}
+      <div class="t"><b>${esc(g ? g.name : s.gameId)}</b><span>${BH.fmtDate(s.created)}${place ? " · " + esc(place.name) : ""}</span></div>
+      <div class="sl-right">${right}${tablePeople(s)}</div>
     </a>`;
   }
   // one finished session as a tall card (home): cover, a cup when I won it, game, players, date
@@ -1776,7 +1777,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.11.1";
+  BH.version = "0.11.2";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

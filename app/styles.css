@@ -496,14 +496,15 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 @media (max-width:420px){.step-body{padding-left:0;position:relative;z-index:1;background:var(--surface)}.step.open::before{display:none}}
 
 /* ---------- a session row: who played and who won; the rounds table ---------- */
-.sl-people{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;margin-top:5px}
+.sl-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;max-width:52%}
+.sl-people{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .sl-win,.sl-rest{display:inline-flex;align-items:center;gap:5px}
 .sl-people svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.list .item .t .sl-win{color:#C99700}
-.list .item .t .sl-rest{color:var(--muted)}
-.list .item .t .sl-people .avatar{width:24px;height:24px;font-size:10px;color:#fff;margin-left:-5px;border:2px solid var(--surface)}
-.list .item .t .sl-people .avatar:first-child{margin-left:0}
-.list .item .t .sl-people .more{margin-left:4px;font-size:12px;color:var(--muted)}
+.sl-win{color:#C99700}
+.sl-rest{color:var(--muted)}
+.sl-people .avatar{width:24px;height:24px;font-size:10px;color:#fff;margin-left:-5px;border:2px solid var(--surface)}
+.sl-people .avatar:first-child{margin-left:0}
+.sl-people .more{margin-left:3px;font-size:12px;font-weight:600;color:var(--muted)}
 .hist thead th:not(:first-child),.hist td:not(:first-child),.hist tfoot th:not(:first-child){text-align:center}
 .hist thead th{vertical-align:bottom}
 .hist thead .avatar{width:26px;height:26px;font-size:10px}
@@ -512,3 +513,4 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .hist-d{display:inline-flex;margin-left:6px;vertical-align:middle}
 .avatar.xs{width:18px;height:18px;font-size:7.5px;text-shadow:none}
 .hist tfoot th{border-top:2px solid var(--line);color:var(--ink);font-size:15px;font-weight:700;padding-top:9px}
+.list .item.sline .t span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

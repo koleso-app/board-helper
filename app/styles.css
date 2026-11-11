@@ -7,15 +7,15 @@
   --shadow:0 1px 2px rgba(30,27,22,.06),0 8px 24px rgba(30,27,22,.07);
   --f-display:"Unbounded","Segoe UI",system-ui,sans-serif;
   --f-ui:"Onest","Segoe UI",system-ui,-apple-system,sans-serif;
-  --r:14px; --tabbar-h:64px;
+  --r:14px; --tabbar-h:64px; --chip:color-mix(in srgb,var(--ink) 7%,transparent); --win:#8F6A00;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#15130F; --surface:#201C17; --sunk:#1A1713; --ink:#F1EBE0; --muted:#A69C8C; --line:#342E26;
   --accent:#EE8A5C; --accent-ink:#1E0F08; --accent-soft:#3A2419; --good:#79C795; --good-soft:#1C3024;
-  --warn:#E9A866; --warn-soft:#3A2A19; --bad:#F2918A; --bad-soft:#3D1F1C;
+  --warn:#E9A866; --warn-soft:#3A2A19; --bad:#F2918A; --bad-soft:#3D1F1C; --win:#E3B341;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3); color-scheme:dark}}
-:root[data-theme="dark"]{
+:root[data-theme="dark"]{ --win:#E3B341;
   --bg:#15130F; --surface:#201C17; --sunk:#1A1713; --ink:#F1EBE0; --muted:#A69C8C; --line:#342E26;
   --accent:#EE8A5C; --accent-ink:#1E0F08; --accent-soft:#3A2419; --good:#79C795; --good-soft:#1C3024;
   --warn:#E9A866; --warn-soft:#3A2A19; --bad:#F2918A; --bad-soft:#3D1F1C;
@@ -82,8 +82,9 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .panel.flat{background:transparent;border-style:dashed}
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px}
 .page-head .sub{color:var(--muted);font-size:15px;margin-top:4px}
-.back{display:inline-flex;max-width:100%;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;margin-bottom:6px;background:none;border:none;padding:0;cursor:pointer}
-.back:hover{color:var(--ink)}
+.back{display:inline-flex;max-width:100%;min-width:0;align-items:center;gap:4px;min-height:36px;padding:6px 14px 6px 8px;border-radius:999px;background:var(--chip);color:var(--ink);
+  text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;border:none;cursor:pointer}
+.back:hover{background:var(--line)}
 .back svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 
@@ -93,10 +94,6 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.primary:hover{filter:brightness(1.06)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
-/* the session's top line: the title wraps, the buttons stay right */
-.sess-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.sess-top>.label{flex:1;min-width:0}
-.sess-top>.row{flex:none;gap:6px}
 .btn.finish{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
 .btn.finish:hover{background:var(--accent);color:var(--accent-ink)}
 .btn.ghost:hover{color:var(--ink);background:var(--sunk)}
@@ -138,7 +135,7 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .list .item:first-child{border-top:none}
 .list .item .t{flex:1;min-width:0}
 .list .item .t b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.list .item .t span{font-size:14px;color:var(--muted)}
+.list .item .t>span{font-size:14px;color:var(--muted)}
 .faces{display:flex}
 .faces .avatar{margin-left:-8px;border:2px solid var(--surface)}
 .faces .avatar:first-child{margin-left:0}
@@ -146,12 +143,6 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (min-width:900px){.cols{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
 
 /* ---------- game cards ---------- */
-.game{display:flex;gap:14px;align-items:center;padding:14px;border-radius:var(--r);border:1.5px solid var(--line);background:var(--surface);cursor:pointer;text-align:left;width:100%;text-decoration:none;color:inherit}
-.game .cover{width:64px;height:64px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden}
-.game .cover svg{width:100%;height:100%}
-.game b{display:block;font-family:var(--f-display);font-weight:600;font-size:16px}
-.game span{font-size:13.5px;color:var(--muted)}
-.game h1{color:var(--ink)}
 
 /* ---------- wizard ---------- */
 .seat{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
@@ -200,10 +191,6 @@ input[type="datetime-local"].input{min-height:48px}
 /* ---------- play ---------- */
 .play{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 @media (min-width:900px){.play{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start}}
-.round-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.round-no{font-family:var(--f-display);font-weight:700;font-size:40px;line-height:1}
-.leader{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border-radius:999px;background:var(--accent-soft)}
-.leader .label{color:var(--accent)}
 .board{display:flex;flex-direction:column;gap:8px}
 .pl{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
 .pl.lead{border-color:var(--accent)}
@@ -248,6 +235,7 @@ input[type="datetime-local"].input{min-height:48px}
 .picker{display:flex;flex-direction:column;gap:10px}
 .picker .grp{display:flex;flex-direction:column;gap:6px}
 .picker .grp .label{font-size:11px}
+.picker .grp .label .badge{font-size:11px;padding:1px 7px;letter-spacing:0;margin-left:4px;text-transform:none}
 .cards{display:flex;flex-wrap:wrap;gap:6px}
 .card-t{min-width:44px;height:52px;padding:0 6px;border-radius:9px;border:1.5px solid var(--line);background:var(--bg);font-family:var(--f-display);font-weight:700;font-size:17px;cursor:pointer;display:grid;place-items:center}
 .card-t[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -350,7 +338,7 @@ body.in-game #toast-root{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
 /* ---------- home, games, sessions calendar, menu ---------- */
-.profile-stats svg,.gcard-count svg,.gcard-win svg,.gcard-meta svg,.won>svg,.grow-n svg,.menu-ic svg,.menu-chev svg,.tile-ic svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.profile-stats svg,.gcard-count svg,.gcard-win svg,.gcard-meta svg,.won>svg,.menu-ic svg,.menu-chev svg,.tile-ic svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .cover svg{width:100%;height:100%}
 .profile{display:flex;align-items:center;gap:16px;padding:4px 2px}
 .avatar.xl{width:76px;height:76px;font-size:28px}
@@ -360,7 +348,6 @@ body.in-game #toast-root{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .profile-stats{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--ink);font-size:15.5px}
 .profile-stats span{display:inline-flex;align-items:center;gap:6px}
 .profile-stats svg{width:20px;height:20px}
-.shelf-h{font-size:17px;margin:2px 0 10px}
 .hscroll{display:flex;gap:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;scroll-padding-inline:16px;margin:0 -16px;padding:2px 16px 6px;scrollbar-width:none}
 .hscroll::-webkit-scrollbar{display:none}
 .hscroll>*{scroll-snap-align:start;flex:none}
@@ -389,9 +376,7 @@ body.in-game #toast-root{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .glist .grow .cover{width:64px;height:64px;border-radius:12px;overflow:hidden;flex:none;display:grid;place-items:center;background:var(--sunk)}
 .glist .grow .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .glist .grow .t b{font-family:var(--f-display);font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.glist .grow .t span{font-size:14px;color:var(--muted)}
-.grow-n{position:absolute;top:-1px;right:-1px;display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 9px;border-radius:0 16px 0 12px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700}
-.grow-n svg{width:15px;height:15px}
+.glist .grow .t>span{font-size:14px;color:var(--muted)}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .cal-head b{font-family:var(--f-display);font-weight:600;font-size:16px}
 .cal-next svg{transform:scaleX(-1)}
@@ -421,7 +406,7 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .pcell.off{opacity:.5}
 .pcell-av{position:relative;margin-bottom:4px}
 .pcell>b{font-weight:600;font-size:14.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pcell>span:last-child{font-size:12.5px;color:var(--muted)}
+.pcell>.pc-n{font-size:12.5px;color:var(--muted)}
 .pc-head{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:22px 16px 16px;border-radius:20px;
   background:linear-gradient(180deg,color-mix(in srgb,var(--pc) 70%,var(--surface)) 0 46%,var(--surface) 46%);border:1px solid var(--line)}
 .pc-av{position:relative}
@@ -491,7 +476,7 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .pick-row[aria-pressed="true"]{background:var(--accent-soft)}
 .pick-row .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .pick-row .t b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pick-row .t span{font-size:13px;color:var(--muted)}
+.pick-row .t>span{font-size:13px;color:var(--muted)}
 .pick-box{width:24px;height:24px;border-radius:7px;border:2px solid var(--line);display:grid;place-items:center;flex:none;color:var(--accent-ink)}
 .pick-row[aria-pressed="true"] .pick-box{background:var(--accent);border-color:var(--accent)}
 .pick-box svg{width:16px;height:16px;stroke-width:3}
@@ -502,6 +487,8 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 @media (max-width:420px){.step-body{padding-left:0;position:relative;z-index:1;background:var(--surface)}.step.open::before{display:none}}
 
 /* ---------- a session row: who played and who won; the rounds table ---------- */
+.item.sline .meta.plain{flex-wrap:nowrap}
+.item.sline .meta.plain .mi:first-child{flex:none}
 .sl-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;max-width:52%}
 .sl-people{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .sl-win,.sl-rest{display:inline-flex;align-items:center;gap:5px}
@@ -519,7 +506,7 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .hist-d{display:inline-flex;margin-left:6px;vertical-align:middle}
 .avatar.xs{width:18px;height:18px;font-size:7.5px;text-shadow:none}
 .hist tfoot th{border-top:2px solid var(--line);color:var(--ink);font-size:15px;font-weight:700;padding-top:9px}
-.list .item.sline .t span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 .pl-best{display:flex;flex-direction:column;align-items:flex-end;flex:none;line-height:1.2}
 .pl-best b{font-family:var(--f-display);font-size:17px}
 .pl-best small{font-size:12px;color:var(--muted)}
@@ -529,9 +516,54 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .pr-bar{height:6px;border-radius:999px;background:var(--sunk);overflow:hidden;margin-top:3px;max-width:220px}
 .pr-bar i{display:block;height:100%;border-radius:999px}
 .pr-pct{flex:none;min-width:44px;text-align:right;font-family:var(--f-display);font-weight:700;font-size:16px}
-.place-head{display:flex;align-items:center;gap:14px}
 .place-ic{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;flex:none;background:var(--accent-soft);color:var(--accent)}
 .place-ic svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.place-t{flex:1;min-width:0}
-.place-t h1{font-size:24px;overflow-wrap:anywhere}
 .pc-line b a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+
+/* ---------- the UI kit (docs/ui.md): each kind of thing has its own place and look ---------- */
+/* top line: back on the left, actions on the object on the right */
+.shead{display:flex;flex-direction:column;gap:10px;min-width:0}
+.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;min-width:0}
+.topline .back{margin:0}
+.topline-act{display:flex;align-items:center;gap:4px;flex:none}
+/* facts: an icon and a short text in a chip; "plain" in dense rows (icon and text, no pill) */
+.meta{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.mi{display:inline-flex;align-items:center;gap:5px;min-height:26px;padding:3px 10px 3px 8px;border-radius:999px;background:var(--chip);color:var(--muted);
+  font-size:13px;font-weight:500;line-height:1.2;max-width:100%;min-width:0}
+.mi>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.mi svg{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mi.accent{background:var(--accent-soft);color:var(--accent);border-radius:12px}
+.mi.accent>span{white-space:normal}
+.mi.win{color:var(--win)}
+.mi.dim{opacity:.8}
+.meta.plain{gap:2px 12px}
+.meta.plain .mi{background:none;padding:0;min-height:20px}
+/* a section's title with its own link on the right */
+.sec-h{display:flex;align-items:center;gap:10px;margin:2px 0 10px;min-height:32px}
+.sec-h h2{font-size:17px}
+.sec-link{margin-left:auto;display:inline-flex;align-items:center;gap:2px;min-height:32px;font-size:14px;font-weight:600;color:var(--accent);text-decoration:none}
+.sec-link svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+/* the game of a session: cover, name, facts */
+.sess-hero{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:16px;background:var(--surface);border:1px solid var(--line);min-width:0}
+.sess-hero .cover.mini{width:52px;height:52px;border-radius:12px}
+.sess-hero-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.sess-hero-n{font-family:var(--f-display);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere;letter-spacing:0}
+/* a running game: the round, and who deals (with the wheel before the first round) */
+.status-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px}
+.stat-tile{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);min-width:0}
+.stat-tile:not(.leader){flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-width:84px}
+.round-no{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1}
+.stat-tile.leader{background:var(--accent-soft);border-color:transparent}
+.leader-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.leader-t .label{color:var(--accent)}
+.leader-t b{font-weight:600;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.leader-wheel{flex:none;padding-left:10px;padding-right:12px}
+/* an object's head (a game, a place): picture, name, facts */
+.obj-head{display:flex;align-items:center;gap:14px;min-width:0}
+.obj-cover{width:80px;height:80px;border-radius:16px;overflow:hidden;flex:none;display:grid;place-items:center;background:var(--sunk)}
+.obj-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.obj-t h1{font-size:24px;overflow-wrap:anywhere}
+.sheet-t{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+/* in the round sheet: "Карты" opens the cards (an action), "Перебор" is a mark (a toggle) */
+.flag-open{display:inline-flex;align-items:center;gap:6px;border-style:dashed;color:var(--accent);border-color:var(--accent)}
+.flag-open svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}

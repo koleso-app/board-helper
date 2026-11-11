@@ -800,15 +800,64 @@
       <p class="muted small" id="games-none" hidden>Ничего не нашлось.</p>
     </div>`;
   }
+  /* a game's page: what it is, a new game / a question, and tabs — its statistics, its sessions, its rules */
+  let gcard = { id: null, tab: "stats", period: "all" };
   function viewGame(g) {
+    const fin = finishedSessions().filter(x => x.gameId === g.id);
+    if (gcard.id !== g.id) gcard = { id: g.id, tab: fin.length ? "stats" : "rules", period: gcard.period };
+    const years = [...new Set(fin.map(x => new Date(BH.sessionDate(x)).getFullYear()))].sort((a, b) => b - a);
+    const opts = Object.assign({}, PERIODS); for (const y of years) opts["y" + y] = y + " год";
+    if (!(gcard.period in opts)) gcard.period = "all";
+    const st = BH.gameStats(g.id, fin.filter(x => inPeriod(x, gcard.period)));
+    const live = S().sessions.filter(x => x.gameId === g.id && x.status !== "finished");
+    const tabs = [["stats", "Статистика"], ["sessions", "Партии" + (fin.length ? " · " + fin.length : "")], ["rules", "Правила"]];
+    const period = `<label class="small muted pc-sort">Период<select class="input" data-act="gc-period" aria-label="Период">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === gcard.period ? "selected" : ""}>${v}</option>`).join("")}</select></label>`;
+    let body;
+    if (gcard.tab === "rules") body = BH.rulesUI.panel(g, "");
+    else if (gcard.tab === "sessions") body = `${live.length ? `<section class="panel"><h2 style="margin-bottom:4px">Идут сейчас</h2><div class="list">${live.map(sessionLine).join("")}</div></section>` : ""}
+      ${fin.length ? period : ""}
+      ${st.sessions.length ? `<section class="panel"><div class="list">${st.sessions.map(sessionLine).join("")}</div></section>` : `<p class="muted small">${fin.length ? "За этот период партий нет." : "В эту игру ещё не играли."}</p>`}`;
+    else body = fin.length ? period + gameStatsHTML(g, st) : `<p class="muted small">В эту игру ещё не играли. Статистика появится после первой партии.</p>`;
     return `<div class="stack">
       <div>${backSmart("#/games", "Игры")}
         <div class="game" style="cursor:default;border:none;padding:0;background:none"><span class="cover" style="width:80px;height:80px"${BH.assets.cover(g)}>${g.cover || ""}</span>
           <span><h1>${esc(g.name)}</h1><span>${esc(g.publisher || "")}${g.year ? ", " + g.year : ""} · от ${g.players.recommendedMin || g.players.min} игроков · ${esc(g.time || "")} · ${esc(g.age || "")}</span></span></div></div>
       ${g.tagline ? `<p>${esc(g.tagline)}</p>` : ""}
       <div class="actions"><button class="btn primary big" data-act="new-with" data-id="${g.id}">${I.plus}Новая партия</button>${askButton(g, true)}</div>
-      ${BH.rulesUI.panel(g, "")}
+      <div class="seg pc-tabs" role="group" aria-label="Разделы игры">${tabs.map(([k, v]) => `<button type="button" data-act="gc-tab" data-tab="${k}" aria-pressed="${gcard.tab === k}">${v}</button>`).join("")}</div>
+      ${body}
     </div>`;
+  }
+  // "3,4 раунда" but "5 раундов": a fraction takes the genitive singular
+  const avgWord = (n, one, few, many) => Number.isInteger(n) ? BH.plural(n, one, few, many) : few;
+  function gameStatsHTML(g, st) {
+    if (!st.played) return `<p class="muted small">За этот период партий нет.</p>`;
+    const name = id => { const q = BH.player(id); return q ? esc(q.name) : "?"; };
+    const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
+    const kpi = (v, label) => `<div class="kpi"><b>${v}</b><span>${label}</span></div>`;
+    const line = (label, v) => v ? `<div class="pc-line"><span>${label}</span><b>${v}</b></div>` : "";
+    const hours = ms => ms >= 3600000 ? (ms / 3600000).toFixed(1).replace(".", ",") + " ч" : BH.fmtDuration(ms);
+    const top = st.players[0], place = st.favPlace && BH.place(st.favPlace.id);
+    const best = st.bestScore, bestR = st.bestRound;
+    return `<div class="kpis">
+        ${kpi(st.played, BH.plural(st.played, "партия", "партии", "партий"))}
+        ${kpi(st.players.length, BH.plural(st.players.length, "игрок", "игрока", "игроков"))}
+        ${st.time ? kpi(hours(st.time), "за столом") : ""}
+        ${st.avgTime ? kpi(BH.fmtDuration(st.avgTime), "в среднем партия") : ""}
+        ${st.avgRounds ? kpi(String(st.avgRounds).replace(".", ","), avgWord(st.avgRounds, "раунд", "раунда", "раундов") + " в среднем") : ""}
+        ${kpi(String(st.avgTable).replace(".", ","), avgWord(st.avgTable, "игрок", "игрока", "игроков") + " за столом в среднем")}
+      </div>
+      <section class="panel">
+        <h2 style="margin-bottom:6px">Рекорды</h2>
+        ${line("Лучший счёт", best ? `${best.v} · ${name(best.id)}, ${BH.fmtDate(best.at)}` : "")}
+        ${line("Лучший раунд", bestR ? `${bestR.v} · ${name(bestR.id)}` : "")}
+        ${line("Средний счёт победителя", st.avgWin !== null ? String(st.avgWin) : "")}
+        ${line("Чаще всех побеждает", top && top.wins ? `${name(top.id)} · ${top.wins} ${BH.plural(top.wins, "победа", "победы", "побед")}` : "")}
+        ${line("Где играют", place ? `${esc(place.name)} · ${parties(st.favPlace.n)}` : "")}
+        ${line("Первая партия", BH.fmtDate(st.first))}
+        ${line("Последняя партия", BH.fmtDate(st.last))}
+      </section>
+      <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">лучший счёт · средний</span></div><div class="list">${st.players.map(e => { const q = BH.player(e.id); return q ? `<a class="item" href="#/players/${esc(q.id)}">${BH.avatar(q)}<div class="t"><b>${esc(q.name)}</b><span>${parties(e.n)} · ${e.wins} ${BH.plural(e.wins, "победа", "победы", "побед")} · ${Math.round(100 * e.rate)}%</span></div><span class="pl-best" title="Лучший счёт · средний"><b>${e.best}</b><small>ср. ${e.avg}</small></span></a>` : ""; }).join("")}</div></section>`;
   }
 
   /* ---------- players & places ---------- */
@@ -1547,6 +1596,7 @@
       /* players */
       case "edit-player": editPlayer = el.dataset.id || null; editKeep = null; render(); break;
       case "players-sort": playersSort = playersSort === "name" ? "plays" : "name"; render(); break;
+      case "gc-tab": gcard.tab = el.dataset.tab; render(); refocus('[data-act="gc-tab"][data-tab="' + gcard.tab + '"]'); break;
       case "pc-tab": pcard.tab = el.dataset.tab; render(); refocus('[data-act="pc-tab"][data-tab="' + pcard.tab + '"]'); break;
       case "pick-color": {
         const p = BH.player(el.dataset.id), f = el.closest("form");
@@ -1605,6 +1655,7 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
+    if (el.dataset.act === "gc-period") { gcard.period = el.value; render(); refocus('[data-act="gc-period"]'); }
     if (el.dataset.act === "pc-period") { pcard.period = el.value; render(); refocus('[data-act="pc-period"]'); }
     if (el.dataset.act === "pc-sort") { pcard.sort = el.value; render(); refocus('[data-act="pc-sort"]'); }
     if (el.dataset.act === "draft-date" && draft) {
@@ -1777,7 +1828,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.11.2";
+  BH.version = "0.12.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

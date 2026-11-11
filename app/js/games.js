@@ -97,6 +97,50 @@
     };
   };
 
+  /* everything the game's page shows about its finished sessions (already narrowed to a period) */
+  BH.gameStats = (gameId, sessions) => {
+    const g = BH.game(gameId), low = !!(g && g.scoring && g.scoring.lowerWins);
+    const better = (a, b) => (low ? a < b : a > b);
+    const mine = (sessions || []).filter(s => s.status === "finished" && s.gameId === gameId).sort((a, b) => BH.sessionDate(a) - BH.sessionDate(b));
+    const dur = s => (s.finishedAt && s.startedAt && s.finishedAt > s.startedAt ? s.finishedAt - s.startedAt : 0);
+    const people = new Map(), places = new Map();
+    let bestScore = null, bestRound = null, winSum = 0, winN = 0, rounds = 0, withRounds = 0, seats = 0;
+    for (const s of mine) {
+      const t = BH.totals(s);
+      seats += s.players.length;
+      for (const id of s.players) {
+        const e = people.get(id) || { id, n: 0, wins: 0, sum: 0, best: null };
+        e.n++; e.sum += t[id]; if (s.winners.includes(id)) e.wins++;
+        if (e.best === null || better(t[id], e.best)) e.best = t[id];
+        people.set(id, e);
+        if (!bestScore || better(t[id], bestScore.v)) bestScore = { id, v: t[id], sid: s.id, at: BH.sessionDate(s) };
+      }
+      for (const id of s.winners) { winSum += t[id] || 0; winN++; }
+      if (s.rounds.length) {
+        withRounds++; rounds += s.rounds.length;
+        s.rounds.forEach((rd, i) => s.players.forEach(id => {
+          const v = Number(rd.scores[id]) || 0;
+          if (!bestRound || better(v, bestRound.v)) bestRound = { id, v, sid: s.id, round: i + 1 };
+        }));
+      }
+      if (s.placeId) places.set(s.placeId, (places.get(s.placeId) || 0) + 1);
+    }
+    const timed = mine.filter(dur), time = timed.reduce((a, s) => a + dur(s), 0);
+    const list = [...people.values()].map(e => Object.assign(e, { rate: e.n ? e.wins / e.n : 0, avg: e.n ? Math.round(e.sum / e.n) : 0 }))
+      .sort((a, b) => b.wins - a.wins || b.rate - a.rate || b.n - a.n);
+    const fav = [...places.entries()].sort((a, b) => b[1] - a[1])[0];
+    return {
+      played: mine.length, players: list, bestScore, bestRound,
+      avgWin: winN ? Math.round(winSum / winN) : null,
+      time, avgTime: timed.length ? Math.round(time / timed.length) : 0,
+      avgRounds: withRounds ? Math.round(10 * rounds / withRounds) / 10 : 0,
+      avgTable: mine.length ? Math.round(10 * seats / mine.length) / 10 : 0,
+      favPlace: fav ? { id: fav[0], n: fav[1] } : null,
+      first: mine.length ? BH.sessionDate(mine[0]) : 0, last: mine.length ? BH.sessionDate(mine[mine.length - 1]) : 0,
+      sessions: mine.slice().reverse(),
+    };
+  };
+
   /* players sorted best first, with shared places for equal totals */
   BH.standings = s => {
     const g = BH.game(s.gameId), t = BH.totals(s), high = !(g && g.scoring && g.scoring.lowerWins);

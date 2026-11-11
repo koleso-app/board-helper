@@ -204,6 +204,7 @@
       if (seg[0] === "games" && !seg[1]) return backLink(b, "Игры");
       if (seg[0] === "sessions") return backLink(b, "Партии");
       if (seg[0] === "menu") return backLink(b, "Меню");
+      if (seg[0] === "s" && BH.session(seg[1])) return backLink(b, "Партия");
       if (seg[0] === "players" && !seg[1]) return backLink(b, "Игроки");
       if (seg[0] === "players" && seg[1] && route().a === "players" && route().b && seg[1] !== route().b) { const q = BH.player(seg[1]); if (q) return backLink(b, q.name); }
     }
@@ -276,7 +277,7 @@
     const won = meId && s.winners.includes(meId);
     return `<a class="gcard" href="#/s/${esc(s.id)}">
       ${coverOf(g, "gcard-img")}
-      ${won ? `<span class="gcard-win" title="Вы победили">${IC.trophy}</span>` : ""}
+      ${won ? `<span class="gcard-win" title="${s.winners.length > 1 ? "Ничья — вы среди победителей" : "Вы победили"}">${IC.trophy}</span>` : ""}
       <span class="gcard-t"><b>${esc(g ? g.name : s.gameId)}</b><span class="gcard-meta"><span>${IC.people}${s.players.length}</span><span>${IC.cal}${shortDate(s.created)}</span></span></span>
     </a>`;
   }
@@ -664,22 +665,26 @@
   }
 
   // the rounds as a table: who dealt, each player's points (✕ bust, ★ seven numbers), the totals for a finished game
+  const lowerWins = g => !!(g && g.scoring && g.scoring.lowerWins);
   function roundsTable(s, g, editable) {
-    const tot = BH.totals(s), best = s.rounds.map(rd => Math.max(...s.players.map(id => Number(rd.scores[id]) || 0)));
+    const tot = BH.totals(s), low = lowerWins(g);
+    // the best of each round, marked only when the round is not all the same
+    const best = s.rounds.map(rd => { const v = s.players.map(id => Number(rd.scores[id]) || 0); return new Set(v).size > 1 ? (low ? Math.min(...v) : Math.max(...v)) : null; });
     const lead = g && g.rounds && g.rounds.leaderLabel;
     return `<div class="scroll-x"><table class="hist">
       <thead><tr><th>№</th>${s.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<th title="${esc(p.name)}">${BH.avatar(p, "sm")}<span class="hist-n">${esc(p.name)}</span></th>`; }).join("")}</tr></thead>
       <tbody>${s.rounds.map((rd, i) => { const dealer = BH.player(rd.leader || BH.leaderAt(s, i));
-        return `<tr${editable ? ` class="click" data-act="edit-round" data-i="${i}" tabindex="0"` : ""}><td class="hist-r"><span>${i + 1}</span>${lead && dealer ? `<span class="hist-d" title="${esc(lead)}: ${esc(dealer.name)}" style="background:${esc(dealer.color)}"></span>` : ""}</td>${s.players.map(id => { const f = (rd.flags || {})[id] || {}, v = Number(rd.scores[id]) || 0;
-          return `<td class="${f.bust ? "bust" : f.flip7 ? "f7" : v && v === best[i] ? "top" : ""}">${f.bust ? "✕" : (f.flip7 ? "★ " : "") + v}</td>`; }).join("")}</tr>`; }).join("")}</tbody>
+        return `<tr${editable ? ` class="click" data-act="edit-round" data-i="${i}" tabindex="0"` : ""}><td class="hist-r"><span>${i + 1}</span>${lead && dealer ? `<span class="hist-d" title="${esc(lead)}: ${esc(dealer.name)}">${BH.avatar(dealer, "xs")}</span>` : ""}</td>${s.players.map(id => { const f = (rd.flags || {})[id] || {}, v = Number(rd.scores[id]) || 0;
+          return `<td class="${f.bust ? "bust" : f.flip7 ? "f7" : best[i] !== null && v === best[i] ? "top" : ""}">${f.bust ? "✕" : (f.flip7 ? "★ " : "") + v}</td>`; }).join("")}</tr>`; }).join("")}</tbody>
       ${editable ? "" : `<tfoot><tr><th>Итого</th>${s.players.map(id => `<th>${tot[id]}</th>`).join("")}</tr></tfoot>`}
-    </table></div>${lead ? `<p class="tiny muted" style="margin-top:6px">Цветная точка у номера — ${esc(lead.toLowerCase())} раунда. ✕ — перебор, ★ — 7 разных чисел, жирным — лучший в раунде.</p>` : ""}`;
+    </table></div>${lead ? `<p class="tiny muted" style="margin-top:6px">Кружок у номера — ${esc(lead.toLowerCase())} раунда. ✕ — перебор, ★ — 7 разных чисел, жирным — лучший в раунде.</p>` : ""}`;
   }
   // per player over the rounds of one game: average, best round, busts, sevens
-  function roundStats(s) {
+  function roundStats(s, g) {
+    const low = lowerWins(g);
     return s.players.map(id => {
       const pts = s.rounds.map(rd => Number(rd.scores[id]) || 0), fl = s.rounds.map(rd => (rd.flags || {})[id] || {});
-      return { id, avg: pts.length ? Math.round(pts.reduce((a, b) => a + b, 0) / pts.length) : 0, best: pts.length ? Math.max(...pts) : 0,
+      return { id, avg: pts.length ? Math.round(pts.reduce((a, b) => a + b, 0) / pts.length) : 0, best: pts.length ? (low ? Math.min(...pts) : Math.max(...pts)) : 0,
         busts: fl.filter(f => f.bust).length, sevens: fl.filter(f => f.flip7).length };
     });
   }
@@ -723,7 +728,7 @@
       </div>
       <div class="game-bar">
         <button class="btn big" data-act="ask-open" aria-label="Спросить по правилам голосом" title="Спросить по правилам">${MIC}</button>
-        <button class="btn primary big" data-act="new-round">${I.plus}Записать раунд ${r + 1}</button>
+        <button class="btn primary big" data-act="new-round" aria-label="Записать раунд ${r + 1}">${I.plus}<span class="ell"><span class="lbl-l">Записать раунд</span><span class="lbl-s">Раунд</span> ${r + 1}</span></button>
         ${s.rounds.length ? `<button class="btn big" data-act="undo-round" aria-label="Отменить последний раунд" title="Отменить последний раунд">${I.undo}</button>` : ""}
       </div>
     </div>`;
@@ -755,22 +760,22 @@
         <div class="list">${st.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<a class="item" href="#/players/${esc(x.id)}"><span class="place-n">${x.place}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div>${s.winners.includes(x.id) ? `<span class="won">${IC.trophy}</span>` : ""}<span class="num" style="font-size:20px;font-weight:700">${x.total}</span></a>`; }).join("")}</div>
       </section>
       ${s.rounds.length ? (() => {
-        const rs = roundStats(s), anyF7 = rs.some(x => x.sevens), allR = [];
+        const rs = roundStats(s, g), anyF7 = rs.some(x => x.sevens), allR = [], low = lowerWins(g);
         s.rounds.forEach((rd, i) => s.players.forEach(id => allR.push({ id, i, v: Number(rd.scores[id]) || 0 })));
-        const top = allR.sort((a, b) => b.v - a.v)[0], topP = top && BH.player(top.id);
+        const top = allR.sort((a, b) => low ? a.v - b.v : b.v - a.v)[0], topP = top && BH.player(top.id);
         const busts = rs.reduce((a, x) => a + x.busts, 0), sevens = rs.reduce((a, x) => a + x.sevens, 0);
         return `<div class="kpis">
           <div class="kpi"><b>${s.rounds.length}</b><span>${BH.plural(s.rounds.length, "раунд", "раунда", "раундов")}</span></div>
           ${dur ? `<div class="kpi"><b>${dur}</b><span>длилась партия</span></div>` : ""}
-          ${top && top.v ? `<div class="kpi"><b>${top.v}</b><span>лучший раунд${topP ? ": " + esc(topP.name) + ", " + (top.i + 1) + "-й" : ""}</span></div>` : ""}
+          ${top && (top.v || low) ? `<div class="kpi"><b>${top.v}</b><span>лучший раунд${topP ? ": " + esc(topP.name) + ", " + (top.i + 1) + "-й" : ""}</span></div>` : ""}
           <div class="kpi"><b>${busts}</b><span>${BH.plural(busts, "перебор", "перебора", "переборов")}</span></div>
-          ${sevens ? `<div class="kpi"><b>${sevens}</b><span>раз 7 разных чисел</span></div>` : ""}
+          ${sevens ? `<div class="kpi"><b>${sevens}</b><span>${BH.plural(sevens, "раз", "раза", "раз")} 7 разных чисел</span></div>` : ""}
         </div>
         <section class="panel"><h2 style="margin-bottom:6px">Раунды</h2>${roundsTable(s, g, false)}</section>
         <section class="panel"><h2 style="margin-bottom:6px">По игрокам</h2><div class="scroll-x"><table class="tbl">
-          <thead><tr><th>Игрок</th><th title="Среднее за раунд">Ср.</th><th title="Лучший раунд">Макс.</th><th title="Переборы">✕</th>${anyF7 ? "<th>★</th>" : ""}</tr></thead>
+          <thead><tr><th>Игрок</th><th title="Среднее за раунд">Ср.</th><th title="Лучший раунд">Лучш.</th><th title="Переборы">✕</th>${anyF7 ? "<th>★</th>" : ""}</tr></thead>
           <tbody>${rs.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<tr><td><span class="row">${BH.avatar(p, "sm")}${esc(p.name)}</span></td><td>${x.avg}</td><td>${x.best}</td><td>${x.busts}</td>${anyF7 ? `<td>${x.sevens}</td>` : ""}</tr>`; }).join("")}</tbody>
-        </table></div><p class="tiny muted" style="margin-top:6px">Ср. — среднее за раунд, Макс. — лучший раунд, ✕ — переборы${anyF7 ? ", ★ — 7 разных чисел" : ""}.</p></section>`;
+        </table></div><p class="tiny muted" style="margin-top:6px">Ср. — среднее за раунд, Лучш. — лучший раунд, ✕ — переборы${anyF7 ? ", ★ — 7 разных чисел" : ""}.</p></section>`;
       })() : ""}
       <div class="actions">
         <button class="btn primary big" data-act="rematch">${I.plus}Ещё партию теми же</button>
@@ -1504,7 +1509,7 @@
       case "flag": { const en = sheet.entries[el.dataset.p]; en.sel.flags[el.dataset.f] = !en.sel.flags[el.dataset.f]; if (en.sel.flags.bust) en.manual = null; renderOverlay(); break; }
       case "save-round": saveRound(); break;
       case "delete-round": { const i = sheet.index; openDialog({ title: "Удалить раунд " + (i + 1) + "?", text: "Остальные раунды сохранятся, сдающие сдвинутся.", buttons: [
-        { label: "Удалить", danger: true, run: () => { const c = fresh(s); c.rounds.splice(i, 1); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(c, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
+        { label: "Удалить", danger: true, run: () => { const c = fresh(s); c.rounds.splice(i, 1); c.rounds.forEach((rd, j) => { rd.leader = BH.leaderAt(c, j); }); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(c, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
       case "dlg": { const b = dialog && dialog.buttons[+el.dataset.i]; if (b) b.run(); break; }
 
       /* done */
@@ -1771,7 +1776,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.11.0";
+  BH.version = "0.11.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

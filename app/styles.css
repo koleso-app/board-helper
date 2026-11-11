@@ -219,7 +219,10 @@ input[type="datetime-local"].input{min-height:48px}
 .hist tr.click:hover td{background:var(--sunk)}
 .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .game-bar{position:sticky;bottom:0;z-index:10;display:flex;gap:10px;padding:12px 0 calc(12px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,var(--bg) 72%,transparent)}
-.game-bar .btn.primary{flex:1}
+.game-bar .btn.primary{flex:1;min-width:0}
+.game-bar .ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.lbl-s{display:none}
+@media (max-width:400px){.game-bar{gap:8px}.game-bar .btn:not(.primary){padding-left:14px;padding-right:14px}.lbl-l{display:none}.lbl-s{display:inline}}
 
 /* ---------- round entry (sheet) ---------- */
 .overlay{position:fixed;inset:0;z-index:50;background:rgba(10,8,6,.55);display:flex;align-items:flex-end;justify-content:center}
@@ -311,14 +314,14 @@ mark{background:var(--warn-soft);color:inherit;border-radius:3px;padding:0 2px}
 /* ---------- finish ---------- */
 .podium{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:12px 0}
 .podium .crown{width:64px;height:64px}
-.podium h1{font-size:28px}
+.podium h1{font-size:28px;overflow-wrap:anywhere}
 .place-n{font-family:var(--f-display);font-weight:700;color:var(--muted);width:26px;text-align:center}
 
 /* ---------- stats ---------- */
 .kpis{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .kpi b{display:block;font-family:var(--f-display);font-size:26px;font-weight:700;line-height:1.1}
-.kpi span{font-size:13px;color:var(--muted)}
+.kpi span{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 .tbl{width:100%;border-collapse:collapse;font-size:15px}
 .tbl th,.tbl td{padding:9px 6px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
 .tbl th:first-child,.tbl td:first-child{text-align:left;white-space:normal}
@@ -506,5 +509,6 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .hist thead .avatar{width:26px;height:26px;font-size:10px}
 .hist-n{display:block;max-width:72px;margin:2px auto 0;font-size:11.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
 .hist td.top{font-weight:700;color:var(--ink)}
-.hist-d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;vertical-align:1px}
+.hist-d{display:inline-flex;margin-left:6px;vertical-align:middle}
+.avatar.xs{width:18px;height:18px;font-size:7.5px;text-shadow:none}
 .hist tfoot th{border-top:2px solid var(--line);color:var(--ink);font-size:15px;font-weight:700;padding-top:9px}

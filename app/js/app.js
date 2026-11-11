@@ -948,7 +948,7 @@
             g.age && [IC.cake, esc(g.age), "Возраст"],
           ])}</div></div></div>
       ${g.tagline ? `<p>${esc(g.tagline)}</p>` : ""}
-      <div class="actions"><button class="btn primary big" data-act="new-with" data-id="${g.id}">${I.plus}Новая партия</button>${askButton(g, true)}</div>
+      <div class="act-row"><button class="btn primary big" data-act="new-with" data-id="${g.id}">${I.plus}Новая партия</button><button class="btn big" data-act="ask-open" data-game="${esc(g.id)}" aria-label="Спросить по правилам голосом" title="Спросить по правилам голосом">${MIC}</button></div>
       <div class="seg pc-tabs" role="group" aria-label="Разделы игры">${tabs.map(([k, v]) => `<button type="button" data-act="gc-tab" data-tab="${k}" aria-pressed="${gcard.tab === k}">${v}</button>`).join("")}</div>
       ${body}
     </div>`;
@@ -1292,7 +1292,7 @@
   }
 
   const MIC = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
-  const askButton = (g, inline) => `${inline ? "" : '<div class="actions">'}<button class="btn big" data-act="ask-open" data-game="${esc(g.id)}">${MIC}Спросить голосом</button>${inline ? "" : "</div>"}`;
+  const askButton = g => `<div class="actions"><button class="btn big" data-act="ask-open" data-game="${esc(g.id)}">${MIC}Спросить голосом</button></div>`;
 
   /* ---------- voice assistant: asking ---------- */
   let ask = null;   // { gameId, sid, phase: listening|thinking|answer|error, text, result, error }
@@ -2065,7 +2065,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.15.2";
+  BH.version = "0.15.3";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

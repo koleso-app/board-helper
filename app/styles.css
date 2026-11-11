@@ -594,3 +594,7 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .setup-screen.tight .setup-card{gap:8px}
 .setup-screen.tight .setup-text h2{font-size:17px}
 .setup-screen.tight .setup-text p{font-size:14.5px;line-height:1.45}
+/* a game's page: the main action and the voice question as an icon to its right */
+.act-row{display:flex;gap:10px;max-width:480px}
+.act-row .btn.primary{flex:1;min-width:0}
+.act-row .btn:not(.primary){flex:none;padding-left:18px;padding-right:18px}

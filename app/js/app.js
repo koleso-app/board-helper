@@ -257,12 +257,16 @@
     const list = items.filter(x => x && x[1] !== undefined && x[1] !== null && x[1] !== "");
     return list.length ? `<span class="meta ${cls || ""}">${list.map(([ic, t, title, c]) => `<span class="mi ${c || ""}"${title ? ` title="${esc(title)}"` : ""}>${ic || ""}<span>${t}</span></span>`).join("")}</span>` : "";
   };
+  // a value with what it is about under it, for the key-value lines: two("197", "Коля, 13 октября")
+  const two = (main, sub) => `${main}<small>${sub}</small>`;
   const topline = (back, actions) => `<div class="topline">${back || "<span></span>"}${actions ? `<div class="topline-act">${actions}</div>` : ""}</div>`;
   const MONTHS_NOM = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
   const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
   const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
   const MONTHS_IN = ["январе", "феврале", "марте", "апреле", "мае", "июне", "июле", "августе", "сентябре", "октябре", "ноябре", "декабре"];
   const shortDate = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_SHORT[d.getMonth()]; };
+  // a date in a list row: short, with the year when it is not this one
+  const rowDate = ts => shortDate(ts) + (new Date(ts).getFullYear() !== new Date().getFullYear() ? " " + new Date(ts).getFullYear() : "");
   const finishedSessions = () => S().sessions.filter(s => s.status === "finished");
   // the whole collection, most played first (then by name)
   function gamesByPlays() {
@@ -296,7 +300,7 @@
   }
   // one game session as a list row: cover, game, date · place; on the right the stage of a game still going,
   // the winners with a cup and the others (kept to the right, so the row does not grow taller)
-  function sessionLine(s) {
+  function sessionLine(s, o) {
     const g = BH.game(s.gameId), place = BH.place(s.placeId);
     let right = "";
     if (s.status === "setup") right = '<span class="badge warn">подготовка</span>';
@@ -304,7 +308,7 @@
     else if (s.status === "playing") right = `<span class="badge accent">раунд ${s.rounds.length + 1}</span>`;
     return `<a class="item sline" href="#/s/${s.id}">
       ${coverOf(g, "mini")}
-      <div class="t"><b>${esc(g ? g.name : s.gameId)}</b>${meta([[IC.cal, esc(BH.fmtDate(s.created)), "Дата"], place && [IC.pin, esc(place.name), "Место"]], "plain")}</div>
+      <div class="t"><b>${esc(g ? g.name : s.gameId)}</b>${meta([[IC.cal, rowDate(s.created), BH.fmtDate(s.created)], place && !(o && o.noPlace) && [IC.pin, esc(place.name), place.name]], "plain")}</div>
       <div class="sl-right">${right}${tablePeople(s)}</div>
     </a>`;
   }
@@ -412,7 +416,7 @@
       <div class="page-head"><div><h1>Меню</h1></div></div>
       <section class="panel"><div class="list">
         ${row("#/players", IC.people, "Игроки", meta([[IC.people, nP + " " + BH.plural(nP, "игрок", "игрока", "игроков")], me ? [IC.user, "это вы: " + esc(me.name)] : [IC.user, "отметьте себя", "", "accent"]], "plain"))}
-        ${row("#/places", IC.pin, "Места", `${nPl} ${BH.plural(nPl, "место", "места", "мест")}`)}
+        ${row("#/places", IC.pin, "Места", meta([[IC.pin, nPl + " " + BH.plural(nPl, "место", "места", "мест")]], "plain"))}
         ${row("#/stats", IC.chart, "Статистика", "победы, любимые игры и места")}
       </div></section>
       <section class="panel"><div class="list">
@@ -521,8 +525,8 @@
     const ranked = gamesByPlays();
     const gameBody = draft.editId ? `<p class="small muted">Игру у созданной партии не поменять: для другой игры создайте новую партию.</p>` : `
       ${BH.games.length > 6 ? `<div class="search">${I.search}<input class="input" type="search" data-act="pick-q" data-list="games" placeholder="Найти игру" aria-label="Найти игру" autocomplete="off"></div>` : ""}
-      <div class="pick-list" data-list="games">${ranked.map(({ g: x, n: k }) => `<button type="button" class="pick-row" data-act="pick-game" data-id="${esc(x.id)}" data-name="${esc(x.name.toLowerCase())}" aria-pressed="${x.id === draft.gameId}">
-        ${coverOf(x, "mini")}<span class="t"><b>${esc(x.name)}</b>${meta([k && [IC.cards, k + " " + BH.plural(k, "партия", "партии", "партий"), "Сыграно партий"], [IC.people, playersRange(x), "Игроков"], x.time && [IC.clock, esc(x.time), "Время партии"]], "plain")}</span>
+      <div class="pick-list" data-list="games">${ranked.map(({ g: x }) => `<button type="button" class="pick-row" data-act="pick-game" data-id="${esc(x.id)}" data-name="${esc(x.name.toLowerCase())}" aria-pressed="${x.id === draft.gameId}">
+        ${coverOf(x, "mini")}<span class="t"><b>${esc(x.name)}</b>${meta([[IC.people, playersRange(x), "Игроков"], x.time && [IC.clock, esc(x.time), "Время партии"]], "plain")}</span>
         ${x.id === draft.gameId ? `<span class="pick-on">${I.check}</span>` : ""}</button>`).join("")}</div>
       ${BH.games.length > 1 ? `<button type="button" class="btn ghost sm" data-act="draft-random">${IC.dice}Случайная игра</button>` : ""}`;
     const expBody = g && g.expansions.length ? `<div class="label" style="margin-top:6px">Дополнения</div><div class="chips">${g.expansions.map(e => `<button class="chip" data-act="toggle-exp" data-id="${e.id}" aria-pressed="${draft.exp.includes(e.id)}">${esc(e.name)}</button>`).join("")}</div>` : "";
@@ -655,7 +659,8 @@
       if (!draft || draft.editId !== s.id) startDraft(null, s);
       return { html: viewNew() };
     }
-    if (sub === "setup") return { html: viewSetup(s, g) };
+    // sized again once the fonts are in: the text may take other room with them
+    if (sub === "setup") return { html: viewSetup(s, g), after: () => { fitSetup(); if (document.fonts) document.fonts.ready.then(() => { if (BH.$(".setup-card")) fitSetup(); }); } };
     if (sub === "first") return { html: viewFirst(s, g) };
     if (sub === "play") return { html: viewPlay(s, g), after: () => BH.rulesUI.bind(main, g, { compact: true }) };
     if (sub === "rules") return { html: viewSessionRules(s, g), after: () => BH.rulesUI.bind(main, g) };
@@ -677,29 +682,82 @@
   }
   const deleteBtn = `<button class="icon-btn" data-act="delete-session" aria-label="Удалить партию" title="Удалить партию">${I.trash}</button>`;
 
+  /* setup: one step per screen — its picture, title and text fit above the button (fitSetup sizes the
+     picture to the screen); the dots show every step and jump to it; swipe or ‹ to move back and forth */
+  const setupPos = {};             // session id -> the id of the step on screen
+  const setupAt = { sid: null, i: 0 };   // the step on screen now (index in the current steps)
   function viewSetup(s, g) {
     const steps = BH.setupSteps(s);
-    const done = steps.filter(st => s.setupDone[st.id]).length;
-    return `<div class="stack">
+    if (!steps.length) return `<div class="stack">${topline(backToOrigin())}<p class="muted">Подготовка не нужна.</p><button class="btn primary big" data-act="setup-next">Дальше</button></div>`;
+    let k = steps.findIndex(x => x.id === setupPos[s.id]);
+    if (k < 0) { k = steps.findIndex(x => !s.setupDone[x.id]); if (k < 0) k = steps.length - 1; }
+    setupAt.sid = s.id; setupAt.i = k; setupPos[s.id] = steps[k].id;
+    const i = k, st = steps[i], last = i === steps.length - 1;
+    const done = steps.filter(x => s.setupDone[x.id]).length, isDone = !!s.setupDone[st.id];
+    const nextLabel = g.first ? g.first.label.toLowerCase() : "игра";
+    return `<div class="stack setup-screen">
       <div class="shead">
         ${topline(backToOrigin(), `<a class="btn ghost sm" href="#/s/${esc(s.id)}/edit">${I.edit}Изменить</a>${deleteBtn}`)}
         ${sessionHero(s, g)}
       </div>
-      <div class="page-head"><div><h1>Подготовка</h1><p class="sub">${done} из ${steps.length} готово</p></div></div>
-      <div class="progress" aria-hidden="true"><i style="width:${steps.length ? 100 * done / steps.length : 100}%"></i></div>
-      ${steps.map((st, i) => `<section class="panel setup-step ${s.setupDone[st.id] ? "done" : ""}" id="step-${esc(st.id)}">
-          <div class="art"${BH.assets.attr(g.id, ((g.images || {}).steps || {})[st.id])}>${st.art || ""}</div>
-          <div class="body">
-            <span class="label">Шаг ${i + 1}</span>
-            <h2>${esc(st.title)}</h2>
-            <p>${esc(st.text)}</p>
-            <div class="row wrap">
-              <label class="check"><input type="checkbox" data-act="setup-check" data-id="${esc(st.id)}" ${s.setupDone[st.id] ? "checked" : ""}> Готово</label>
-            </div>
-          </div>
-        </section>`).join("")}
-      <div class="sticky-foot"><button class="btn primary big block" data-act="setup-next">${I.wheel}${esc(g.first ? "Дальше: " + g.first.label.toLowerCase() : "Начать игру")}</button></div>
+      <div class="setup-head">
+        <div><h1>Подготовка</h1><p class="sub">Шаг ${i + 1} из ${steps.length}${done ? `, готово ${done}` : ""}</p></div>
+        <button class="sec-link" data-act="setup-next">К игре${IC.chev}</button>
+      </div>
+      <div class="setup-dots" role="group" aria-label="Шаги подготовки">${steps.map((x, k) => `<button type="button" class="${s.setupDone[x.id] ? "done" : ""}" data-act="setup-go" data-i="${k}" aria-current="${k === i ? "step" : "false"}" aria-label="Шаг ${k + 1}: ${esc(x.title)}${s.setupDone[x.id] ? ", готово" : ""}"></button>`).join("")}</div>
+      <section class="setup-card${isDone ? " done" : ""}">
+        <div class="art" data-act="art-zoom" title="Нажмите, чтобы увеличить"${BH.assets.attr(g.id, ((g.images || {}).steps || {})[st.id])}>${st.art || ""}</div>
+        <div class="setup-text">
+          <h2>${esc(st.title)}${isDone ? ` <button type="button" class="badge good badge-btn" data-act="setup-undo" title="Снять отметку" aria-label="Готово. Снять отметку">${I.check}готово ${I.x}</button>` : ""}</h2>
+          <p>${esc(st.text)}</p>
+        </div>
+      </section>
+      <div class="game-bar setup-bar">
+        <button class="btn big" data-act="setup-prev" ${i ? "" : "disabled"} aria-label="Предыдущий шаг">${I.back}</button>
+        <button class="btn primary big" data-act="setup-done"><span class="ell">${isDone ? (last ? "Дальше: " + esc(nextLabel) : "Дальше") : last ? "Готово — " + esc(nextLabel) : "Готово, дальше"}</span></button>
+      </div>
     </div>`;
+  }
+  // the step's picture takes the room left on the screen, so the text and the buttons stay in view
+  // on a small screen a long step first makes the head compact (no facts under the game, smaller titles)
+  function fitSetup() {
+    const scr = BH.$(".setup-screen"), card = BH.$(".setup-card"), art = card && card.querySelector(".art");
+    const r = route(), s = r.a === "s" ? BH.session(r.b) : null;
+    if (!art || !scr || !s || card.classList.contains("zoomed")) return;
+    const y = window.scrollY, p = card.querySelector(".setup-text p"), h = card.querySelector(".setup-text h2");
+    // the free room: the screen less the page drawn with no picture
+    const room = () => { art.style.height = "0px"; return window.innerHeight - document.body.getBoundingClientRect().height; };
+    const steps = BH.setupSteps(s), longest = steps.reduce((a, x) => (x.text.length + x.title.length > a.text.length + a.title.length ? x : a), steps[0]);
+    const keep = [p.textContent, h.innerHTML];
+    p.textContent = longest.text; h.textContent = longest.title;
+    scr.classList.remove("tight");
+    if (room() < 150) scr.classList.add("tight");
+    p.textContent = keep[0]; h.innerHTML = keep[1];
+    art.style.height = Math.max(90, Math.min(Math.round(art.clientWidth * 0.75), 380, room())) + "px";
+    window.scrollTo(0, y);
+  }
+  // only a new width re-fits: a phone's address bar showing or hiding changes the height while scrolling
+  let fitW = window.innerWidth;
+  window.addEventListener("resize", () => { if (window.innerWidth === fitW) return; fitW = window.innerWidth; if (BH.$(".setup-card")) fitSetup(); });
+  // a swipe on the step: to the left — the next step, to the right — the one before (nothing is marked done)
+  let swipe = null;
+  document.addEventListener("touchstart", e => {
+    swipe = e.touches.length === 1 && e.target.closest && e.target.closest(".setup-card") ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+  }, { passive: true });
+  document.addEventListener("touchend", e => {
+    if (!swipe) return;
+    const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y; swipe = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < 1.5 * Math.abs(dy)) return;
+    const r = route(), s = r.a === "s" ? BH.session(r.b) : null;
+    if (!s || !BH.$(".setup-card") || sheet || dialog || ask) return;
+    const k = setupAt.i + (dx < 0 ? 1 : -1);
+    if (k < 0 || k >= BH.setupSteps(s).length) return;
+    setupStep(s, k);
+  }, { passive: true });
+  function setupStep(s, k) {
+    const steps = BH.setupSteps(s);
+    if (!Number.isInteger(k) || k < 0 || k >= steps.length) return;
+    setupPos[s.id] = steps[k].id; quiet(); render(); window.scrollTo(0, 0);
   }
 
   function viewFirst(s, g) {
@@ -856,11 +914,8 @@
       ${n > 6 ? `<div class="search">${I.search}<input class="input" type="search" data-act="games-q" placeholder="По названию" aria-label="Поиск игры" autocomplete="off"></div>` : ""}
       <div class="glist">${list.map(({ g, n: k }) => `<a class="grow" href="#/games/${esc(g.id)}" data-name="${esc(g.name.toLowerCase())}">
           ${coverOf(g)}
-          <span class="t"><b>${esc(g.name)}</b>${meta([
-            [IC.cards, k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "ещё не играли", "Сыграно партий", k ? "" : "dim"],
-            [IC.people, playersRange(g), "Игроков"],
-            g.time && [IC.clock, esc(g.time), "Время партии"],
-          ], "plain")}</span>
+          <span class="t"><b>${esc(g.name)}</b>${meta([[IC.people, playersRange(g), "Игроков"], g.time && [IC.clock, esc(g.time), "Время партии"]], "plain")}</span>
+          <span class="grow-n${k ? "" : " zero"}" title="Сыграно партий">${IC.cards}${k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "не играли"}</span>
         </a>`).join("")}</div>
       <p class="muted small" id="games-none" hidden>Ничего не нашлось.</p>
     </div>`;
@@ -906,8 +961,7 @@
       const pct = Math.round(100 * e.rate);
       return `<a class="item pr-row" href="#/players/${esc(q.id)}">${BH.avatar(q)}
         <div class="t"><b>${esc(q.name)}</b>${meta([[IC.cards, parties(e.n), "Партий"], [IC.trophy, e.wins + " " + BH.plural(e.wins, "победа", "победы", "побед"), "Побед", e.wins ? "win" : ""]], "plain")}
-          <div class="pr-bar" role="img" aria-label="${pct}% побед"><i style="width:${pct}%;background:${esc(q.color)}"></i></div></div>
-        <span class="pr-pct">${pct}%</span>
+          <div class="pr-line"><div class="pr-bar" role="img" aria-label="${pct}% побед"><i style="width:${pct}%;background:${esc(q.color)}"></i></div><span class="pr-pct">${pct}%</span></div></div>
         ${withScores ? `<span class="pl-best" title="Лучший счёт · средний"><b>${e.best !== null ? e.best : "—"}</b><small>${e.avg !== null ? "ср. " + e.avg : "без очков"}</small></span>` : ""}
       </a>`;
     }).join("");
@@ -933,15 +987,15 @@
       </div>
       <section class="panel">
         <h2 style="margin-bottom:6px">Рекорды</h2>
-        ${line("Лучший счёт", best && (best.v || lowerWins(g)) ? `${best.v} · ${name(best.id)}, ${BH.fmtDate(best.at)}` : "")}
-        ${line("Лучший раунд", bestR ? `${bestR.v} · ${name(bestR.id)}` : "")}
+        ${line("Лучший счёт", best && (best.v || lowerWins(g)) ? two(best.v, `${name(best.id)}, ${BH.fmtDate(best.at)}`) : "")}
+        ${line("Лучший раунд", bestR ? two(bestR.v, name(bestR.id)) : "")}
         ${line("Средний счёт победителя", st.avgWin || (st.avgWin === 0 && lowerWins(g)) ? String(st.avgWin) : "")}
-        ${line("Чаще всех побеждает", top && top.wins ? `${name(top.id)} · ${top.wins} ${BH.plural(top.wins, "победа", "победы", "побед")}` : "")}
-        ${line("Где играют", place ? `<a href="#/places/${esc(place.id)}">${esc(place.name)}</a> · ${parties(st.favPlace.n)}` : "")}
+        ${line("Чаще всех побеждает", top && top.wins ? two(name(top.id), top.wins + " " + BH.plural(top.wins, "победа", "победы", "побед")) : "")}
+        ${line("Где играют", place ? two(`<a href="#/places/${esc(place.id)}">${esc(place.name)}</a>`, parties(st.favPlace.n)) : "")}
         ${line("Первая партия", BH.fmtDate(st.first))}
         ${line("Последняя партия", BH.fmtDate(st.last))}
       </section>
-      <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">% побед · лучший · средний</span></div><div class="list">${playersRateList(st.players, true)}</div></section>`;
+      <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">справа — лучший и средний счёт</span></div><div class="list">${playersRateList(st.players, true)}</div></section>`;
   }
 
   /* ---------- players & places ---------- */
@@ -1044,7 +1098,7 @@
     const kpi = (v, label) => `<div class="kpi"><b>${v}</b><span>${label}</span></div>`;
     const line = (label, v) => v ? `<div class="pc-line"><span>${label}</span><b>${v}</b></div>` : "";
     const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
-    const rivals = st.opponents.slice(0, 8).map(o => { const q = BH.player(o.id); return q ? `<a class="item" href="#/players/${esc(q.id)}">${BH.avatar(q)}<div class="t"><b>${esc(q.name)}</b>${meta([[IC.cards, parties(o.n) + " вместе", "Партий вместе"], [IC.trophy, "побед " + o.myWins + " против " + o.theirWins, "Побед: у этого игрока против соперника"]], "plain")}</div></a>` : ""; }).join("");
+    const rivals = st.opponents.slice(0, 8).map(o => { const q = BH.player(o.id); return q ? `<a class="item" href="#/players/${esc(q.id)}">${BH.avatar(q)}<div class="t"><b>${esc(q.name)}</b>${meta([[IC.cards, parties(o.n) + " вместе", "Партий вместе"]], "plain")}</div><span class="pl-best" title="Победы: ${esc(p.name)} против ${esc(q.name)}"><b>${o.myWins} : ${o.theirWins}</b><small>победы</small></span></a>` : ""; }).join("");
     return `<div class="kpis">
         ${kpi(st.played, BH.plural(st.played, "партия", "партии", "партий"))}
         ${kpi(st.wins, BH.plural(st.wins, "победа", "победы", "побед"))}
@@ -1056,9 +1110,9 @@
       <section class="panel">
         ${line("Первая партия", BH.fmtDate(st.first))}
         ${line("Последняя партия", BH.fmtDate(st.last))}
-        ${line("Любимая игра", fav ? esc(name(fav.gameId)) + " · " + parties(fav.n) : "")}
-        ${line("Лучше всего получается", best ? esc(name(best.gameId)) + " · " + Math.round(100 * best.rate) + "% побед" : "")}
-        ${line("Любимое место", place ? esc(place.name) + " · " + parties(st.favPlace.n) : "")}
+        ${line("Любимая игра", fav ? two(esc(name(fav.gameId)), parties(fav.n)) : "")}
+        ${line("Лучше всего получается", best ? two(esc(name(best.gameId)), Math.round(100 * best.rate) + "% побед") : "")}
+        ${line("Любимое место", place ? two(esc(place.name), parties(st.favPlace.n)) : "")}
       </section>
       ${rivals ? `<section class="panel"><h2 style="margin-bottom:4px">С кем играет чаще всего</h2><div class="list">${rivals}</div></section>` : ""}`;
   }
@@ -1070,10 +1124,12 @@
     const list = st.games.slice().sort((a, b) => by(a, b) || nameOf(a).localeCompare(nameOf(b), "ru"));
     return `<label class="small muted pc-sort">Сортировать<select class="input" data-act="pc-sort" aria-label="Сортировка игр">${Object.entries(GAME_SORTS).map(([k, v]) => `<option value="${k}" ${k === pcard.sort ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       ${meta([[IC.dice, st.games.length + " " + BH.plural(st.games.length, "игра", "игры", "игр")], [IC.cards, st.played + " " + BH.plural(st.played, "партия", "партии", "партий")], st.time && [IC.clock, BH.fmtDuration(st.time), "За столом"]])}
+      ${st.games.some(e => e.best !== null) ? `<p class="tiny muted">Справа — лучший и средний счёт.</p>` : ""}
       <div class="pc-games">${list.map((e, i) => { const g = BH.game(e.gameId); return `<a class="pc-game" href="${g ? "#/games/" + esc(g.id) : "#/games"}">
         ${coverOf(g)}
-        <span class="t"><span class="pc-g1"><i class="rank">${i + 1}</i><b>${esc(nameOf(e))}</b><span class="badge">${e.n} ${BH.plural(e.n, "партия", "партии", "партий")}</span></span>
-          <span class="pc-g2"><span>${IC.trophy}${e.wins} · ${Math.round(100 * e.rate)}%</span>${e.time ? `<span>${BH.fmtDuration(e.time)}</span>` : ""}${e.best !== null ? `<span class="pc-avg">ср. ${e.avg} · лучший ${e.best}</span>` : ""}</span></span>
+        <span class="t"><span class="pc-g1"><i class="rank">${i + 1}</i><b>${esc(nameOf(e))}</b></span>
+          ${meta([[IC.trophy, e.wins + " из " + e.n + " " + BH.plural(e.n, "партии", "партий", "партий"), "Побед из сыгранных партий", e.wins ? "win" : ""], [IC.chart, Math.round(100 * e.rate) + "%", "Процент побед"]], "plain")}</span>
+        ${e.best !== null ? `<span class="pl-best" title="Лучший счёт и средний"><b>${e.best}</b><small>ср. ${e.avg}</small></span>` : ""}
       </a>`; }).join("")}</div>`;
   }
   function viewPlaces() {
@@ -1081,7 +1137,7 @@
     return `<div class="stack">
       <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Места</h1><p class="sub">Где вы играете — для статистики.</p></div></div></div>
       <section class="panel">
-        <div class="list">${S().places.length ? S().places.slice().sort((a, b) => fin.filter(x => x.placeId === b.id).length - fin.filter(x => x.placeId === a.id).length).map(p => { const n = fin.filter(x => x.placeId === p.id).length; return `<a class="item menu-row" href="#/places/${esc(p.id)}"><span class="menu-ic">${IC.pin}</span><div class="t"><b>${esc(p.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли"}</span></div><span class="menu-chev">${IC.chev}</span></a>`; }).join("") : `<p class="muted small" style="padding:8px 0">Мест пока нет.</p>`}</div>
+        <div class="list">${S().places.length ? S().places.slice().sort((a, b) => fin.filter(x => x.placeId === b.id).length - fin.filter(x => x.placeId === a.id).length).map(p => { const n = fin.filter(x => x.placeId === p.id).length; return `<a class="item menu-row" href="#/places/${esc(p.id)}"><span class="menu-ic">${IC.pin}</span><div class="t"><b>${esc(p.name)}</b>${meta([[IC.cards, n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли", "Сыграно партий"]], "plain")}</div><span class="menu-chev">${IC.chev}</span></a>`; }).join("") : `<p class="muted small" style="padding:8px 0">Мест пока нет.</p>`}</div>
         <form class="row" data-form="add-place" style="margin-top:8px"><input class="input" name="name" placeholder="Новое место" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>
       </section>
     </div>`;
@@ -1104,10 +1160,10 @@
     const none = `<p class="muted small">${fin.length ? "За этот период партий нет." : "Здесь ещё не играли."}</p>`;
     let body;
     if (plcard.tab === "games") body = period + (st.games.length ? `<div class="pc-games">${st.games.map((e, i) => { const g = BH.game(e.gameId); return `<a class="pc-game" href="${g ? "#/games/" + esc(g.id) : "#/games"}">${coverOf(g)}
-        <span class="t"><span class="pc-g1"><i class="rank">${i + 1}</i><b>${esc(g ? g.name : e.gameId)}</b><span class="badge">${parties(e.n)}</span></span>
-          <span class="pc-g2"><span>последняя: ${BH.fmtDate(e.last)}</span></span></span></a>`; }).join("")}</div>` : none);
-    else if (plcard.tab === "sessions") body = (live.length ? `<section class="panel"><div class="sec-h"><h2>Идут сейчас</h2><span class="badge accent">${live.length}</span></div><div class="list">${live.map(sessionLine).join("")}</div></section>` : "")
-      + period + (st.sessions.length ? `<section class="panel"><div class="list">${st.sessions.map(sessionLine).join("")}</div></section>` : none);
+        <span class="t"><span class="pc-g1"><i class="rank">${i + 1}</i><b>${esc(g ? g.name : e.gameId)}</b></span>
+          ${meta([[IC.cards, parties(e.n), "Партий здесь"], [IC.cal, rowDate(e.last), "Последняя партия: " + BH.fmtDate(e.last)]], "plain")}</span></a>`; }).join("")}</div>` : none);
+    else if (plcard.tab === "sessions") body = (live.length ? `<section class="panel"><div class="sec-h"><h2>Идут сейчас</h2><span class="badge accent">${live.length}</span></div><div class="list">${live.map(x => sessionLine(x, { noPlace: true })).join("")}</div></section>` : "")
+      + period + (st.sessions.length ? `<section class="panel"><div class="list">${st.sessions.map(x => sessionLine(x, { noPlace: true })).join("")}</div></section>` : none);
     else body = period + (st.played ? (() => {
       const top = st.players[0], fav = st.games[0], fg = fav && BH.game(fav.gameId);
       const kpi = (v, label) => `<div class="kpi"><b>${v}</b><span>${label}</span></div>`;
@@ -1120,12 +1176,12 @@
           ${st.time ? kpi(hours(st.time), "за столом") : ""}
         </div>
         <section class="panel">
-          ${line("Любимая игра здесь", fav ? `${esc(fg ? fg.name : fav.gameId)} · ${parties(fav.n)}` : "")}
-          ${line("Чаще всех побеждает", top && top.wins ? `${esc((BH.player(top.id) || { name: "?" }).name)} · ${top.wins} ${BH.plural(top.wins, "победа", "победы", "побед")}` : "")}
+          ${line("Любимая игра здесь", fav ? two(esc(fg ? fg.name : fav.gameId), parties(fav.n)) : "")}
+          ${line("Чаще всех побеждает", top && top.wins ? two(esc((BH.player(top.id) || { name: "?" }).name), top.wins + " " + BH.plural(top.wins, "победа", "победы", "побед")) : "")}
           ${line("Первая партия", BH.fmtDate(st.first))}
           ${line("Последняя партия", BH.fmtDate(st.last))}
         </section>
-        <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">% побед</span></div><div class="list">${playersRateList(st.players, false)}</div></section>`;
+        <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">процент побед</span></div><div class="list">${playersRateList(st.players, false)}</div></section>`;
     })() : none);
     return `<div class="stack">
       <div class="shead">
@@ -1626,14 +1682,15 @@
       case "new-with": startDraft(el.dataset.id); go("#/new/" + el.dataset.id); break;
 
       /* setup */
-      case "setup-check": break; // handled on change
-      case "say-step": { const st = BH.setupSteps(s).find(x => x.id === el.dataset.id); if (st) BH.speech.speak(st.title + ". " + st.text); break; }
-      case "say-setup": {
-        if (BH.speech.speaking) { BH.speech.stop(); render(); break; }
-        const st = BH.setupSteps(s).filter(x => !s.setupDone[x.id]);
-        const list = st.length ? st : BH.setupSteps(s);
-        BH.speech.speak(list.map((x, i) => "Шаг " + (i + 1) + ". " + x.title + ". " + x.text).join(" "), () => render());
-        render();
+      case "setup-go": setupStep(s, Number(el.dataset.i)); break;
+      case "setup-prev": setupStep(s, setupAt.i - 1); break;
+      case "setup-undo": { const st = BH.setupSteps(s)[setupAt.i]; if (st) { s.setupDone[st.id] = false; BH.saveNow(); render(); refocus('[data-act="setup-done"]'); } break; }
+      case "art-zoom": { const c = el.closest(".setup-card"); if (!c) break; const on = c.classList.toggle("zoomed"); if (on) el.style.height = ""; else fitSetup(); break; }
+      case "setup-done": {
+        const steps = BH.setupSteps(s), st = steps[setupAt.i];
+        if (st && !s.setupDone[st.id]) { s.setupDone[st.id] = true; BH.saveNow(); }
+        if (setupAt.i < steps.length - 1) setupStep(s, setupAt.i + 1);
+        else { quiet(); BH.speech.stop(); s.status = s.status === "setup" ? "first" : s.status; BH.saveNow(); goReplace("#/s/" + s.id + "/first"); }
         break;
       }
       case "setup-next": BH.speech.stop(); s.status = s.status === "setup" ? "first" : s.status; BH.saveNow(); goReplace("#/s/" + s.id + "/first"); break;
@@ -1815,14 +1872,6 @@
   document.addEventListener("change", e => {
     const el = e.target;
     const r = route(), s = r.a === "s" ? BH.session(r.b) : null;
-    if (el.dataset.act === "setup-check" && s) {
-      s.setupDone[el.dataset.id] = el.checked; BH.saveNow();
-      const card = el.closest(".setup-step"); if (card) card.classList.toggle("done", el.checked);
-      const steps = BH.setupSteps(s), done = steps.filter(x => s.setupDone[x.id]).length;
-      const bar = BH.$(".progress > i"); if (bar) bar.style.width = (100 * done / steps.length) + "%";
-      const sub = BH.$(".page-head .sub"); if (sub) sub.textContent = `${done} из ${steps.length} готово`;
-      if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
-    }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
     if (el.dataset.act === "pl-period") { plcard.period = el.value; render(); refocus('[data-act="pl-period"]'); }
     if (el.dataset.act === "gc-period") { gcard.period = el.value; render(); refocus('[data-act="gc-period"]'); }
@@ -2003,7 +2052,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.15.0";
+  BH.version = "0.15.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

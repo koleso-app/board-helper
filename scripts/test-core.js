@@ -281,6 +281,12 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.strictEqual(score({ num: [10] }, { minus15: true }, true).score, -5);
     assert.strictEqual(score({ num: [10] }, { minus15: true }, false).score, 10, "the −15 exists only in the brutal mode");
   });
+  t("bust hides the cards in the round sheet; only the minus cards of the brutal mode stay (book p. 7: modifiers go even to a busted player)", () => {
+    const kept = (game, brutal) => game.calc.groups.filter(grp => grp.keepOnBust && grp.keepOnBust(ctxOf(3, brutal))).map(grp => grp.id).join(",");
+    assert.strictEqual(kept(v, false), "");
+    assert.strictEqual(kept(v, true), "minus");
+    assert.strictEqual(kept(BH.game("flip7"), false), "");
+  });
   t("vengeance: warnings — Unlucky 7 with a 7, too many cards of a number", () => {
     const w = v.calc.roundWarnings([{}, {}], [sel({ num: [7], special: ["u7"] }), sel({ num: [1] })], ctxOf(2));
     assert.ok(w.some(x => x.includes("Несчастливая 7")));

@@ -189,6 +189,7 @@
   }
   // the sync waits while the user is in the middle of something
   let spinning = false;
+  let cheer = null;            // the game just finished: confetti once over its result
   BH.uiBusy = () => {
     const a = document.activeElement;
     const typing = a && a.matches && a.matches("main input:not([type=checkbox]), main textarea") && a.value;   // half-typed text would be lost by a redraw
@@ -665,7 +666,13 @@
     if (sub === "first") return { html: viewFirst(s, g), after: () => { fitWheel(); if (document.fonts) document.fonts.ready.then(() => { if (BH.$(".wheel")) fitWheel(); }); } };
     if (sub === "play") return { html: viewPlay(s, g), after: () => BH.rulesUI.bind(main, g, { compact: true }) };
     if (sub === "rules") return { html: viewSessionRules(s, g), after: () => BH.rulesUI.bind(main, g) };
-    if (sub === "done") return { html: viewDone(s, g) };
+    if (sub === "done") return { html: viewDone(s, g), after: () => {
+      if (cheer !== s.id) return;
+      cheer = null;
+      const at = BH.$(".crown") || BH.$("main h1"); if (!at) return;
+      const r = at.getBoundingClientRect();
+      confetti(r.left + r.width / 2, r.top + r.height / 2, (s.winners || []).map(id => (BH.player(id) || {}).color).filter(Boolean));
+    } };
     return { html: notFound("Такого экрана нет.") };
   }
   // the game of a session as a card: cover, name, and its facts as chips — place, date, add-ons, the mode
@@ -737,15 +744,49 @@
     art.style.height = Math.max(90, Math.min(Math.round(art.clientWidth * 0.75), 380, room())) + "px";
     window.scrollTo(0, y);
   }
-  // the wheel takes the room left above its buttons (the manual choice below may stay out of view)
+  // the wheel takes the room left above its buttons, which come right under it in the page (not stuck to the
+  // bottom: on some phones the bottom of the screen hides under the system buttons). The manual choice below may stay out of view.
   function fitWheel() {
-    const wh = BH.$(".wheel"); if (!wh) return;
-    const man = BH.$(".wheel-manual"), y = window.scrollY;
+    const wh = BH.$(".wheel"), bar = BH.$(".wheel-bar"); if (!wh || !bar) return;
+    const y = window.scrollY;
     wh.style.width = "120px";
-    const rest = document.body.getBoundingClientRect().height - (man ? man.getBoundingClientRect().height + 16 : 0);
+    const vv = window.visualViewport;
+    const H = Math.min(window.innerHeight, document.documentElement.clientHeight || Infinity, vv ? vv.height : Infinity);
+    const inset = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;   // the phone's own bottom bar, if it says so
+    const end = bar.getBoundingClientRect().bottom + window.scrollY;                   // where the buttons end on the page
     const max = Math.min(window.innerWidth * 0.84, 380);
-    wh.style.width = Math.round(Math.max(140, Math.min(max, 120 + window.innerHeight - rest - 8))) + "px";
+    wh.style.width = Math.round(Math.max(140, Math.min(max, 120 + H - end - inset - 16))) + "px";
     window.scrollTo(0, y);
+  }
+  // the first player found: the name instead of the wheel
+  const firstResultHTML = p => `<div class="first-res">${BH.avatar(p, "xxl")}<b class="first-name">${esc(p.name)}</b></div>`;
+  const wheelButtons = (s, chosen) => chosen
+    ? `<button class="btn big" data-act="spin" aria-label="Крутить ещё раз">${I.wheel}<span class="lbl-l">Крутить ещё раз</span><span class="lbl-s">Ещё раз</span></button><button class="btn primary big" data-act="start-play">${s.status === "playing" ? "Готово" : "Начать игру"}</button>`
+    : `<button class="btn primary big" data-act="spin">${I.wheel}Крутить</button>`;
+  // a burst of confetti from a point on the screen (none when the phone asks for less motion)
+  function confetti(x0, y0, colors) {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const c = document.createElement("canvas"), dpr = Math.min(2, window.devicePixelRatio || 1), W = window.innerWidth, H = window.innerHeight;
+    c.className = "confetti"; c.width = W * dpr; c.height = H * dpr; c.setAttribute("aria-hidden", "true");
+    document.body.appendChild(c);
+    const x = c.getContext("2d"); x.scale(dpr, dpr);
+    const cols = [...colors, "#F2C230", "#E0603B", "#3B82F6", "#22C55E", "#A855F7"];
+    const parts = Array.from({ length: 110 }, () => {
+      const a = Math.random() * Math.PI * 2, v = 3 + Math.random() * 8;
+      return { x: x0, y: y0, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 5, r: Math.random() * 3, vr: (Math.random() - .5) * .35, w: 6 + Math.random() * 6, h: 4 + Math.random() * 4, c: cols[Math.floor(Math.random() * cols.length)] };
+    });
+    const t0 = performance.now();
+    (function frame(t) {
+      const k = (t - t0) / 2000;
+      x.clearRect(0, 0, W, H);
+      if (k >= 1 || !c.isConnected) { c.remove(); return; }
+      x.globalAlpha = Math.min(1, (1 - k) * 2.5);
+      for (const p of parts) {
+        p.vy += 0.22; p.vx *= 0.985; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.fillStyle = p.c; x.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); x.restore();
+      }
+      requestAnimationFrame(frame);
+    })(t0);
   }
   // only a new width re-fits: a phone's address bar showing or hiding changes the height while scrolling
   let fitW = window.innerWidth;
@@ -775,23 +816,17 @@
     const pl = s.players.map(BH.player).filter(Boolean);
     const chosen = s.first ? BH.player(s.first) : null;
     const label = (g.first && g.first.label) || "Первый игрок";
-    return `<div class="stack">
+    return `<div class="stack wheel-screen">
       <div class="shead">
         ${topline(s.status === "playing" ? backLink("#/s/" + s.id + "/play", "К игре") : backLink("#/s/" + s.id + "/setup", "Подготовка"))}
         ${sessionHero(s, g)}
       </div>
       <div class="page-head"><div><h1>${esc(label)}</h1>${g.first && g.first.hint ? `<p class="sub">${esc(g.first.hint)}</p>` : ""}</div></div>
-      <section class="panel wheel-box">
-        ${BH.wheel.html(pl)}
-        <div class="wheel-result" id="wheel-result" aria-live="polite">${chosen ? esc(chosen.name) : ""}</div>
-      </section>
+      <section class="panel wheel-box" id="wheel-box" aria-live="polite">${chosen ? firstResultHTML(chosen) : BH.wheel.html(pl)}</section>
+      <div class="wheel-bar">${wheelButtons(s, !!chosen)}</div>
       <details class="panel wheel-manual"><summary class="small" style="cursor:pointer;font-weight:600">Выбрать вручную</summary>
         <div class="chips" style="margin-top:12px">${pl.map(p => `<button class="chip" data-act="set-first" data-id="${p.id}" aria-pressed="${s.first === p.id}"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</button>`).join("")}</div>
       </details>
-      <div class="game-bar wheel-bar">
-        <button class="btn ${chosen ? "" : "primary"} big" data-act="spin">${I.wheel}${chosen ? "Крутить ещё раз" : "Крутить"}</button>
-        ${chosen ? `<button class="btn primary big" data-act="start-play">${s.status === "playing" ? "Готово" : "Начать игру"}</button>` : ""}
-      </div>
     </div>`;
   }
 
@@ -1708,7 +1743,11 @@
       const bust = e.sel.flags && e.sel.flags.bust;
       let picker = "";
       if (open) {
-        picker = `<div class="picker">${g.calc.groups.map(grp => {
+        // a bust hides the cards (they stay marked and come back when the bust is taken off);
+        // a group the game keeps on a bust stays (the minus cards in the brutal mode of Vengeance)
+        const groups = g.calc.groups.filter(grp => !bust || (grp.keepOnBust && grp.keepOnBust(ctx)));
+        const hid = bust ? `<p class="small muted bust-hid">${groups.length ? "Числа скрыты: при переборе они не считаются. Вычеты остаются — в жестоком режиме они считаются." : "Карты скрыты: при переборе они не считаются. Снимите «Перебор» — и они вернутся."}</p>` : "";
+        picker = hid + (!groups.length ? "" : `<div class="picker">${groups.map(grp => {
           const mine = e.sel.picks[grp.id] || [];
           const uniq = grp.uniqueAcross && grp.uniqueAcross(ctx);
           const taken = uniq ? new Set(s.players.filter(o => o !== id).flatMap(o => (sheet.entries[o].sel.picks[grp.id] || []))) : new Set();
@@ -1719,7 +1758,7 @@
             const dis = !on && ((lim.max && lim.count >= lim.max) || taken.has(v));
             return `<button type="button" class="card-t ${grp.style === "mod" ? "mod" : ""}" data-act="pick" data-p="${id}" data-g="${grp.id}" data-v="${esc(JSON.stringify(v))}" aria-pressed="${on}" ${dis ? "disabled" : ""} title="${taken.has(v) ? "Эта карта уже у другого игрока" : ""}">${esc(grp.show ? grp.show(v) : v)}</button>`;
           }).join("")}</div></div>`;
-        }).join("")}</div>`;
+        }).join("")}</div>`);
       }
       const flags = g.calc && g.calc.flags ? g.calc.flags.filter(f => !f.when || f.when(ctx)).map(f => `<button type="button" class="flag" data-act="flag" data-p="${id}" data-f="${f.id}" aria-pressed="${!!(e.sel.flags && e.sel.flags[f.id])}">${esc(f.label)}</button>`).join("") : "";
       return `<div class="entry ${open ? "open" : ""}" data-entry="${id}">
@@ -1740,7 +1779,7 @@
         ${warns.map(w => `<div class="note">${esc(w)}</div>`).join("")}
       </div>
       <div class="sheet-foot">
-        ${nextUp ? `<button class="btn big sheet-next" data-act="open-entry" data-p="${nextUp}" title="Дальше: ${esc((BH.player(nextUp) || {}).name || "")}"><span class="ell">Дальше: ${esc((BH.player(nextUp) || {}).name || "")}</span>${IC.chev}</button>` : ""}
+        ${nextUp ? `<button class="btn big sheet-next" data-act="open-entry" data-p="${nextUp}" title="Дальше: ${esc((BH.player(nextUp) || {}).name || "")}"><span class="sn-l">Дальше:</span><span class="ell">${esc((BH.player(nextUp) || {}).name || "")}</span>${IC.chev}</button>` : ""}
         <button class="btn primary big" data-act="save-round">${I.check}Сохранить</button>
       </div>
     </div></div>`;
@@ -1812,6 +1851,7 @@
     delete s.continueTie;
     BH.clearToast();
     BH.saveNow();
+    if (winners && winners.length) cheer = s.id;
     goReplace("#/s/" + s.id + "/done");   // "Back" from the result must not reopen the game screen
   }
 
@@ -1877,25 +1917,26 @@
 
       /* first player */
       case "spin": {
-        const pl = s.players;
-        el.disabled = true;
-        const res = BH.$("#wheel-result"); if (res) res.textContent = "Крутится…";
+        const box = BH.$("#wheel-box"); if (!box) break;
+        const ps = s.players.map(BH.player).filter(Boolean);
         const my = ++spinToken;
         spinning = true;
-        BH.$$('[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = true; });
-        BH.wheel.spin(main, pl.length, i => {
+        // a name shown from the spin before gives way to the wheel again
+        if (!box.querySelector(".wheel")) { box.innerHTML = BH.wheel.html(ps); fitWheel(); }
+        BH.$$('[data-act="spin"],[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = true; });
+        BH.wheel.spin(box, ps.length, i => {
           spinning = false;
-          if (my !== spinToken) return;            // the user picked someone else or left the screen meanwhile
-          BH.$$('[data-act="start-play"],[data-act="set-first"]').forEach(b => { b.disabled = false; });
-          const cur = fresh(s); cur.first = pl[i]; BH.saveNow();
-          const p = BH.player(pl[i]);
-          // re-render only the controls, keep the disc where it stopped
-          if (res) res.textContent = p ? p.name : "";
-          el.disabled = false;
-          el.classList.remove("primary");
-          el.innerHTML = I.wheel + "Крутить ещё раз";
-          if (!BH.$('[data-act="start-play"]')) el.insertAdjacentHTML("afterend", `<button class="btn primary big" data-act="start-play">${s.status === "playing" ? "Готово" : "Начать игру"}</button>`);
-          BH.$$('[data-act="set-first"]').forEach(b => b.setAttribute("aria-pressed", String(b.dataset.id === s.first)));
+          if (my !== spinToken || !box.isConnected) return;   // the user picked someone else or left the screen meanwhile
+          const cur = fresh(s), p = ps[i]; cur.first = p.id; BH.saveNow();
+          BH.$$('[data-act="set-first"]').forEach(b => { b.disabled = false; b.setAttribute("aria-pressed", String(b.dataset.id === p.id)); });
+          // confetti from the wheel, then the name takes the wheel's place with the buttons right under it
+          const r = box.getBoundingClientRect();
+          confetti(r.left + r.width / 2, r.top + r.height / 2, [p.color]);
+          setTimeout(() => {
+            if (my !== spinToken || !box.isConnected) return;
+            box.innerHTML = firstResultHTML(p);
+            const bar = BH.$(".wheel-bar"); if (bar) bar.innerHTML = wheelButtons(cur, true);
+          }, window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1100);
         });
         break;
       }
@@ -2262,7 +2303,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.16.2";
+  BH.version = "0.16.3";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

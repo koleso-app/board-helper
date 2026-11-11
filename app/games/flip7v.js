@@ -126,7 +126,7 @@
         { id: "num", label: "Числовые карты", items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], max: 7 },
         { id: "special", label: "Особые числовые — тоже в счёт семи", items: ["zero", "u7", "l13"], show: v => SPECIAL[v].label, pool: "num", uniqueAcross: c => c.players <= 18 },
         { id: "div", label: "Делитель", items: ["d2"], show: () => "÷2", style: "mod", uniqueAcross: c => c.players <= 18 },
-        { id: "minus", label: "Вычеты", items: [2, 4, 6, 8, 10], show: v => "−" + v, style: "mod", uniqueAcross: c => c.players <= 18 },
+        { id: "minus", label: "Вычеты", items: [2, 4, 6, 8, 10], show: v => "−" + v, style: "mod", uniqueAcross: c => c.players <= 18, keepOnBust: c => c.opt("brutal") },
       ],
       flags: [
         { id: "bust", label: "Перебор" },

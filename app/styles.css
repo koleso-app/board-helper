@@ -177,7 +177,7 @@ input[type="datetime-local"].input{min-height:48px}
 .wheel svg.disc{width:100%;height:100%;display:block;transition:transform 4.2s cubic-bezier(.12,.62,.08,1);will-change:transform}
 .wheel .pointer{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:34px;height:40px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
 .wheel .hub{position:absolute;inset:0;margin:auto;width:22%;height:22%;border-radius:50%;background:var(--surface);border:4px solid var(--ink);display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:13px}
-.wheel-result{font-family:var(--f-display);font-size:22px;font-weight:600;text-align:center;min-height:32px}
+
 @media (prefers-reduced-motion: reduce){.wheel svg.disc{transition-duration:.01s}}
 
 /* ---------- play ---------- */
@@ -630,14 +630,24 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .end-how ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .hist.pad td:first-child,.hist.pad th:first-child{white-space:normal;min-width:96px}
 
-/* the wheel: its buttons below, the wheel takes the room left (fitWheel) */
-.shell:has(.wheel-box){padding-bottom:4px}
-.wheel-bar>.btn:not(.primary){flex:none}
-.wheel-box{padding-top:12px;padding-bottom:10px;gap:10px}
-.stack:has(>.wheel-box){gap:10px}
-.stack:has(>.wheel-box) .page-head .sub{font-size:14px;line-height:1.4}
+/* the wheel: its buttons right under it in the page, the wheel takes the room left (fitWheel);
+   once it stops — confetti, then the name in the wheel's place */
+.wheel-box{padding-top:12px;padding-bottom:12px;gap:10px}
+.wheel-screen{gap:10px}
+.wheel-screen .page-head .sub{font-size:14px;line-height:1.4}
+.wheel-bar{display:flex;flex-wrap:wrap;gap:10px}
+.wheel-bar .btn{flex:1 1 auto}
+@media (max-width:400px){.wheel-bar .btn:not(.primary){padding-left:14px;padding-right:14px}}
+.first-res{display:grid;justify-items:center;gap:12px;padding:14px 8px 8px;text-align:center;animation:first-pop .35s ease-out}
+.first-name{font-family:var(--f-display);font-size:30px;font-weight:700;line-height:1.15;overflow-wrap:anywhere}
+@keyframes first-pop{from{transform:scale(.85);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){.first-res{animation:none}}
+.confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:80}
 /* the round sheet: «Дальше» on the left, «Сохранить» on the right; short cards in a grid of seven */
-.sheet-foot .sheet-next{flex:1;min-width:0;white-space:nowrap}
+.sheet-foot .sheet-next{flex:1 1 auto;min-width:0;white-space:nowrap;gap:6px}
+.sheet-foot .sheet-next .sn-l{flex:none}
+.sheet-foot .sheet-next+.btn.primary{flex:0 0 auto}
+@media (max-width:400px){.sheet-foot .btn{padding-left:14px;padding-right:14px}}
 .sheet-foot .sheet-next svg{flex:none}
 .sheet-foot .ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .cards.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
@@ -648,3 +658,4 @@ body:has(.setup-screen.tight) .topbar{display:none}
 /* a word as the placeholder of a score field is set in the plain font, the digits stay large */
 .score-in.ph-word::placeholder{font-family:var(--f-ui);font-weight:600;font-size:15px;color:var(--muted);opacity:1}
 .search-ex{margin:-8px 2px 0}
+.bust-hid{margin:0}

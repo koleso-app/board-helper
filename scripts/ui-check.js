@@ -15,7 +15,7 @@
   const BOX = ".panel,.entry,.sheet,.sess-hero,.pl,.kpi,.item,.grow,.gcard,.pc-game,.setup-card,.stat-tile,.pick-row,.step,.note,.btn,.chip,.badge,.mi,.tile,.flag,.card-t,.seat,.pc-line";
   const SCROLLERS = ".hscroll,.scroll-x,.pick-list";
   // texts that may be cut on purpose: what a person typed and made very long is shortened in a row
-  const allowCut = el => el.closest(".mi") || el.closest(".back") || el.closest(".sheet-next");
+  const allowCut = el => el.closest(".mi") || el.closest(".back") || (el.matches(".ell") && el.closest(".sheet-next"));
 
   function scan(where) {
     const vw = document.documentElement.clientWidth, out = [];
@@ -83,12 +83,16 @@
       const n = document.querySelectorAll(".setup-dots button").length;
       for (let k = 0; k < n; k++) { document.querySelector(`.setup-dots [data-i="${k}"]`).click(); await wait(300); out.push(...scan(`#/s/${s.id}/setup [шаг ${k + 1}]`)); }
     }
-    // the wheel: the buttons are seen without scrolling
-    for (const s of S.sessions.filter(x => x.status === "first")) {
-      await visit("#/s/" + s.id + "/first"); await wait(150);
-      out.push(...scan(`#/s/${s.id}/first`));
-      const b = document.querySelector('[data-act="spin"]');
-      if (b && b.getBoundingClientRect().bottom > window.innerHeight + 1) out.push(`#/s/${s.id}/first — кнопка «Крутить» ниже края экрана`);
+    // the wheel, and the name once chosen: the buttons are seen without scrolling, with room to spare
+    // (the first player is taken off only in memory for a moment, nothing is saved)
+    const seen = where => { for (const b of document.querySelectorAll(".wheel-bar .btn")) if (b.getBoundingClientRect().bottom > window.innerHeight - 12) out.push(`${where} — кнопка «${b.innerText.trim()}» у самого края экрана или ниже`); };
+    for (const s of S.sessions.filter(x => x.status === "first" || (x.status === "playing" && !x.rounds.length && BH.game(x.gameId).first))) {
+      const was = s.first;
+      try {
+        s.first = null; await visit("#/s/" + s.id + "/first"); await wait(150);
+        out.push(...scan(`#/s/${s.id}/first [колесо]`)); seen(`#/s/${s.id}/first [колесо]`);
+      } finally { s.first = was; }
+      if (was) { await visit("#/"); await visit("#/s/" + s.id + "/first"); await wait(150); out.push(...scan(`#/s/${s.id}/first [выбран]`)); seen(`#/s/${s.id}/first [выбран]`); }
     }
     // running games: the round sheet with the cards of each player, editing a round, the finish dialog, a voice answer
     const V = BH.voice, keep = { ready: V.ready, canListen: V.canListen, speaks: V.speaks, ask: V.ask };
@@ -110,6 +114,9 @@
         const ids = [...document.querySelectorAll('.overlay [data-act="open-entry"][data-p]')].map(x => x.dataset.p).filter(Boolean);
         out.push(...scan(`${s.id} [лист раунда]`));
         for (const id of [...new Set(ids)]) { const e = document.querySelector(`.overlay [data-act="open-entry"][data-p="${id}"]`); if (e) { e.click(); await wait(250); } out.push(...scan(`${s.id} [лист раунда, карты ${id}]`)); }
+        // a bust on the open entry: the cards hide, the note shows (the sheet is closed without saving)
+        const bf = document.querySelector('.overlay .entry.open [data-act="flag"][data-f="bust"]');
+        if (bf) { bf.click(); await wait(250); out.push(...scan(`${s.id} [лист раунда, перебор]`)); }
         await closeOverlay();
         if (s.rounds.length) { const row = document.querySelector('[data-act="edit-round"]'); if (row) { row.click(); await wait(350); out.push(...scan(`${s.id} [исправить раунд]`)); await closeOverlay(); } }
         document.querySelector('[data-act="finish-menu"]').click(); await wait(300); out.push(...scan(`${s.id} [завершить]`)); await closeOverlay();

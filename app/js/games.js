@@ -32,6 +32,7 @@
     const g = BH.game(s.gameId); if (!g) return [];
     const ctx = BH.ctxOf(s);
     return g.setup.filter(st => !st.when || st.when(ctx)).map(st => Object.assign({}, st, {
+      title: typeof st.title === "function" ? st.title(ctx) : st.title,
       text: typeof st.text === "function" ? st.text(ctx) : st.text,
       art: typeof st.art === "function" ? st.art(ctx) : st.art,
     }));
@@ -59,7 +60,8 @@
   // the day a game was played: when it was started (as on the calendar and in the lists)
   BH.sessionDate = s => s.created || s.finishedAt || 0;
   // a player's score counts only where it was kept: rounds were played, or it was written in afterwards
-  BH.hasScore = (s, id) => s.rounds.length > 0 || !!(s.final && s.final[id] !== undefined);
+  BH.isEndScored = g => !!(g && g.scoring && g.scoring.type === "end");
+  BH.hasScore = (s, id) => (!BH.isEndScored(BH.game(s.gameId)) && s.rounds.length > 0) || !!(s.final && s.final[id] !== undefined);
   BH.playerStats = (pid, sessions) => {
     const mine = (sessions || []).filter(s => s.status === "finished" && s.players.includes(pid)).sort((a, b) => BH.sessionDate(a) - BH.sessionDate(b));
     const isWin = s => s.winners.includes(pid);
@@ -126,7 +128,7 @@
       // one number per game: the winners' score (a tie counts once)
       const ws = s.winners.filter(id => BH.hasScore(s, id));
       if (ws.length) { winSum += ws.reduce((a, id) => a + t[id], 0) / ws.length; winN++; }
-      if (s.rounds.length) {
+      if (s.rounds.length && !BH.isEndScored(g)) {
         withRounds++; rounds += s.rounds.length;
         s.rounds.forEach((rd, i) => s.players.forEach(id => {
           const v = Number(rd.scores[id]) || 0;
@@ -175,12 +177,23 @@
   };
 
   /* players sorted best first, with shared places for equal totals */
+  // a game with a tie-breaker (Faraway: the lowest sum of the card numbers) uses it for the first place only
+  // (the book decides the winner with it), and only when every player sharing that place has the value
   BH.standings = s => {
     const g = BH.game(s.gameId), t = BH.totals(s), high = !(g && g.scoring && g.scoring.lowerWins);
-    const list = s.players.map((id, seat) => ({ id, seat, total: t[id] }));
+    const useTb = BH.isEndScored(g) && g.endScore && g.endScore.tie && s.finalDetail;
+    const tbOf = id => { const d = useTb && s.finalDetail[id]; return d && Number.isInteger(d.tie) ? d.tie : null; };
+    const list = s.players.map((id, seat) => ({ id, seat, total: t[id], tb: tbOf(id) }));
     list.sort((a, b) => (high ? b.total - a.total : a.total - b.total) || a.seat - b.seat);
+    const topN = list.filter(x => list.length && x.total === list[0].total).length;
+    const split = useTb && topN > 1 && list.slice(0, topN).every(x => x.tb !== null);
+    if (split) list.splice(0, topN, ...list.slice(0, topN).sort((a, b) => a.tb - b.tb || a.seat - b.seat));
     let place = 0, prev = null;
-    list.forEach((x, i) => { if (prev === null || x.total !== prev) { place = i + 1; prev = x.total; } x.place = place; });
+    list.forEach((x, i) => {
+      const apart = split && i < topN && prev && x.tb !== prev.tb;
+      if (prev === null || x.total !== prev.total || apart) place = i + 1;
+      x.place = place; prev = x;
+    });
     return list;
   };
 
@@ -195,6 +208,40 @@
     const best = st[0].total;
     const winners = st.filter(x => x.total === best).map(x => x.id);
     return { over: true, winners, tie: winners.length > 1 };
+  };
+
+  /* ---------- scoring at the end (g.endScore): rows (the cards, last to first), extra rows, the tie-breaker ----------
+     a sheet: { cards: [fame of the 1st…Nth card played], <extra id>: fame, tie: the tie-breaker value } — empty is null */
+  const intOrNull = v => (v === "" || v === null || v === undefined ? null : Number(v));
+  BH.endTotal = (g, d) => {
+    const e = g.endScore; if (!e || !d) return 0;
+    const cells = (d.cards || []).slice(0, e.rows).concat((e.extra || []).map(x => d[x.id]));
+    return cells.reduce((a, v) => a + (Number.isFinite(intOrNull(v)) ? intOrNull(v) : 0), 0);
+  };
+  // what in a sheet breaks the rules: fame is a whole number from 0; the tie-breaker within its range
+  BH.endProblems = (g, d, o) => {
+    const e = g.endScore, out = []; if (!e || !d) return out;
+    const bad = v => { const n = intOrNull(v); return n !== null && (!Number.isInteger(n) || n < 0 || n > e.max); };
+    (d.cards || []).slice(0, e.rows).forEach((v, i) => { if (bad(v)) out.push(`${e.rowLabel(i + 1)}: слава — целое число от 0 до ${e.max}`); });
+    for (const x of e.extra || []) if (bad(d[x.id])) out.push(`${x.label}: слава — целое число от 0 до ${e.max}`);
+    const t = intOrNull(d.tie);
+    const tmin = o && o.partial ? 1 : e.tie && e.tie.min;
+    if (e.tie && t !== null && (!Number.isInteger(t) || t < tmin || t > e.tie.max)) out.push(`${e.tie.label}: от ${tmin} до ${e.tie.max}`);
+    return out;
+  };
+  BH.endFilled = (g, d) => { const e = g.endScore; if (!e || !d) return 0; return (d.cards || []).slice(0, e.rows).concat((e.extra || []).map(x => d[x.id])).filter(v => intOrNull(v) !== null).length; };
+  // who won: the most fame; equal fame — the lowest tie-breaker value (Faraway: the sum of the card numbers).
+  // tieOpen: the players still tied for lack of the value, so the app can ask for it
+  BH.endWinners = (g, players, sheets) => {
+    const tot = Object.fromEntries(players.map(id => [id, BH.endTotal(g, sheets[id])]));
+    const best = Math.max(...players.map(id => tot[id]));
+    let top = players.filter(id => tot[id] === best);
+    if (top.length < 2 || !(g.endScore && g.endScore.tie)) return { winners: top, totals: tot, tieOpen: [] };
+    const tv = id => intOrNull(sheets[id] && sheets[id].tie);
+    const missing = top.filter(id => tv(id) === null);
+    if (missing.length) return { winners: top, totals: tot, tieOpen: missing };
+    const low = Math.min(...top.map(tv));
+    return { winners: top.filter(id => tv(id) === low), totals: tot, tieOpen: [], byTie: true };
   };
 
   /* ---------- round calculator: generic card picker, the game supplies groups and compute() ---------- */

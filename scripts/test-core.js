@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -318,4 +318,113 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.ok(!v.calc.flags.find(f => f.id === "gave15").when(ctxOf(1, true)), "no −15 when playing alone");
   });
   console.log(`${passed} passed (with Flip 7: With A Vengeance)${process.exitCode ? ", some FAILED" : ""}`);
+}
+
+/* ---------- Faraway («Дальние дали»): each test checks one rule of the book (docs/rules-check.md) ---------- */
+{
+  const F = BH.game("faraway");
+  const fpassed0 = passed;
+  const ctxN = (n, adv) => ({ players: n, exp: new Set(), has: () => false, opt: id => id === "advanced" ? !!adv : false });
+  const sheet = (cards, sanct, tie) => ({ cards: cards.map(String), sanct: sanct === undefined ? "" : String(sanct), tie: tie === undefined ? "" : String(tie) });
+  t("faraway p.1: 2–6 players, no first player, 8 rounds, scored at the end", () => {
+    assert.strictEqual(F.players.min, 2); assert.strictEqual(F.players.max, 6);
+    assert.ok(!F.first, "everyone plays at once — no wheel");
+    assert.strictEqual(F.rounds.count, 8); assert.strictEqual(F.rounds.leader, false);
+    assert.ok(BH.isEndScored(F)); assert.strictEqual(F.endScore.rows, 8);
+  });
+  t("faraway p.5: deal 3 (advanced: 5, keep 3); reveal players + 1", () => {
+    const s = { gameId: "faraway", players: ["a", "b", "c", "d", "e"], exp: [], opts: {} };
+    const st = BH.setupSteps(s);
+    assert.ok(st.find(x => x.id === "deal").text.includes("по 3"));
+    const c = st.find(x => x.id === "center");
+    assert.ok(c.title.includes("6"), "5 players reveal 6: " + c.title); assert.ok(c.text.includes("6"));
+    const adv = BH.setupSteps(Object.assign({}, s, { opts: { advanced: true } })).find(x => x.id === "deal").text;
+    assert.ok(adv.includes("по 5") && adv.includes("оставляет 3") && adv.includes("обратно"));
+  });
+  t("faraway p.10–11: round 1 has no sanctuaries; round 8 takes no card; the leftover goes, players + 1 come", () => {
+    const ph = r => F.rounds.phases(ctxN(4), r, 8).map(p => p.text).join(" ");
+    assert.ok(ph(1).includes("В первом раунде Святилищ нет"));
+    assert.ok(ph(3).includes("1 карту Святилища") && ph(3).includes("за каждую улику"));
+    assert.ok(ph(3).includes("уберите из игры") && ph(3).includes("откройте 5 новых"), "4 players reveal 5");
+    assert.ok(ph(3).includes("наименьшего номера"), "phase 3 goes from the lowest card up");
+    assert.ok(ph(8).includes("Новую карту Региона не берите") && !ph(8).includes("откройте"));
+    assert.ok(ph(8).includes("добавляет одно") && ph(8).includes("под колоду"), "in round 8 a sanctuary may still be added");
+    assert.ok(ph(3).includes("добавляет одно") && ph(3).includes("под колоду") && ph(3).includes("действует сразу"), "one sanctuary kept, it works at once, the rest under the deck");
+    assert.ok(ph(1).includes("одновременно") && ph(1).includes("рубашкой вверх") && ph(1).includes("справа"), "phase 1: at once, face down, to the right");
+    assert.ok(ph(7).includes("так решают игроки"), "not revealing after round 7 is marked as the players' way");
+    assert.strictEqual(F.rounds.phases(ctxN(4), 2, 8)[1].title, "Обнаружение Святилищ");
+    assert.ok(ph(7).includes("можно не открывать"), "nothing is taken in round 8, so nothing to reveal after round 7");
+  });
+  t("faraway p.12: the fame is the sum of the 8 Region cards and the sanctuaries", () => {
+    assert.strictEqual(BH.endTotal(F, sheet([3, 0, 12, 6, 0, 19, 4, 8], 7)), 59);
+    assert.strictEqual(BH.endTotal(F, sheet(["", "", "", "", "", "", "", ""])), 0, "empty is zero");
+  });
+  t("faraway: fame is a whole number from 0; the sum of 8 card numbers is 36…516", () => {
+    assert.strictEqual(BH.endProblems(F, sheet([0, 1, 2, 3, 4, 5, 6, 7], 0, 36)).length, 0);
+    assert.strictEqual(BH.endProblems(F, sheet([-1, 0, 0, 0, 0, 0, 0, 0])).length, 1, "no negative fame");
+    assert.strictEqual(BH.endProblems(F, sheet([1.5, 0, 0, 0, 0, 0, 0, 0])).length, 1, "whole numbers");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], -2)).length, 1, "sanctuaries too");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 35)).length, 1, "1+2+…+8 = 36 is the least");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 517)).length, 1, "61+…+68 = 516 is the most");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 516)).length, 0);
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 15), { partial: true }).length, 0, "a game stopped early has fewer cards");
+  });
+  t("faraway p.12 + English rules: equal fame — the lowest sum of card numbers wins", () => {
+    const pl = ["a", "b", "c"];
+    const one = BH.endWinners(F, pl, { a: sheet([10, 0, 0, 0, 0, 0, 0, 0]), b: sheet([5, 0, 0, 0, 0, 0, 0, 0]), c: sheet([1, 0, 0, 0, 0, 0, 0, 0]) });
+    assert.deepStrictEqual([...one.winners], ["a"]); assert.strictEqual(one.tieOpen.length, 0);
+    const tied = { a: sheet([10, 0, 0, 0, 0, 0, 0, 0]), b: sheet([4, 6, 0, 0, 0, 0, 0, 0]), c: sheet([1, 0, 0, 0, 0, 0, 0, 0]) };
+    const open = BH.endWinners(F, pl, tied);
+    assert.deepStrictEqual([...open.tieOpen], ["a", "b"], "the tied players are asked for the sum");
+    tied.a.tie = "250"; tied.b.tie = "198";
+    const decided = BH.endWinners(F, pl, tied);
+    assert.deepStrictEqual([...decided.winners], ["b"]); assert.ok(decided.byTie);
+    tied.a.tie = "198";
+    assert.deepStrictEqual([...BH.endWinners(F, pl, tied).winners], ["a", "b"], "still equal — a shared win");
+  });
+  t("faraway: the score sheet survives saving and syncing (normalize keeps it, idempotent)", () => {
+    const raw = { players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true, sessions: [{ id: "s1", gameId: "faraway", players: ["a", "b"], status: "finished", rounds: [], final: { a: 59, b: 40 },
+      finalDetail: { a: { cards: [3, 0, 12, 6, 0, 19, 4, 8], sanct: 7, tie: 250 }, b: { cards: [5, 5, 5, 5, 5, 5, 5, 5], sanct: 0, tie: null }, x: { cards: [1] } }, winners: ["a"] }] };
+    BH.replaceFromSync(raw);
+    const fd = BH.state.sessions[0].finalDetail;
+    assert.deepStrictEqual(JSON.stringify(fd.a), JSON.stringify({ cards: [3, 0, 12, 6, 0, 19, 4, 8], sanct: 7, tie: 250 }));
+    assert.strictEqual(fd.b.tie, null); assert.ok(!fd.x, "a sheet of someone not at the table is dropped");
+    const before = JSON.stringify(BH.state.sessions[0]);
+    BH.replaceFromSync(JSON.parse(JSON.stringify(BH.state)));
+    assert.strictEqual(JSON.stringify(BH.state.sessions[0]), before, "normalize twice — the same");
+  });
+  t("faraway: a game recorded with fame counts as scored; its rounds alone do not", () => {
+    const s = { gameId: "faraway", players: ["a", "b"], rounds: [{ scores: { a: 0, b: 0 } }], final: undefined };
+    assert.strictEqual(BH.hasScore(s, "a"), false, "8 counted rounds carry no fame");
+    assert.strictEqual(BH.hasScore(Object.assign({}, s, { final: { a: 59, b: 40 } }), "a"), true);
+  });
+  t("faraway: rules, groups, questions and pictures refer to real sections", () => {
+    const ids = new Set(F.rules.map(r => r.id));
+    for (const gr of F.ruleGroups) for (const id of gr.ids) assert.ok(ids.has(id), "group " + id);
+    for (const gr of F.faqGroups) for (const id of gr.refs) assert.ok(ids.has(id), "faq group " + id);
+    for (const f of F.faq) assert.ok(ids.has(f.ref), "faq ref " + f.ref);
+    for (const k of Object.keys(F.images.rules)) assert.ok(ids.has(k), "image for " + k);
+    assert.ok(F.rules.every(r => r.page === undefined || (r.page >= 1 && r.page <= 12)), "pages of the 12-page book");
+    const grouped = new Set(F.ruleGroups.flatMap(gr => gr.ids));
+    for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
+  });
+  console.log(`faraway: ${passed - fpassed0} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  const before = passed;
+  t("faraway p.12: places follow the tie-breaker — equal fame, lower sum of numbers is first", () => {
+    const s = { gameId: "faraway", players: ["a", "b", "c", "d"], rounds: [], final: { a: 59, b: 59, c: 38, d: 38 },
+      finalDetail: { a: { cards: [], tie: 250 }, b: { cards: [], tie: 198 }, c: { cards: [], tie: null }, d: { cards: [], tie: null } } };
+    const st = BH.standings(s);
+    assert.deepStrictEqual(st.map(x => x.id + ":" + x.place).join(" "), "b:1 a:2 c:3 d:3", "b wins on the sum; c and d stay shared without one");
+    s.finalDetail.c.tie = 100; s.finalDetail.d.tie = 300;
+    assert.deepStrictEqual(BH.standings(s).filter(x => x.total === 38).map(x => x.place), [3, 3], "the sum decides the first place only");
+    const three = { gameId: "faraway", players: ["a", "b", "c"], rounds: [], final: { a: 50, b: 50, c: 50 }, finalDetail: { a: { cards: [], tie: 200 }, b: { cards: [], tie: 300 }, c: { cards: [], tie: null } } };
+    assert.deepStrictEqual(BH.standings(three).map(x => x.place), [1, 1, 1], "a sum missing for one of them — a shared place, as the shared win");
+    s.finalDetail.a.tie = 198;
+    assert.strictEqual(BH.standings(s).filter(x => x.place === 1).length, 2, "the same sum — a shared first place");
+    const flip = { gameId: "flip7", players: ["a", "b"], rounds: [{ scores: { a: 5, b: 5 } }] };
+    assert.deepStrictEqual(BH.standings(flip).map(x => x.place), [1, 1], "games without a tie-breaker share places");
+  });
+  console.log(`faraway standings: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

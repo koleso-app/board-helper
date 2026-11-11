@@ -80,6 +80,18 @@
         first: typeof x.first === "string" && allowed.has(x.first) ? x.first : null,
         winners: ids(x.winners, allowed),
         opts: (() => { const o = {}; for (const [k, v] of Object.entries(isObj(x.opts) ? x.opts : {})) if (ID.test(k)) o[k] = !!v; return o; })(),
+        // the score sheet of a game scored at the end: fame per card (in the order played), extra rows, the tie-breaker
+        finalDetail: (() => {
+          if (!isObj(x.finalDetail)) return undefined;
+          const n = v => (Number.isInteger(v) && v >= 0 && v <= 9999 ? v : null), f = {};
+          for (const id of pl) {
+            const d = x.finalDetail[id]; if (!isObj(d)) continue;
+            const o = { cards: arr(d.cards).slice(0, 20).map(n) };
+            for (const [k, v] of Object.entries(d)) if (k !== "cards" && ID.test(k)) o[k] = n(v);
+            f[id] = o;
+          }
+          return Object.keys(f).length ? f : undefined;
+        })(),
         final: (() => { if (!isObj(x.final)) return undefined; const f = {}; for (const id of pl) if (x.final[id] !== undefined && x.final[id] !== null && x.final[id] !== "") f[id] = num(x.final[id]); return Object.keys(f).length ? f : undefined; })(),
         continueTie: Number.isInteger(x.continueTie) && x.continueTie > 0 ? x.continueTie : undefined,
       });

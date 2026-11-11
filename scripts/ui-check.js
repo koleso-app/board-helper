@@ -82,6 +82,15 @@
       V.ask = async () => ({ answer: "Да, можно. Остановившийся игрок не защищён: его карты остаются в раунде, и на него можно сыграть любое действие, кроме тех, что требуют активного игрока.", quote: "Карты остановившегося игрока остаются в раунде до самого конца, и их всё ещё можно украсть, поменять или сбросить.", page: "11–12", ref: (BH.game(S.sessions[0] && S.sessions[0].gameId) || BH.games[0]).rules[0].id, found: true });
       for (const s of S.sessions.filter(x => x.status === "playing")) {
         await visit("#/s/" + s.id + "/play");
+        // a game scored at the end: its score sheet, reached from «Завершить»
+        if (!document.querySelector('[data-act="new-round"]')) {
+          const fm = document.querySelector('[data-act="finish-menu"]'); if (fm) { fm.click(); await wait(300); out.push(...scan(`${s.id} [завершить]`)); }
+          const go = document.querySelector('[data-act="dlg"][data-i="0"]'); if (go) { go.click(); await wait(350); }
+          const ids = [...document.querySelectorAll('.overlay [data-act="end-entry"][data-p]')].map(x => x.dataset.p);
+          for (const id of [...new Set(ids)]) { const e = document.querySelector(`.overlay [data-act="end-entry"][data-p="${id}"]`); if (e && e.getAttribute("aria-expanded") !== "true") { e.click(); await wait(250); } out.push(...scan(`${s.id} [подсчёт славы, ${id}]`)); }
+          await closeOverlay();
+          continue;
+        }
         document.querySelector('[data-act="new-round"]').click(); await wait(350);
         const ids = [...document.querySelectorAll('.overlay [data-act="open-entry"][data-p]')].map(x => x.dataset.p).filter(Boolean);
         out.push(...scan(`${s.id} [лист раунда]`));

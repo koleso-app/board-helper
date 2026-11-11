@@ -17,10 +17,10 @@ function cheatSheet(gameFile) {
 }
 
 /* ---------- the rulebook text with printed page numbers ---------- */
-// pdf page N carries printed page N-1 (page 1 is the cover)
-function rulebook(file) {
+// printed: pdf page N carries printed page N-1 (page 1 is the cover); pdf: the page of the PDF file itself
+function rulebook(file, pages) {
   if (!fs.existsSync(file)) return "";
-  return fs.readFileSync(file, "utf8").replace(/===== СТРАНИЦА (\d+) =====/g, (m, n) => (n === "1" ? "[обложка]" : `[стр. ${n - 1}]`));
+  return fs.readFileSync(file, "utf8").replace(/===== СТРАНИЦА (\d+) =====/g, (m, n) => (pages === "pdf" ? `[стр. ${n}]` : n === "1" ? "[обложка]" : `[стр. ${n - 1}]`));
 }
 
 const games = [
@@ -28,10 +28,12 @@ const games = [
     bookNote: "основной источник; часть страниц со схемами подсчёта распознана с ошибками — там сверяйся со шпаргалкой" },
   { js: "games/flip7v.js", book: path.join(root, "sources", "flip7v-rules-en.txt"), title: "Flip 7: With A Vengeance",
     bookNote: "на английском, основной источник; отвечай по-русски и называй карты так, как в шпаргалке. Числа «x12 x8 x3…» на стр. 2–3 распознаны вперемешку — состав колоды бери из шпаргалки. Последняя страница — задняя обложка без номера" },
+  { js: "games/faraway.js", book: path.join(root, "sources", "faraway-rules-ru.txt"), title: "Дальние дали (Faraway)", pages: "pdf",
+    bookNote: "перевод на русский, основной источник; номера страниц — страницы PDF-файла. Значки в книге нарисованы, поэтому часть текста неполная — виды заданий и святилища сверяй со шпаргалкой. Правило ничьей в переводе неточное: верно то, что в шпаргалке (меньше сумма номеров 8 карт Регионов)" },
 ];
 const files = [["index.js", fs.readFileSync(path.join(root, "functions", "voice", "index.js"))]];
 for (const g of games) {
-  const sheet = cheatSheet(g.js), bookText = rulebook(g.book);
+  const sheet = cheatSheet(g.js), bookText = rulebook(g.book, g.pages);
   if (!bookText) console.warn(`! нет книги правил для ${g.title}: ${g.book} — в функцию попадёт только шпаргалка`);
   const text = `ИГРА: ${g.title}\n\n` +
     (bookText ? `КНИГА ПРАВИЛ (${g.bookNote})\n${bookText}\n\n` : "") +

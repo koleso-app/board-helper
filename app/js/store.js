@@ -33,7 +33,10 @@
     for (const p of arr(s.players)) {
       if (!isObj(p) || typeof p.id !== "string" || !ID.test(p.id) || seen.has(p.id) || !str(p.name)) continue;
       seen.add(p.id);
-      players.push({ id: p.id, name: str(p.name), color: COLOR.test(p.color) ? p.color : BH.COLORS[players.length % BH.COLORS.length], created: time(p.created) || Date.now(), hidden: !!p.hidden });
+      const rec = { id: p.id, name: str(p.name), color: COLOR.test(p.color) ? p.color : BH.COLORS[players.length % BH.COLORS.length], created: time(p.created) || Date.now(), hidden: !!p.hidden };
+      // "this is me": the owner of the app, shown on the home screen; only one player can be it
+      if (p.me === true && !players.some(x => x.me)) rec.me = true;
+      players.push(rec);
     }
     const places = arr(s.places).filter(p => isObj(p) && typeof p.id === "string" && ID.test(p.id) && str(p.name)).map(p => ({ id: p.id, name: str(p.name) }));
     const st = isObj(s.settings) ? s.settings : {};
@@ -138,6 +141,9 @@
 
   /* ---------- lookups ---------- */
   BH.player = id => BH.state.players.find(p => p.id === id) || null;
+  BH.me = () => BH.state.players.find(p => p.me) || null;
+  // marks one player as "me" (or nobody, with a falsy id); the flag exists only on that player
+  BH.setMe = id => { for (const p of BH.state.players) { if (p.id === id) p.me = true; else delete p.me; } };
   BH.place = id => BH.state.places.find(p => p.id === id) || null;
   BH.session = id => BH.state.sessions.find(s => s.id === id) || null;
 

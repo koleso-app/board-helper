@@ -95,6 +95,12 @@ t("search by the rulebook's words", () => {
 });
 t("every rule from the book has a page, except our own tie note", () => { for (const r of g.rules) if (r.id !== "tie") assert.ok(r.page > 0, r.id); });
 t("normalize keeps a default place", () => assert.strictEqual(BH._normalize({}).places[0].name, "Дома"));
+t("only one player can be 'me', and the flag is absent on the others", () => {
+  const n = BH._normalize({ players: [{ id: "a1", name: "Аня", me: true }, { id: "b2", name: "Боря", me: true }, { id: "c3", name: "Вера", me: false }] });
+  assert.strictEqual(JSON.stringify(n.players.map(p => !!p.me)), "[true,false,false]");
+  assert.ok(!("me" in n.players[1]) && !("me" in n.players[2]), "no me:false keys (keeps the data stable for the sync)");
+  assert.strictEqual(JSON.stringify(BH._normalize(JSON.parse(JSON.stringify(n))).players), JSON.stringify(n.players));
+});
 t("reading answers aloud is on by default and can be turned off", () => {
   assert.strictEqual(BH._normalize({}).settings.speakAnswers, true);
   assert.strictEqual(BH._normalize({ settings: { speakAnswers: false } }).settings.speakAnswers, false);

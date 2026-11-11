@@ -55,8 +55,9 @@
     // pictures from the rulebook, kept in the owner's private repo (see js/assets.js)
     images: {
       cover: "cover-square",
-      steps: { deck: ["numbers", "specials"], space: ["line"], challenge: ["solo"] },
-      rules: { deck: ["numbers", "specials"], example: ["line"], freeze: ["freeze@card"], flip3: ["flip3@card"], second: ["second@card"], mods: ["modifiers"], target: ["actions"], solo: ["solo"] },
+      // composed from the rulebook rendered large, with Russian labels (scripts/assets/flip7-compose.mjs)
+      steps: { deck: ["numbers", "specials"], space: ["line"] },
+      rules: { deck: ["numbers", "specials"], example: ["line"], freeze: ["freeze@card"], flip3: ["flip3@card"], second: ["second@card"], mods: ["modifiers"], target: ["actions"], score: ["score"] },
     },
     expansions: [],
     source: "Книга правил Flip 7, перевод Serco, версия 3.1",

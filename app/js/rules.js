@@ -33,7 +33,8 @@
   R.panel = (g, q, opts) => {
     opts = opts || {};
     return `<div class="stack">
-      <div class="search">${BH.ICON.search}<input class="input" type="search" id="rules-q" value="${esc(q || "")}" placeholder="Спросите: «${esc(g.searchExample || "как считать очки?")}»" aria-label="Поиск по правилам" autocomplete="off"></div>
+      <div class="search">${BH.ICON.search}<input class="input" type="search" id="rules-q" value="${esc(q || "")}" placeholder="Найти в правилах" aria-label="Поиск по правилам" autocomplete="off"></div>
+      <p class="tiny muted search-ex">Например: «${esc(g.searchExample || "как считать очки?")}»</p>
       <div id="rules-out">${q ? R.results(g, q) : R.full(g, opts)}</div>
     </div>`;
   };

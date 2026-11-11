@@ -538,7 +538,7 @@
     const place = BH.place(draft.placeId);
     const placeSec = step2("place", "Место", place ? esc(place.name) : "Не указано", `<div class="chips">${places.map(p => `<button class="chip" data-act="pick-place" data-id="${p.id}" aria-pressed="${p.id === draft.placeId}">${esc(p.name)}</button>`).join("")}
         <button class="chip" data-act="pick-place" data-id="" aria-pressed="${!draft.placeId}">Не указывать</button></div>
-      <form class="row" data-form="add-place" style="margin-top:10px"><input class="input" name="name" placeholder="Новое место: у Саши, в клубе…" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>`, true);
+      <form class="row" data-form="add-place" style="margin-top:10px"><input class="input" name="name" placeholder="Новое место" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>`, true);
 
     // players: me first, "as last time" in one tap, the regulars on top
     let playersBody = "";
@@ -580,7 +580,7 @@
       resultSec = step2("result", "Итог", draft.winners.length ? "Победа: " + esc(draft.winners.map(id => (BH.player(id) || { name: "?" }).name).join(", ")) : scored ? "Очки вписаны" : "Очки и победитель — по желанию",
         `<p class="small muted">Очки можно не вписывать. Победитель выберется по очкам, или отметьте его сами.</p>${g.scoring && g.scoring.tieHint ? `<p class="note info small">${esc(g.scoring.tieHint)}</p>` : ""}
         ${draft.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="seat" style="grid-template-columns:auto minmax(0,1fr) auto">${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
-          <input class="input score-in" type="number" inputmode="numeric" data-act="draft-final" data-p="${id}" value="${draft.final[id] ?? ""}" placeholder="очки" aria-label="Очки: ${esc(p.name)}"></div>`; }).join("")}
+          <input class="input score-in ph-word" type="number" inputmode="numeric" data-act="draft-final" data-p="${id}" value="${draft.final[id] ?? ""}" placeholder="очки" aria-label="Очки: ${esc(p.name)}"></div>`; }).join("")}
         <div class="label" style="margin:12px 0 6px">Победитель</div>
         <div class="chips">${draft.players.map(id => { const p = BH.player(id) || { name: "?" }; return `<button class="chip" data-act="draft-winner" data-id="${id}" aria-pressed="${draft.winners.includes(id)}">${esc(p.name)}</button>`; }).join("")}</div>`, draft.winners.length > 0 || scored > 0);
     }
@@ -662,7 +662,7 @@
     }
     // sized again once the fonts are in: the text may take other room with them
     if (sub === "setup") return { html: viewSetup(s, g), after: () => { fitSetup(); if (document.fonts) document.fonts.ready.then(() => { if (BH.$(".setup-card")) fitSetup(); }); } };
-    if (sub === "first") return { html: viewFirst(s, g) };
+    if (sub === "first") return { html: viewFirst(s, g), after: () => { fitWheel(); if (document.fonts) document.fonts.ready.then(() => { if (BH.$(".wheel")) fitWheel(); }); } };
     if (sub === "play") return { html: viewPlay(s, g), after: () => BH.rulesUI.bind(main, g, { compact: true }) };
     if (sub === "rules") return { html: viewSessionRules(s, g), after: () => BH.rulesUI.bind(main, g) };
     if (sub === "done") return { html: viewDone(s, g) };
@@ -737,9 +737,19 @@
     art.style.height = Math.max(90, Math.min(Math.round(art.clientWidth * 0.75), 380, room())) + "px";
     window.scrollTo(0, y);
   }
+  // the wheel takes the room left above its buttons (the manual choice below may stay out of view)
+  function fitWheel() {
+    const wh = BH.$(".wheel"); if (!wh) return;
+    const man = BH.$(".wheel-manual"), y = window.scrollY;
+    wh.style.width = "120px";
+    const rest = document.body.getBoundingClientRect().height - (man ? man.getBoundingClientRect().height + 16 : 0);
+    const max = Math.min(window.innerWidth * 0.84, 380);
+    wh.style.width = Math.round(Math.max(140, Math.min(max, 120 + window.innerHeight - rest - 8))) + "px";
+    window.scrollTo(0, y);
+  }
   // only a new width re-fits: a phone's address bar showing or hiding changes the height while scrolling
   let fitW = window.innerWidth;
-  window.addEventListener("resize", () => { if (window.innerWidth === fitW) return; fitW = window.innerWidth; if (BH.$(".setup-card")) fitSetup(); });
+  window.addEventListener("resize", () => { if (window.innerWidth === fitW) return; fitW = window.innerWidth; if (BH.$(".setup-card")) fitSetup(); if (BH.$(".wheel")) fitWheel(); });
   // a swipe on the step: to the left — the next step, to the right — the one before (nothing is marked done)
   let swipe = null;
   document.addEventListener("touchstart", e => {
@@ -774,14 +784,14 @@
       <section class="panel wheel-box">
         ${BH.wheel.html(pl)}
         <div class="wheel-result" id="wheel-result" aria-live="polite">${chosen ? esc(chosen.name) : ""}</div>
-        <div class="actions" style="justify-content:center">
-          <button class="btn ${chosen ? "" : "primary"} big" data-act="spin">${I.wheel}${chosen ? "Крутить ещё раз" : "Крутить"}</button>
-          ${chosen ? `<button class="btn primary big" data-act="start-play">${s.status === "playing" ? "Готово" : "Начать игру"}</button>` : ""}
-        </div>
       </section>
-      <details class="panel"><summary class="small" style="cursor:pointer;font-weight:600">Выбрать вручную</summary>
+      <details class="panel wheel-manual"><summary class="small" style="cursor:pointer;font-weight:600">Выбрать вручную</summary>
         <div class="chips" style="margin-top:12px">${pl.map(p => `<button class="chip" data-act="set-first" data-id="${p.id}" aria-pressed="${s.first === p.id}"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</button>`).join("")}</div>
       </details>
+      <div class="game-bar wheel-bar">
+        <button class="btn ${chosen ? "" : "primary"} big" data-act="spin">${I.wheel}${chosen ? "Крутить ещё раз" : "Крутить"}</button>
+        ${chosen ? `<button class="btn primary big" data-act="start-play">${s.status === "playing" ? "Готово" : "Начать игру"}</button>` : ""}
+      </div>
     </div>`;
   }
 
@@ -1690,18 +1700,21 @@
     const results = s.players.map(id => entryResult(g, s, sheet.entries[id]));
     const warns = g.calc && g.calc.roundWarnings ? g.calc.roundWarnings(results, s.players.map(id => sheet.entries[id].sel), ctx) : [];
     const leader = BH.player(BH.leaderAt(s, idx));
+    // the player after the open one (the first when none is open): the left button of the foot
+    const nextUp = g.calc ? (sheet.open ? s.players[s.players.indexOf(sheet.open) + 1] : s.players[0]) : null;
     const body = s.players.map((id, i) => {
       const p = BH.player(id) || { name: "?", color: "#888" }, e = sheet.entries[id], res = results[i];
       const open = sheet.open === id && g.calc;
       const bust = e.sel.flags && e.sel.flags.bust;
       let picker = "";
       if (open) {
-        picker = `<div class="picker" ${bust ? 'style="opacity:.45"' : ""}>${g.calc.groups.map(grp => {
+        picker = `<div class="picker">${g.calc.groups.map(grp => {
           const mine = e.sel.picks[grp.id] || [];
           const uniq = grp.uniqueAcross && grp.uniqueAcross(ctx);
           const taken = uniq ? new Set(s.players.filter(o => o !== id).flatMap(o => (sheet.entries[o].sel.picks[grp.id] || []))) : new Set();
           const lim = BH.pickLimit(g, e.sel.picks, grp);
-          return `<div class="grp"><span class="label">${esc(grp.label)}${grp.max ? ` <span class="badge${lim.count >= lim.max ? " accent" : ""}">${lim.count} из ${lim.max}</span>` : ""}</span><div class="cards">${grp.items.map(v => {
+          const grid = grp.items.every(v => String(grp.show ? grp.show(v) : v).length <= 3);
+          return `<div class="grp"><span class="label">${esc(grp.label)}${grp.max ? ` <span class="badge${lim.count >= lim.max ? " accent" : ""}">${lim.count} из ${lim.max}</span>` : ""}</span><div class="cards${grid ? " grid" : ""}">${grp.items.map(v => {
             const on = mine.includes(v);
             const dis = !on && ((lim.max && lim.count >= lim.max) || taken.has(v));
             return `<button type="button" class="card-t ${grp.style === "mod" ? "mod" : ""}" data-act="pick" data-p="${id}" data-g="${grp.id}" data-v="${esc(JSON.stringify(v))}" aria-pressed="${on}" ${dis ? "disabled" : ""} title="${taken.has(v) ? "Эта карта уже у другого игрока" : ""}">${esc(grp.show ? grp.show(v) : v)}</button>`;
@@ -1716,20 +1729,19 @@
         </div>
         ${g.calc ? `<div class="spread"><div class="flagrow">${flags}${open ? "" : `<button type="button" class="flag flag-open" data-act="open-entry" data-p="${id}">${IC.cards}Карты</button>`}</div><span class="notes" data-notes="${id}">${esc((res.notes || []).join("; "))}</span></div>` : ""}
         ${picker}
-        ${open ? `<div class="row" style="justify-content:flex-end">${i < s.players.length - 1 ? `<button type="button" class="btn sm" data-act="open-entry" data-p="${s.players[i + 1]}">Дальше: ${esc((BH.player(s.players[i + 1]) || {}).name || "")}</button>` : `<button type="button" class="btn sm" data-act="open-entry" data-p="">Свернуть</button>`}</div>` : ""}
       </div>`;
     }).join("");
     return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
       <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">${sheet.index !== null ? "Исправить раунд " + (idx + 1) : "Раунд " + (idx + 1)}</h2>${leader ? `<span class="mi accent">${BH.avatar(leader, "xs")}<span>${esc((g.rounds.leaderLabel || "Начинал") + ": " + leader.name)}</span></span>` : ""}</div>
-        <button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div>
+        <div class="row" style="gap:4px">${sheet.index !== null ? `<button class="icon-btn danger-ic" data-act="delete-round" aria-label="Удалить раунд" title="Удалить раунд">${I.trash}</button>` : ""}<button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div></div>
       <div class="sheet-body">
-        ${g.calc ? `<p class="small muted">Отметьте карты каждого игрока, и приложение посчитает очки. Можно и просто вписать число справа.</p>` : `<p class="small muted">Впишите очки каждого игрока за раунд.</p>`}
+        ${g.calc ? `<p class="small muted">Отметьте карты — очки посчитаются. Или впишите число справа.</p>` : `<p class="small muted">Впишите очки каждого игрока за раунд.</p>`}
         ${body}
         ${warns.map(w => `<div class="note">${esc(w)}</div>`).join("")}
       </div>
       <div class="sheet-foot">
-        ${sheet.index !== null ? `<button class="btn danger big" data-act="delete-round" aria-label="Удалить раунд" title="Удалить раунд">${I.trash}</button>` : ""}
-        <button class="btn primary big" data-act="save-round">${I.check}Сохранить раунд</button>
+        ${nextUp ? `<button class="btn big sheet-next" data-act="open-entry" data-p="${nextUp}" title="Дальше: ${esc((BH.player(nextUp) || {}).name || "")}"><span class="ell">Дальше: ${esc((BH.player(nextUp) || {}).name || "")}</span>${IC.chev}</button>` : ""}
+        <button class="btn primary big" data-act="save-round">${I.check}Сохранить</button>
       </div>
     </div></div>`;
   }
@@ -1942,7 +1954,7 @@
       case "ask-stop": if (rec) rec.finish(); break;
       case "ask-again": BH.voice.stopAudio(); startListening(); break;
       case "ask-replay": if (ask && ask.result && ask.result.audio) BH.voice.play(ask.result.audio).catch(() => {}); break;
-      case "open-entry": sheet.open = el.dataset.p || null; renderOverlay(); { const n = overlayRoot.querySelector(`[data-entry="${el.dataset.p}"]`); if (n) n.scrollIntoView({ block: "nearest" }); } break;
+      case "open-entry": sheet.open = el.dataset.p || null; renderOverlay(); { const n = overlayRoot.querySelector(`[data-entry="${el.dataset.p}"]`); if (n) n.scrollIntoView({ block: "start" }); } break;
       case "pick": {
         const en = sheet.entries[el.dataset.p], gid = el.dataset.g, v = JSON.parse(el.dataset.v);
         const arr = en.sel.picks[gid] = en.sel.picks[gid] || [];
@@ -2250,7 +2262,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.16.1";
+  BH.version = "0.16.2";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

@@ -629,3 +629,22 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .end-how summary{cursor:pointer;font-weight:600}
 .end-how ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .hist.pad td:first-child,.hist.pad th:first-child{white-space:normal;min-width:96px}
+
+/* the wheel: its buttons below, the wheel takes the room left (fitWheel) */
+.shell:has(.wheel-box){padding-bottom:4px}
+.wheel-bar>.btn:not(.primary){flex:none}
+.wheel-box{padding-top:12px;padding-bottom:10px;gap:10px}
+.stack:has(>.wheel-box){gap:10px}
+.stack:has(>.wheel-box) .page-head .sub{font-size:14px;line-height:1.4}
+/* the round sheet: «Дальше» on the left, «Сохранить» on the right; short cards in a grid of seven */
+.sheet-foot .sheet-next{flex:1;min-width:0;white-space:nowrap}
+.sheet-foot .sheet-next svg{flex:none}
+.sheet-foot .ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cards.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.cards.grid .card-t{min-width:0;padding:0;font-size:16px}
+.card-t{height:46px}
+.entry{scroll-margin-top:8px}
+.icon-btn.danger-ic{color:var(--bad)}
+/* a word as the placeholder of a score field is set in the plain font, the digits stay large */
+.score-in.ph-word::placeholder{font-family:var(--f-ui);font-weight:600;font-size:15px;color:var(--muted);opacity:1}
+.search-ex{margin:-8px 2px 0}

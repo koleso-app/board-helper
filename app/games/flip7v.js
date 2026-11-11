@@ -61,11 +61,12 @@
     cover,
     images: {
       cover: "cover-square",
-      steps: { deck: ["numbers", "modifiers", "actions"], space: ["line"], challenge: ["solo"] },
+      // composed from the rulebook rendered large, with Russian labels (scripts/assets/flip7-compose.mjs)
+      steps: { deck: ["numbers", "modifiers", "actions"], space: ["line"] },
       rules: {
         deck: ["numbers"], specials: ["specials"], zero: ["zero@card"], unlucky7: ["unlucky7@card"], lucky13: ["lucky13@card"],
         actions: ["actions"], "just-one-more": ["justonemore@card"], swap: ["swap@card"], steal: ["steal@card"], discard: ["discard@card"], flip4: ["flip4@card"],
-        mods: ["modifiers"], score: ["example"], flip7: ["line"], solo: ["solo"],
+        mods: ["modifiers"], score: ["example"], flip7: ["line"],
       },
     },
     expansions: [],

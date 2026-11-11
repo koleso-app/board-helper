@@ -8,13 +8,14 @@
    - элемент выходит за край экрана;
    - элемент вылезает из своей карточки (панель, строка, кнопка, чип…);
    - текст обрезан многоточием или по числу строк;
-   - у текста скрыт хвост. */
+   - у текста скрыт хвост;
+   - подсказка в пустом поле (placeholder) шире самого поля. */
 (() => {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const BOX = ".panel,.entry,.sheet,.sess-hero,.pl,.kpi,.item,.grow,.gcard,.pc-game,.setup-card,.stat-tile,.pick-row,.step,.note,.btn,.chip,.badge,.mi,.tile,.flag,.card-t,.seat,.pc-line";
   const SCROLLERS = ".hscroll,.scroll-x,.pick-list";
   // texts that may be cut on purpose: what a person typed and made very long is shortened in a row
-  const allowCut = el => el.closest(".mi") || el.closest(".back");
+  const allowCut = el => el.closest(".mi") || el.closest(".back") || el.closest(".sheet-next");
 
   function scan(where) {
     const vw = document.documentElement.clientWidth, out = [];
@@ -40,10 +41,17 @@
           if (r.right > b.right + 1.5 || r.left < b.left - 1.5) why = "вылезает из " + (typeof box.className === "string" ? "." + box.className.trim().split(/\s+/)[0] : box.tagName);
         }
       }
+      if (!why && el.matches("input:not([type=checkbox]):not([type=radio]),textarea") && el.placeholder && !el.value) {
+        const ps = getComputedStyle(el, "::placeholder"), room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (el.type === "search" ? 20 : 0);
+        ctx.font = `${ps.fontStyle} ${ps.fontWeight} ${ps.fontSize} ${ps.fontFamily}`;
+        if (ctx.measureText(el.placeholder).width > room - (el.type === "number" ? 6 : 0)) why = "подсказка в поле не помещается";
+        if (why) { out.push(`${where} — ${why}: ${name} «${el.placeholder}»`); continue; }
+      }
       if (why) out.push(`${where} — ${why}: ${name} «${txt}»`);
     }
     return out;
   }
+  const ctx = document.createElement("canvas").getContext("2d");
   async function visit(hash) { location.hash = hash; await wait(450); window.scrollTo(0, 0); }
   async function withTabs(where) {
     const keys = [...document.querySelectorAll('[data-act="pc-tab"],[data-act="gc-tab"],[data-act="pl-tab"]')].map(b => [b.dataset.act, b.dataset.tab]);
@@ -74,6 +82,13 @@
       await visit("#/s/" + s.id + "/setup");
       const n = document.querySelectorAll(".setup-dots button").length;
       for (let k = 0; k < n; k++) { document.querySelector(`.setup-dots [data-i="${k}"]`).click(); await wait(300); out.push(...scan(`#/s/${s.id}/setup [шаг ${k + 1}]`)); }
+    }
+    // the wheel: the buttons are seen without scrolling
+    for (const s of S.sessions.filter(x => x.status === "first")) {
+      await visit("#/s/" + s.id + "/first"); await wait(150);
+      out.push(...scan(`#/s/${s.id}/first`));
+      const b = document.querySelector('[data-act="spin"]');
+      if (b && b.getBoundingClientRect().bottom > window.innerHeight + 1) out.push(`#/s/${s.id}/first — кнопка «Крутить» ниже края экрана`);
     }
     // running games: the round sheet with the cards of each player, editing a round, the finish dialog, a voice answer
     const V = BH.voice, keep = { ready: V.ready, canListen: V.canListen, speaks: V.speaks, ask: V.ask };

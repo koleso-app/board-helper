@@ -214,7 +214,7 @@
       if (seg[0] === "players" && !seg[1]) return backLink(b, "Игроки");
       if (seg[0] === "places" && !seg[1]) return backLink(b, "Места");
       if (seg[0] === "games" && seg[1] && !(route().a === "games" && route().b === seg[1])) { const q = BH.game(seg[1]); if (q) return backLink(b, q.name); }
-      if (seg[0] === "players" && seg[1] && route().a === "players" && route().b && seg[1] !== route().b) { const q = BH.player(seg[1]); if (q) return backLink(b, q.name); }
+      if (seg[0] === "players" && seg[1] && !(route().a === "players" && route().b === seg[1])) { const q = BH.player(seg[1]); if (q) return backLink(b, q.name); }
     }
     return backLink(href, label);
   }
@@ -818,13 +818,13 @@
     if (!(gcard.period in opts)) gcard.period = "all";
     const st = BH.gameStats(g.id, fin.filter(x => inPeriod(x, gcard.period)));
     const live = S().sessions.filter(x => x.gameId === g.id && x.status !== "finished");
-    const tabs = [["stats", "Статистика"], ["sessions", "Партии" + (fin.length ? " · " + fin.length : "")], ["rules", "Правила"]];
+    const tabs = [["stats", "Статистика"], ["sessions", "Партии" + (st.played ? " · " + st.played : "")], ["rules", "Правила"]];
     const period = `<label class="small muted pc-sort">Период<select class="input" data-act="gc-period" aria-label="Период">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === gcard.period ? "selected" : ""}>${v}</option>`).join("")}</select></label>`;
     let body;
     if (gcard.tab === "rules") body = BH.rulesUI.panel(g, "");
     else if (gcard.tab === "sessions") body = `${live.length ? `<section class="panel"><h2 style="margin-bottom:4px">Идут сейчас</h2><div class="list">${live.map(sessionLine).join("")}</div></section>` : ""}
       ${fin.length ? period : ""}
-      ${st.sessions.length ? `<section class="panel"><div class="list">${st.sessions.map(sessionLine).join("")}</div></section>` : `<p class="muted small">${fin.length ? "За этот период партий нет." : "В эту игру ещё не играли."}</p>`}`;
+      ${st.sessions.length ? `<section class="panel"><div class="list">${st.sessions.map(sessionLine).join("")}</div></section>` : `<p class="muted small">${fin.length ? "За этот период партий нет." : live.length ? "Сыгранных партий пока нет." : "В эту игру ещё не играли."}</p>`}`;
     else body = fin.length ? period + gameStatsHTML(g, st) : `<p class="muted small">В эту игру ещё не играли. Статистика появится после первой партии.</p>`;
     return `<div class="stack">
       <div>${backSmart("#/games", "Игры")}
@@ -846,7 +846,7 @@
         <div class="t"><b>${esc(q.name)}</b><span>${parties(e.n)} · ${e.wins} ${BH.plural(e.wins, "победа", "победы", "побед")}</span>
           <div class="pr-bar" role="img" aria-label="${pct}% побед"><i style="width:${pct}%;background:${esc(q.color)}"></i></div></div>
         <span class="pr-pct">${pct}%</span>
-        ${withScores ? `<span class="pl-best" title="Лучший счёт · средний"><b>${e.best}</b><small>ср. ${e.avg}</small></span>` : ""}
+        ${withScores ? `<span class="pl-best" title="Лучший счёт · средний"><b>${e.best !== null ? e.best : "—"}</b><small>${e.avg !== null ? "ср. " + e.avg : "без очков"}</small></span>` : ""}
       </a>`;
     }).join("");
   }
@@ -1012,7 +1012,7 @@
       <div class="pc-games">${list.map((e, i) => { const g = BH.game(e.gameId); return `<a class="pc-game" href="${g ? "#/games/" + esc(g.id) : "#/games"}">
         ${coverOf(g)}
         <span class="t"><span class="pc-g1"><i class="rank">${i + 1}</i><b>${esc(nameOf(e))}</b><span class="badge">${e.n} ${BH.plural(e.n, "партия", "партии", "партий")}</span></span>
-          <span class="pc-g2"><span>${IC.trophy}${e.wins} · ${Math.round(100 * e.rate)}%</span>${e.time ? `<span>${BH.fmtDuration(e.time)}</span>` : ""}<span class="pc-avg">ср. ${e.avg} · лучший ${e.best}</span></span></span>
+          <span class="pc-g2"><span>${IC.trophy}${e.wins} · ${Math.round(100 * e.rate)}%</span>${e.time ? `<span>${BH.fmtDuration(e.time)}</span>` : ""}${e.best !== null ? `<span class="pc-avg">ср. ${e.avg} · лучший ${e.best}</span>` : ""}</span></span>
       </a>`; }).join("")}</div>`;
   }
   function viewPlaces() {
@@ -1038,7 +1038,7 @@
     const live = S().sessions.filter(x => x.placeId === pl.id && x.status !== "finished");
     const used = S().sessions.some(x => x.placeId === pl.id);
     const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
-    const tabs = [["stats", "Статистика"], ["games", "Игры"], ["sessions", "Партии" + (fin.length ? " · " + fin.length : "")]];
+    const tabs = [["stats", "Статистика"], ["games", "Игры"], ["sessions", "Партии" + (st.played ? " · " + st.played : "")]];
     const period = fin.length ? `<label class="small muted pc-sort">Период<select class="input" data-act="pl-period" aria-label="Период">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === plcard.period ? "selected" : ""}>${v}</option>`).join("")}</select></label>` : "";
     const none = `<p class="muted small">${fin.length ? "За этот период партий нет." : "Здесь ещё не играли."}</p>`;
     let body;
@@ -1092,7 +1092,7 @@
     const ppl = S().players.map(p => {
       const mine = fin.filter(s => s.players.includes(p.id));
       const wins = mine.filter(s => s.winners.includes(p.id)).length;
-      const g0 = statsGame ? BH.playerStats(p.id, fin).games[0] : null, best = g0 ? g0.best : 0;   // one game: lowest wins where it should
+      const g0 = statsGame ? BH.playerStats(p.id, fin).games[0] : null, best = g0 && g0.best !== null ? g0.best : "—";   // one game: lowest wins where it should
       return { p, played: mine.length, wins, rate: mine.length ? wins / mine.length : 0, best };
     }).filter(x => x.played).sort((a, b) => b.wins - a.wins || b.rate - a.rate || b.played - a.played);
     const byGame = BH.games.map(g => ({ g, n: fin.filter(s => s.gameId === g.id).length, last: fin.filter(s => s.gameId === g.id).reduce((m, s) => Math.max(m, s.finishedAt || 0), 0) })).filter(x => x.n);
@@ -1921,7 +1921,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.13.0";
+  BH.version = "0.13.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

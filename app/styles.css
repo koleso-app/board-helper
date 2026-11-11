@@ -438,11 +438,11 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .pc-bar-t b{color:var(--ink);font-family:var(--f-display);font-size:16px}
 .pc-bar-t span:first-child b{color:var(--accent)}
 .pc-tabs{display:flex;width:100%}
-.pc-tabs button{flex:1;min-height:40px;font-size:14px}
+.pc-tabs button{flex:1;min-height:40px;font-size:14px;white-space:nowrap;padding-left:8px;padding-right:8px}
 .pc-line{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:15px}
 .pc-line:first-child{border-top:none;padding-top:0}
 .pc-line span{color:var(--muted)}
-.pc-line b{text-align:right;font-weight:600}
+.pc-line b{text-align:right;font-weight:600;min-width:0;overflow-wrap:anywhere}
 .pc-sort{display:flex;align-items:center;gap:10px}
 .pc-sort select{width:auto}
 .pc-games{display:flex;flex-direction:column;gap:10px}

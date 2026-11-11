@@ -177,6 +177,20 @@ t("game stats: players, records, average win, rounds, time, table size", () => {
   assert.strictEqual(st.favPlace.id, "home"); assert.strictEqual(st.sessions[0].id, "s3");
   assert.strictEqual(BH.gameStats("nope", ss).played, 0);
 });
+t("a game recorded without scores does not count as zero points; a tie counts once", () => {
+  const day = d => Date.UTC(2026, 9, d, 18);
+  const ss = [
+    { id: "s1", gameId: "flip7", players: ["a", "b"], winners: ["a"], status: "finished", rounds: [], final: { a: 230, b: 100 }, created: day(1) },
+    { id: "s2", gameId: "flip7", players: ["a", "b"], winners: ["a"], status: "finished", rounds: [], created: day(2) },
+    { id: "s3", gameId: "flip7", players: ["a", "b"], winners: ["a", "b"], status: "finished", rounds: [], final: { a: 200, b: 200 }, created: day(3) },
+  ];
+  const st = BH.gameStats("flip7", ss);
+  assert.strictEqual(st.avgWin, 215, "(230 + 200) / 2 — the unscored game and the tie's second winner do not count");
+  const a = st.players.find(x => x.id === "a");
+  assert.strictEqual(a.n, 3); assert.strictEqual(a.avg, 215); assert.strictEqual(a.best, 230);
+  assert.strictEqual(BH.playerStats("a", ss).games[0].avg, 215);
+  assert.strictEqual(BH.gameStats("flip7", [ss[1]]).bestScore, null);
+});
 t("place stats: games by plays, players by wins, time, only that place", () => {
   const day = d => Date.UTC(2026, 9, d, 18);
   const mk = (id, d, gameId, place, players, winners, min) => ({ id, gameId, placeId: place, players, winners, status: "finished", rounds: [], created: day(d), startedAt: day(d), finishedAt: day(d) + (min || 0) * 60000 });

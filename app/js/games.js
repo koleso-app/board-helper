@@ -58,6 +58,8 @@
      sessions: the games to count (already narrowed to a period by the caller). */
   // the day a game was played: when it was started (as on the calendar and in the lists)
   BH.sessionDate = s => s.created || s.finishedAt || 0;
+  // a player's score counts only where it was kept: rounds were played, or it was written in afterwards
+  BH.hasScore = (s, id) => s.rounds.length > 0 || !!(s.final && s.final[id] !== undefined);
   BH.playerStats = (pid, sessions) => {
     const mine = (sessions || []).filter(s => s.status === "finished" && s.players.includes(pid)).sort((a, b) => BH.sessionDate(a) - BH.sessionDate(b));
     const isWin = s => s.winners.includes(pid);
@@ -66,22 +68,25 @@
     let longest = 0, run = 0;
     for (const s of mine) {
       const g = BH.game(s.gameId), lower = !!(g && g.scoring && g.scoring.lowerWins);
-      const e = games.get(s.gameId) || { gameId: s.gameId, n: 0, wins: 0, time: 0, sum: 0, best: null, last: 0 };
-      const score = BH.totals(s)[pid];
-      e.n++; e.time += dur(s); e.sum += score; e.last = Math.max(e.last, BH.sessionDate(s));
+      const e = games.get(s.gameId) || { gameId: s.gameId, n: 0, wins: 0, time: 0, sum: 0, scored: 0, best: null, last: 0 };
+      e.n++; e.time += dur(s); e.last = Math.max(e.last, BH.sessionDate(s));
       if (isWin(s)) e.wins++;
-      if (e.best === null || (lower ? score < e.best : score > e.best)) e.best = score;
+      if (BH.hasScore(s, pid)) {
+        const score = BH.totals(s)[pid];
+        e.sum += score; e.scored++;
+        if (e.best === null || (lower ? score < e.best : score > e.best)) e.best = score;
+      }
       games.set(s.gameId, e);
       for (const o of s.players) if (o !== pid) {
         const x = opp.get(o) || { id: o, n: 0, myWins: 0, theirWins: 0 };
         x.n++; if (isWin(s)) x.myWins++; if (s.winners.includes(o)) x.theirWins++;
         opp.set(o, x);
       }
-      if (s.placeId) places.set(s.placeId, (places.get(s.placeId) || 0) + 1);
+      if (s.placeId && BH.place(s.placeId)) places.set(s.placeId, (places.get(s.placeId) || 0) + 1);
       run = isWin(s) ? run + 1 : 0; longest = Math.max(longest, run);
     }
     let current = 0; for (let i = mine.length - 1; i >= 0 && isWin(mine[i]); i--) current++;
-    const list = [...games.values()].map(e => Object.assign(e, { avg: e.n ? Math.round(e.sum / e.n) : 0, rate: e.n ? e.wins / e.n : 0 }));
+    const list = [...games.values()].map(e => Object.assign(e, { avg: e.scored ? Math.round(e.sum / e.scored) : null, rate: e.n ? e.wins / e.n : 0 }));
     // H-index: h games played at least h times each
     const counts = list.map(e => e.n).sort((a, b) => b - a);
     let h = 0; while (h < counts.length && counts[h] >= h + 1) h++;
@@ -109,13 +114,18 @@
       const t = BH.totals(s);
       seats += s.players.length;
       for (const id of s.players) {
-        const e = people.get(id) || { id, n: 0, wins: 0, sum: 0, best: null };
-        e.n++; e.sum += t[id]; if (s.winners.includes(id)) e.wins++;
-        if (e.best === null || better(t[id], e.best)) e.best = t[id];
+        const e = people.get(id) || { id, n: 0, wins: 0, sum: 0, scored: 0, best: null };
+        e.n++; if (s.winners.includes(id)) e.wins++;
+        if (BH.hasScore(s, id)) {
+          e.sum += t[id]; e.scored++;
+          if (e.best === null || better(t[id], e.best)) e.best = t[id];
+          if (!bestScore || better(t[id], bestScore.v)) bestScore = { id, v: t[id], sid: s.id, at: BH.sessionDate(s) };
+        }
         people.set(id, e);
-        if (!bestScore || better(t[id], bestScore.v)) bestScore = { id, v: t[id], sid: s.id, at: BH.sessionDate(s) };
       }
-      for (const id of s.winners) { winSum += t[id] || 0; winN++; }
+      // one number per game: the winners' score (a tie counts once)
+      const ws = s.winners.filter(id => BH.hasScore(s, id));
+      if (ws.length) { winSum += ws.reduce((a, id) => a + t[id], 0) / ws.length; winN++; }
       if (s.rounds.length) {
         withRounds++; rounds += s.rounds.length;
         s.rounds.forEach((rd, i) => s.players.forEach(id => {
@@ -123,10 +133,10 @@
           if (!bestRound || better(v, bestRound.v)) bestRound = { id, v, sid: s.id, round: i + 1 };
         }));
       }
-      if (s.placeId) places.set(s.placeId, (places.get(s.placeId) || 0) + 1);
+      if (s.placeId && BH.place(s.placeId)) places.set(s.placeId, (places.get(s.placeId) || 0) + 1);
     }
     const timed = mine.filter(dur), time = timed.reduce((a, s) => a + dur(s), 0);
-    const list = [...people.values()].map(e => Object.assign(e, { rate: e.n ? e.wins / e.n : 0, avg: e.n ? Math.round(e.sum / e.n) : 0 }))
+    const list = [...people.values()].map(e => Object.assign(e, { rate: e.n ? e.wins / e.n : 0, avg: e.scored ? Math.round(e.sum / e.scored) : null }))
       .sort((a, b) => b.wins - a.wins || b.rate - a.rate || b.n - a.n);
     const fav = [...places.entries()].sort((a, b) => b[1] - a[1])[0];
     return {

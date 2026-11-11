@@ -177,7 +177,7 @@
   };
 
   /* players sorted best first, with shared places for equal totals */
-  // a game with a tie-breaker (Faraway: the lowest sum of the card numbers) uses it for the first place only
+  // a game with a tie-breaker (Faraway: the lowest card number in the play area) uses it for the first place only
   // (the book decides the winner with it), and only when every player sharing that place has the value
   BH.standings = s => {
     const g = BH.game(s.gameId), t = BH.totals(s), high = !(g && g.scoring && g.scoring.lowerWins);
@@ -225,12 +225,12 @@
     (d.cards || []).slice(0, e.rows).forEach((v, i) => { if (bad(v)) out.push(`${e.rowLabel(i + 1)}: слава — целое число от 0 до ${e.max}`); });
     for (const x of e.extra || []) if (bad(d[x.id])) out.push(`${x.label}: слава — целое число от 0 до ${e.max}`);
     const t = intOrNull(d.tie);
-    const tmin = o && o.partial ? 1 : e.tie && e.tie.min;
-    if (e.tie && t !== null && (!Number.isInteger(t) || t < tmin || t > e.tie.max)) out.push(`${e.tie.label}: от ${tmin} до ${e.tie.max}`);
+    const tmin = o && o.partial ? 1 : e.tie && e.tie.min, tmax = e.tie && (o && o.partial && e.tie.partialMax ? e.tie.partialMax : e.tie.max);
+    if (e.tie && t !== null && (!Number.isInteger(t) || t < tmin || t > tmax)) out.push(`${e.tie.label}: от ${tmin} до ${tmax}`);
     return out;
   };
   BH.endFilled = (g, d) => { const e = g.endScore; if (!e || !d) return 0; return (d.cards || []).slice(0, e.rows).concat((e.extra || []).map(x => d[x.id])).filter(v => intOrNull(v) !== null).length; };
-  // who won: the most fame; equal fame — the lowest tie-breaker value (Faraway: the sum of the card numbers).
+  // who won: the most fame; equal fame — the lowest tie-breaker value (Faraway: the lowest card number).
   // tieOpen: the players still tied for lack of the value, so the app can ask for it
   BH.endWinners = (g, players, sheets) => {
     const tot = Object.fromEntries(players.map(id => [id, BH.endTotal(g, sheets[id])]));

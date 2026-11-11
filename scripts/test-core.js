@@ -345,48 +345,52 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const c = st.find(x => x.id === "center");
     assert.ok(c.title.includes("6"), "5 players reveal 6: " + c.title); assert.ok(c.text.includes("6"));
     const adv = BH.setupSteps(Object.assign({}, s, { opts: { advanced: true } })).find(x => x.id === "deal").text;
-    assert.ok(adv.includes("по 5") && adv.includes("оставляет 3") && adv.includes("обратно"));
+    assert.ok(adv.includes("по 5") && adv.includes("выбирает 3") && adv.includes("откладывает") && adv.includes("с колодой"));
   });
   t("faraway p.10–11: round 1 has no sanctuaries; round 8 takes no card; the leftover goes, players + 1 come", () => {
     const ph = r => F.rounds.phases(ctxN(4), r, 8).map(p => p.text).join(" ");
     assert.ok(ph(1).includes("В первом раунде Святилищ нет"));
-    assert.ok(ph(3).includes("1 карту Святилища") && ph(3).includes("за каждую улику"));
-    assert.ok(ph(3).includes("уберите из игры") && ph(3).includes("откройте 5 новых"), "4 players reveal 5");
+    assert.ok(ph(3).includes("1 карту Святилища") && ph(3).includes("за каждую подсказку") && ph(3).includes("игровой области"));
+    assert.ok(ph(3).includes("уберите из игры") && ph(3).includes("новый рынок — 5 карт"), "4 players reveal 5");
     assert.ok(ph(3).includes("наименьшего номера"), "phase 3 goes from the lowest card up");
     assert.ok(ph(8).includes("Новую карту Региона не берите") && !ph(8).includes("откройте"));
     assert.ok(ph(8).includes("добавляет одно") && ph(8).includes("под колоду"), "in round 8 a sanctuary may still be added");
     assert.ok(ph(3).includes("добавляет одно") && ph(3).includes("под колоду") && ph(3).includes("действует сразу"), "one sanctuary kept, it works at once, the rest under the deck");
     assert.ok(ph(1).includes("одновременно") && ph(1).includes("рубашкой вверх") && ph(1).includes("справа"), "phase 1: at once, face down, to the right");
-    assert.ok(ph(7).includes("так решают игроки"), "not revealing after round 7 is marked as the players' way");
     assert.strictEqual(F.rounds.phases(ctxN(4), 2, 8)[1].title, "Обнаружение Святилищ");
-    assert.ok(ph(7).includes("можно не открывать"), "nothing is taken in round 8, so nothing to reveal after round 7");
+    assert.strictEqual(F.rounds.phases(ctxN(4), 2, 8)[2].title, "Добор карт Регионов", "the official name of phase 3");
+    assert.ok(ph(7).includes("Новый рынок не открывайте") && !ph(7).includes("так решают игроки"), "the book (p. 11): no market for round 8");
   });
   t("faraway p.12: the fame is the sum of the 8 Region cards and the sanctuaries", () => {
     assert.strictEqual(BH.endTotal(F, sheet([3, 0, 12, 6, 0, 19, 4, 8], 7)), 59);
     assert.strictEqual(BH.endTotal(F, sheet(["", "", "", "", "", "", "", ""])), 0, "empty is zero");
   });
-  t("faraway: fame is a whole number from 0; the sum of 8 card numbers is 36…516", () => {
-    assert.strictEqual(BH.endProblems(F, sheet([0, 1, 2, 3, 4, 5, 6, 7], 0, 36)).length, 0);
+  t("faraway: fame is a whole number from 0; the lowest card number is 1…61 (68 in a game stopped early)", () => {
+    assert.strictEqual(BH.endProblems(F, sheet([0, 1, 2, 3, 4, 5, 6, 7], 0, 1)).length, 0);
     assert.strictEqual(BH.endProblems(F, sheet([-1, 0, 0, 0, 0, 0, 0, 0])).length, 1, "no negative fame");
     assert.strictEqual(BH.endProblems(F, sheet([1.5, 0, 0, 0, 0, 0, 0, 0])).length, 1, "whole numbers");
     assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], -2)).length, 1, "sanctuaries too");
-    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 35)).length, 1, "1+2+…+8 = 36 is the least");
-    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 517)).length, 1, "61+…+68 = 516 is the most");
-    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 516)).length, 0);
-    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 15), { partial: true }).length, 0, "a game stopped early has fewer cards");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 0)).length, 1, "cards are numbered from 1");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 61)).length, 0, "61 with 62…68 is the highest lowest card of 8");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 62)).length, 1, "8 different cards always hold one of 61 or lower");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 250)).length, 1, "a sum typed by habit is caught");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 66), { partial: true }).length, 0, "a game stopped early has fewer cards");
+    assert.strictEqual(BH.endProblems(F, sheet([0, 0, 0, 0, 0, 0, 0, 0], 0, 69), { partial: true }).length, 1, "there is no card 69");
   });
-  t("faraway p.12 + English rules: equal fame — the lowest sum of card numbers wins", () => {
+  t("faraway p.12 (the official Russian and the English rules): equal fame — the lowest card number in the play area wins", () => {
+    assert.ok(/наименьш/i.test(F.endScore.tie.label) && !/сумм/i.test(F.endScore.tie.label + F.scoring.tieHint + F.scoring.tieNote), "one card, not a sum");
+    assert.ok(!/сумм/i.test(F.rules.find(r => r.id === "tie").body), "the rule speaks of one card");
     const pl = ["a", "b", "c"];
     const one = BH.endWinners(F, pl, { a: sheet([10, 0, 0, 0, 0, 0, 0, 0]), b: sheet([5, 0, 0, 0, 0, 0, 0, 0]), c: sheet([1, 0, 0, 0, 0, 0, 0, 0]) });
     assert.deepStrictEqual([...one.winners], ["a"]); assert.strictEqual(one.tieOpen.length, 0);
     const tied = { a: sheet([10, 0, 0, 0, 0, 0, 0, 0]), b: sheet([4, 6, 0, 0, 0, 0, 0, 0]), c: sheet([1, 0, 0, 0, 0, 0, 0, 0]) };
     const open = BH.endWinners(F, pl, tied);
-    assert.deepStrictEqual([...open.tieOpen], ["a", "b"], "the tied players are asked for the sum");
-    tied.a.tie = "250"; tied.b.tie = "198";
+    assert.deepStrictEqual([...open.tieOpen], ["a", "b"], "the tied players are asked for their lowest card");
+    tied.a.tie = "12"; tied.b.tie = "3";
     const decided = BH.endWinners(F, pl, tied);
     assert.deepStrictEqual([...decided.winners], ["b"]); assert.ok(decided.byTie);
-    tied.a.tie = "198";
-    assert.deepStrictEqual([...BH.endWinners(F, pl, tied).winners], ["a", "b"], "still equal — a shared win");
+    tied.a.tie = "3";
+    assert.deepStrictEqual([...BH.endWinners(F, pl, tied).winners], ["a", "b"], "the same number typed twice (a typo) — a shared win, nothing is invented");
   });
   t("faraway: the score sheet survives saving and syncing (normalize keeps it, idempotent)", () => {
     const raw = { players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true, sessions: [{ id: "s1", gameId: "faraway", players: ["a", "b"], status: "finished", rounds: [], final: { a: 59, b: 40 },
@@ -418,17 +422,17 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
 }
 {
   const before = passed;
-  t("faraway p.12: places follow the tie-breaker — equal fame, lower sum of numbers is first", () => {
+  t("faraway p.12: places follow the tie-breaker — equal fame, the lower card is first", () => {
     const s = { gameId: "faraway", players: ["a", "b", "c", "d"], rounds: [], final: { a: 59, b: 59, c: 38, d: 38 },
-      finalDetail: { a: { cards: [], tie: 250 }, b: { cards: [], tie: 198 }, c: { cards: [], tie: null }, d: { cards: [], tie: null } } };
+      finalDetail: { a: { cards: [], tie: 12 }, b: { cards: [], tie: 3 }, c: { cards: [], tie: null }, d: { cards: [], tie: null } } };
     const st = BH.standings(s);
-    assert.deepStrictEqual(st.map(x => x.id + ":" + x.place).join(" "), "b:1 a:2 c:3 d:3", "b wins on the sum; c and d stay shared without one");
-    s.finalDetail.c.tie = 100; s.finalDetail.d.tie = 300;
-    assert.deepStrictEqual(BH.standings(s).filter(x => x.total === 38).map(x => x.place), [3, 3], "the sum decides the first place only");
-    const three = { gameId: "faraway", players: ["a", "b", "c"], rounds: [], final: { a: 50, b: 50, c: 50 }, finalDetail: { a: { cards: [], tie: 200 }, b: { cards: [], tie: 300 }, c: { cards: [], tie: null } } };
-    assert.deepStrictEqual(BH.standings(three).map(x => x.place), [1, 1, 1], "a sum missing for one of them — a shared place, as the shared win");
-    s.finalDetail.a.tie = 198;
-    assert.strictEqual(BH.standings(s).filter(x => x.place === 1).length, 2, "the same sum — a shared first place");
+    assert.deepStrictEqual(st.map(x => x.id + ":" + x.place).join(" "), "b:1 a:2 c:3 d:3", "b wins on the lower card; c and d stay shared without one");
+    s.finalDetail.c.tie = 5; s.finalDetail.d.tie = 9;
+    assert.deepStrictEqual(BH.standings(s).filter(x => x.total === 38).map(x => x.place), [3, 3], "the tie-breaker decides the first place only");
+    const three = { gameId: "faraway", players: ["a", "b", "c"], rounds: [], final: { a: 50, b: 50, c: 50 }, finalDetail: { a: { cards: [], tie: 2 }, b: { cards: [], tie: 7 }, c: { cards: [], tie: null } } };
+    assert.deepStrictEqual(BH.standings(three).map(x => x.place), [1, 1, 1], "a value missing for one of them — a shared place, as the shared win");
+    s.finalDetail.a.tie = 3;
+    assert.strictEqual(BH.standings(s).filter(x => x.place === 1).length, 2, "the same value — a shared first place");
     const flip = { gameId: "flip7", players: ["a", "b"], rounds: [{ scores: { a: 5, b: 5 } }] };
     assert.deepStrictEqual(BH.standings(flip).map(x => x.place), [1, 1], "games without a tie-breaker share places");
   });

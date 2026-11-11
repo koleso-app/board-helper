@@ -892,7 +892,10 @@
     const tot = BH.totals(s), st = BH.standings(s), target = g.scoring && g.scoring.target;
     const top = st.length && st[0].total > 0 ? st[0].total : null;
     const last = s.rounds[r - 1];
-    const board = s.players.map(id => {
+    // after a round the best come first (seating order among equal scores); before the first round — the seating order
+    const low = lowerWins(g), seat = id => s.players.indexOf(id);
+    const order = r ? [...s.players].sort((a, b) => (low ? tot[a] - tot[b] : tot[b] - tot[a]) || seat(a) - seat(b)) : s.players;
+    const board = order.map(id => {
       const p = BH.player(id) || { name: "?", color: "#888" };
       const t = tot[id], pct = target ? BH.clamp(100 * t / target, 0, 100) : 0;
       const lr = last ? last.scores[id] : null, lf = last && last.flags ? last.flags[id] || {} : {};
@@ -956,7 +959,7 @@
     return `<section class="panel"><h2 style="margin-bottom:6px">Блокнот</h2><div class="scroll-x"><table class="hist pad">
         <thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody>
         <tfoot><tr><th>Итого</th>${s.players.map(id => `<th>${tot[id]}</th>`).join("")}</tr>${anyTie && e.tie ? `<tr><td class="small muted">${esc(e.tie.label)}</td>${s.players.map(id => `<td class="small">${cell(fd[id] && fd[id].tie)}</td>`).join("")}</tr>` : ""}</tfoot>
-      </table></div><p class="tiny muted" style="margin-top:6px">Регионы — в порядке подсчёта: с последней сыгранной карты к первой.${winTie ? " Слава равная — победа по меньшей сумме номеров карт." : ""}</p></section>`;
+      </table></div><p class="tiny muted" style="margin-top:6px">Регионы — в порядке подсчёта: с последней сыгранной карты к первой.${winTie && e.tie ? ` Слава равная — победа по строке «${esc(e.tie.label)}»: меньше — выше.` : ""}</p></section>`;
   }
 
   function viewDone(s, g) {
@@ -1661,8 +1664,8 @@
       const any = s.players.some(id => BH.endFilled(g, sheet.entries[id]));
       tn.hidden = !any || !(res.tieOpen.length || res.byTie);
       tn.className = "note " + (res.byTie ? "good" : "");
-      tn.textContent = res.tieOpen.length ? `Слава равная у: ${res.winners.map(pname).join(", ")}. Впишите им «${e.tie.label}» — побеждает меньшая.`
-        : res.byTie ? `Слава равная — побеждает ${res.winners.map(pname).join(", ")}: сумма номеров меньше.` : "";
+      tn.textContent = res.tieOpen.length ? `Слава равная у: ${res.winners.map(pname).join(", ")}. Впишите им «${e.tie.label}» — побеждает меньшее число.`
+        : res.byTie ? `Слава равная — побеждает ${res.winners.map(pname).join(", ")}: «${e.tie.label}» меньше.` : "";
     }
   }
   function endSheetHTML() {
@@ -2303,7 +2306,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.16.3";
+  BH.version = "0.16.4";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

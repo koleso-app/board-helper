@@ -197,7 +197,7 @@
   const notFound = text => `<div class="empty"><p>${esc(text)}</p><p style="margin-top:12px"><a class="btn" href="#/">На главную</a></p></div>`;
   // a back link to the previous screen steps back in the history instead of adding an entry,
   // so the phone's Back button does not bring the left screen up again
-  const backLink = (href, text) => `<a class="back" href="${href}" data-act="nav-back" data-href="${href}">${I.back}<span>${esc(text)}</span></a>`;
+  const backLink = (href, text) => `<a class="back" href="${href}" data-act="nav-back" data-href="${href}" title="${esc(text)}">${I.back}<span>${esc(text)}</span></a>`;
   // a game session can be opened from the home screen, the sessions calendar or a game's page:
   // its back link leads to where it was opened from (remembered in the history), home otherwise
   function originOf() {
@@ -834,8 +834,7 @@
         ${sessionHero(s, g, true)}
         <div class="status-row">
           <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${r + 1}</span></div>
-          ${leader ? `<div class="stat-tile leader">${BH.avatar(leader)}<div class="leader-t"><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><b>${esc(leader.name)}</b></div>
-            ${s.rounds.length ? "" : `<a class="btn sm leader-wheel" href="#/s/${esc(s.id)}/first" aria-label="${esc("Колесо: " + ((g.first && g.first.label) || "первый игрок").toLowerCase())}">${I.wheel}Колесо</a>`}</div>` : ""}
+          ${leader ? `<div class="stat-tile leader">${BH.avatar(leader)}<div class="leader-t"><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><b>${esc(leader.name)}</b>${s.rounds.length ? "" : `<a class="btn sm leader-wheel" href="#/s/${esc(s.id)}/first" aria-label="${esc("Колесо: " + ((g.first && g.first.label) || "первый игрок").toLowerCase())}">${I.wheel}Колесо</a>`}</div></div>` : ""}
         </div>
       </div>
       <div class="play">
@@ -876,7 +875,7 @@
         ${crown}
         <h1>${w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена"}</h1>
         ${s.rounds.length ? "" : `<p class="muted small">Записана после игры, без раундов</p>`}
-        ${(() => { const n = g.finishNote && g.finishNote(s); if (!n) return ""; const note = typeof n === "string" ? { text: n, ok: true } : n; return `<p class="badge ${note.ok ? "good" : "warn"}" style="font-size:14px;padding:6px 12px">${esc(note.text)}</p>`; })()}
+        ${(() => { const n = g.finishNote && g.finishNote(s); if (!n) return ""; const note = typeof n === "string" ? { text: n, ok: true } : n; return `<p class="note podium-note ${note.ok ? "good" : ""}">${note.ok ? I.check : IC.bolt}<span>${esc(note.text)}</span></p>`; })()}
       </section>
       <section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
         <div class="list">${st.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<a class="item" href="#/players/${esc(x.id)}"><span class="place-n">${x.place}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div>${s.winners.includes(x.id) ? `<span class="won">${IC.trophy}</span>` : ""}<span class="num" style="font-size:20px;font-weight:700">${x.total}</span></a>`; }).join("")}</div>
@@ -2065,7 +2064,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.15.3";
+  BH.version = "0.15.4";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

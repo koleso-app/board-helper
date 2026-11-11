@@ -671,3 +671,40 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .ic-inline.has-img{background:none}
 .setup-text .ph-steps{font-size:16px;margin-top:6px}
 .end-how ol b{font-weight:700}
+/* a cooperative game: vaults and alarms as pips, the cards of a heist, the heists so far, the hand rankings */
+.coop-tally{display:flex;flex-direction:column;justify-content:center;gap:6px}
+.ct-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pips{display:flex;gap:6px}
+.pip{width:18px;height:18px;border-radius:5px;border:2px solid var(--line);background:var(--sunk)}
+.pip.gold{background:#E3B23C;border-color:#B57E14}
+.pip.red{background:#D9483B;border-color:#9E2B22}
+.heist-cards .hc{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:8px}
+.heist-cards .hc.sp{border-color:color-mix(in srgb,#22995A 45%,var(--line))}
+.heist-cards .hc.ch{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.hc-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:0;color:inherit;cursor:pointer}
+.hc-head svg{grid-row:1/3;grid-column:2;width:18px;height:18px;color:var(--muted)}
+.hc-kind{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.hc.sp .hc-kind{color:#22995A}
+.hc-name{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
+.hc-name b{overflow-wrap:anywhere}
+.hc-name small{color:var(--muted)}
+.hc-ask{margin-top:8px}
+.heist-hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.heist-hist li{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:baseline;gap:4px 10px}
+.heist-hist .hh-n{font-family:var(--f-display);font-weight:700;color:var(--muted);min-width:1.4em}
+.heist-hist li.ok b{color:var(--good,#22995A)}
+.heist-hist li.fail b{color:var(--bad)}
+.heist-hist small{color:var(--muted);overflow-wrap:anywhere}
+.rank-list{margin:10px 0 0;padding-left:24px;display:flex;flex-direction:column;gap:4px;font-size:15px}
+.rank-list li::marker{font-family:var(--f-display);font-weight:700;color:var(--accent)}
+.rank-list b{margin-right:6px}
+.rank-list span{color:var(--muted)}
+.coop-bar .btn.danger{flex:1;min-width:0}
+.dlg-choices{margin-top:10px}
+.dlg-choice{width:100%;text-align:left;background:none;border:0;cursor:pointer;color:inherit}
+.dlg-choice[aria-pressed="true"]{background:var(--sunk);border-radius:10px}
+/* the heist bar on a narrow phone: four buttons — tighter, the check mark goes */
+.coop-bar{gap:6px}
+.coop-bar .btn{padding-left:12px;padding-right:12px}
+.coop-bar .btn.primary,.coop-bar .btn.danger{flex:1 1 0}
+@media (max-width:400px){.coop-bar .btn{padding-left:10px;padding-right:10px}.coop-bar .btn.primary svg{display:none}}

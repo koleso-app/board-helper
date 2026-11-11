@@ -61,7 +61,16 @@
   BH.sessionDate = s => s.created || s.finishedAt || 0;
   // a player's score counts only where it was kept: rounds were played, or it was written in afterwards
   BH.isEndScored = g => !!(g && g.scoring && g.scoring.type === "end");
-  BH.hasScore = (s, id) => (!BH.isEndScored(BH.game(s.gameId)) && s.rounds.length > 0) || !!(s.final && s.final[id] !== undefined);
+  // a cooperative game: the rounds are heists (ok or not), nobody has a score; the team wins or loses together
+  BH.isCoop = g => !!(g && g.scoring && g.scoring.type === "coop");
+  BH.hasScore = (s, id) => (!BH.isEndScored(BH.game(s.gameId)) && !BH.isCoop(BH.game(s.gameId)) && s.rounds.length > 0) || !!(s.final && s.final[id] !== undefined);
+  // heists so far, and how many make the end: wins (vaults) and losses (alarms) from the game and its mode
+  BH.coopTally = s => {
+    const g = BH.game(s.gameId), sc = (g && g.scoring) || {}, ctx = BH.ctxOf(s);
+    const ok = s.rounds.filter(r => r.heist === "ok").length, fail = s.rounds.filter(r => r.heist === "fail").length;
+    const wins = sc.wins || 3, losses = typeof sc.losses === "function" ? sc.losses(ctx) : sc.losses || 3;
+    return { ok, fail, wins, losses, won: ok >= wins, lost: fail >= losses, over: ok >= wins || fail >= losses };
+  };
   BH.playerStats = (pid, sessions) => {
     const mine = (sessions || []).filter(s => s.status === "finished" && s.players.includes(pid)).sort((a, b) => BH.sessionDate(a) - BH.sessionDate(b));
     const isWin = s => s.winners.includes(pid);
@@ -130,7 +139,7 @@
       if (ws.length) { winSum += ws.reduce((a, id) => a + t[id], 0) / ws.length; winN++; }
       if (s.rounds.length && !BH.isEndScored(g)) {
         withRounds++; rounds += s.rounds.length;
-        s.rounds.forEach((rd, i) => s.players.forEach(id => {
+        if (!BH.isCoop(g)) s.rounds.forEach((rd, i) => s.players.forEach(id => {
           const v = Number(rd.scores[id]) || 0;
           if (!bestRound || better(v, bestRound.v)) bestRound = { id, v, sid: s.id, round: i + 1 };
         }));

@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -105,6 +105,12 @@ t("in-game texts of every game are short", () => {
     for (let r = 1; r <= last; r++) {
       if (R.phases) for (const p of R.phases(c, r, last)) lines.push(...(p.steps || [p.text]));
       lines.push(...((typeof R.after === "function" ? R.after(c, r, last) : R.after) || []));
+    }
+    // a heist of a cooperative game: its steps with every card in play, and what each card says
+    if (game.heist) {
+      const all = [...Object.keys(game.heist.cards.ch).map(n => ({ kind: "ch", n: +n })), ...Object.keys(game.heist.cards.sp).map(n => ({ kind: "sp", n: +n }))];
+      for (const p of game.heist.steps(c, all)) lines.push(...p.steps);
+      for (const k of ["ch", "sp"]) for (const d of Object.values(game.heist.cards[k])) lines.push(...d.steps, ...(d.line ? [d.line] : []));
     }
     for (const l of lines) assert.ok(words(l) <= 16, `${game.id}: «${l}» — ${words(l)} слов`);
   }
@@ -457,4 +463,100 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.deepStrictEqual(BH.standings(flip).map(x => x.place), [1, 1], "games without a tie-breaker share places");
   });
   console.log(`faraway standings: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // The Gang: the English rulebook, pages as printed (docs/rules-check.md)
+  const G = BH.game("thegang"), before = passed;
+  const ctxM = (n, mode) => ({ players: n, exp: new Set(), has: () => false, opt: id => id === mode });
+  const lines = (ctx, act, i) => G.heist.steps(ctx, act)[i].steps.join(" ").replace(/\*/g, "");
+  t("the gang p.2–4: 3–6 players, no first player, cooperative, chips 1…players", () => {
+    assert.strictEqual(G.players.min, 3); assert.strictEqual(G.players.max, 6);
+    assert.ok(!G.first, "no turn order, everyone at once");
+    assert.ok(BH.isCoop(G));
+    const st = BH.setupSteps({ gameId: "thegang", players: ["a", "b", "c", "d"], exp: [], opts: {} });
+    const chips = st.find(x => x.id === "chips");
+    assert.ok(chips.title.includes("1–4") && chips.text.replace(/\*/g, "").includes("1–4"), "4 players — the 1- to 4-star chips (book example)");
+    assert.ok(!st.some(x => x.id === "modes"), "the basic game leaves the challenge and specialist cards in the box");
+    for (const n of [3, 6]) assert.ok(BH.setupSteps({ gameId: "thegang", players: Array.from({ length: n }, (_, i) => "p" + i), exp: [], opts: {} }).find(x => x.id === "chips").title.includes("1–" + n), n + " players");
+  });
+  t("the gang p.4, p.9, p.15: 3 vaults win; 3 alarms lose, 2 in master thief mode", () => {
+    const s = (heists, opts) => ({ gameId: "thegang", players: ["a", "b", "c"], exp: [], opts: opts || {}, rounds: heists.map(h => ({ scores: {}, heist: h })) });
+    let x = BH.coopTally(s(["ok", "fail", "ok"])); assert.strictEqual(x.over, false);
+    x = BH.coopTally(s(["ok", "fail", "ok", "ok"])); assert.ok(x.over && x.won && !x.lost);
+    x = BH.coopTally(s(["fail", "fail", "fail"])); assert.ok(x.over && x.lost && !x.won);
+    x = BH.coopTally(s(["fail", "fail"], { master: true })); assert.ok(x.over && x.lost, "master thief: two alarms");
+    assert.strictEqual(BH.coopTally(s(["fail", "fail"])).over, false, "otherwise three");
+    const vaults = BH.setupSteps({ gameId: "thegang", players: ["a", "b", "c"], exp: [], opts: { master: true } }).find(x => x.id === "vaults").text.replace(/\*/g, "");
+    assert.ok(vaults.includes("2 карты сигнализации"), "master thief: one alarm card goes back to the box");
+  });
+  t("the gang p.5–8: four rounds — white, yellow, orange, red; flop 3, turn 1, river 1; the showdown by the red chips", () => {
+    const c = ctxM(4), all = G.heist.steps(c, []);
+    assert.strictEqual(all.length, 5);
+    assert.ok(lines(c, [], 0).includes("2 карманные") && lines(c, [], 0).includes("Белые"));
+    assert.ok(lines(c, [], 1).includes("3 общие") && lines(c, [], 1).includes("Жёлтые"));
+    assert.ok(lines(c, [], 2).includes("1 общую") && lines(c, [], 2).includes("Оранжевые"));
+    assert.ok(lines(c, [], 3).includes("1 общую") && lines(c, [], 3).includes("Красные"));
+    assert.ok(lines(c, [], 4).includes("только красные") && lines(c, [], 4).includes("от 1 ★") && lines(c, [], 4).includes("5 из 7"));
+  });
+  t("the gang p.16–17: Quick Access, Hasty Getaway and Security Cameras change the heist", () => {
+    const c = ctxM(4, "advanced");
+    assert.ok(lines(c, [{ kind: "ch", n: 1 }], 0).includes("не раздаются"), "Quick Access: no white chips");
+    assert.ok(lines(c, [{ kind: "ch", n: 5 }], 2).includes("не раздаются"), "Hasty Getaway: no orange chips");
+    assert.ok(lines(c, [{ kind: "ch", n: 10 }], 0).includes("3 карманные") && lines(c, [{ kind: "ch", n: 10 }], 4).includes("5 из 8"), "Security Cameras: 3 pocket cards");
+    for (const n of [3, 6, 8, 9]) assert.ok(lines(c, [{ kind: "sp", n }], 0).includes(G.heist.cards.sp[n].line.replace(/\*/g, "")), "specialist " + n + " right after the deal");
+    const lt = lines(c, [{ kind: "ch", n: 7 }], 1); assert.ok(lt.indexOf("Откройте") < lt.indexOf("нет"), "Laser Tripwires after the flop is open");
+    assert.ok(lines(c, [{ kind: "ch", n: 9 }], 4).includes("комбинацию"), "Fingerprint Scan at the showdown");
+    assert.ok(lines(c, [{ kind: "ch", n: 8 }], 1).includes("сбрасывают") && lines(c, [{ kind: "ch", n: 8 }], 3).includes("сбрасывают") && !lines(c, [{ kind: "ch", n: 8 }], 0).includes("сбрасывают"), "Blackout: from round 2 on");
+    const r2 = G.heist.steps(c, [{ kind: "ch", n: 3 }, { kind: "ch", n: 8 }])[1].steps.join(" | ");
+    assert.ok(r2.indexOf("сбрасывают") < r2.indexOf("Откройте") && r2.indexOf("Откройте") < r2.indexOf("Во флопе"), "Blackout at the start of the round; the detector after the flop is open: " + r2);
+    const sd = G.heist.steps(c, [{ kind: "ch", n: 4 }])[4].steps.join(" | ");
+    assert.ok(sd.indexOf("Открывайте") < sd.indexOf("угадайте"), "the scan before the highest red chip reveals");
+  });
+  t("the gang p.14: advanced — after a success a challenge, after a failure a specialist, each for one heist, stacks in order", () => {
+    const c = ctxM(4, "advanced"); let st = G.heist.start(c);
+    assert.deepStrictEqual(JSON.stringify(G.heist.active(st)), "[]", "the first heist without cards");
+    st = G.heist.next(c, st, true); assert.strictEqual(JSON.stringify(G.heist.active(st)), JSON.stringify([{ kind: "ch", n: 1 }]));
+    st = G.heist.next(c, st, false); assert.strictEqual(JSON.stringify(G.heist.active(st)), JSON.stringify([{ kind: "sp", n: 1 }]), "the challenge is gone, the specialist 1 comes");
+    st = G.heist.next(c, st, true); assert.strictEqual(JSON.stringify(G.heist.active(st)), JSON.stringify([{ kind: "ch", n: 2 }]), "the next challenge of the stack");
+  });
+  t("the gang p.15: professional — no Quick Access; a challenge for the whole game; master — two challenges, the lower goes", () => {
+    const p = ctxM(4, "pro");
+    assert.ok(!G.heist.choices(p, "ch").includes(1) && G.heist.choices(p, "sp").includes(1));
+    let st = G.heist.start(p); assert.strictEqual(G.heist.asks(p, st).length, 1, "asks for the permanent challenge");
+    st.perm = [2]; st = G.heist.next(p, st, true);
+    assert.strictEqual(JSON.stringify(G.heist.active(st)), JSON.stringify([{ kind: "ch", n: 2, perm: true }, { kind: "ch", n: 3 }]), "the permanent stays, the next one skips 1 and itself");
+    const m = ctxM(4, "master"); let ms = G.heist.start(m);
+    assert.strictEqual(G.heist.asks(m, ms).length, 2, "two random challenges at the start");
+    ms.ch = [7, 4]; ms.nCh = 2; ms = G.heist.next(m, ms, false);
+    assert.strictEqual(JSON.stringify(ms.ch), JSON.stringify([7, 2]), "the lower-numbered (4) goes, the next of the stack comes, also after a failure");
+    assert.ok(!ms.sp, "no specialists");
+    ms = G.heist.next(m, ms, true);
+    assert.strictEqual(JSON.stringify(ms.ch), JSON.stringify([7, 3]), "and after a success the same: 2 goes, 3 comes");
+    assert.ok(!ms.sp, "no specialists after a success either");
+  });
+  t("the gang: a heist is kept with the cards of its time; nobody has a score; the team wins together", () => {
+    const raw = { players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }, { id: "c", name: "В" }], places: [], placesTouched: true, sessions: [{ id: "g1", gameId: "thegang", players: ["a", "b", "c"], status: "playing", opts: { advanced: true },
+      rounds: [{ scores: {}, heist: "ok", coop: { ch: [], sp: 0, perm: [], nCh: 1, nSp: 1 } }, { scores: {}, heist: "nope", coop: { ch: [99] } }], coop: { ch: [1], sp: 0, perm: [], nCh: 2, nSp: 1 } }] };
+    BH.replaceFromSync(raw);
+    const s = BH.state.sessions[0];
+    assert.strictEqual(s.rounds[0].heist, "ok"); assert.strictEqual(s.rounds[1].heist, undefined, "a heist is ok or fail");
+    assert.strictEqual(JSON.stringify(s.rounds[1].coop.ch), "[]", "a card is 1…10");
+    assert.strictEqual(JSON.stringify(s.coop.ch), "[1]");
+    assert.strictEqual(BH.hasScore(s, "a"), false, "no scores in a cooperative game");
+    const won = Object.assign({}, s, { status: "finished", winners: ["a", "b", "c"] });
+    const gs = BH.gameStats("thegang", [won]);
+    assert.strictEqual(gs.bestRound, null); assert.strictEqual(gs.players.every(p => p.wins === 1), true, "a win for everyone at the table");
+  });
+  t("the gang: rules, groups, questions and pictures refer to real sections; pages of the printed book 2–19", () => {
+    const ids = new Set(G.rules.map(r => r.id));
+    for (const gr of G.ruleGroups) for (const id of gr.ids) assert.ok(ids.has(id), "group " + id);
+    for (const gr of G.faqGroups) for (const id of gr.refs) assert.ok(ids.has(id), "faq group " + id);
+    for (const f of G.faq) assert.ok(ids.has(f.ref), "faq ref " + f.ref);
+    for (const k of Object.keys(G.images.rules)) assert.ok(ids.has(k), "image for " + k);
+    assert.ok(G.rules.every(r => r.page >= 2 && r.page <= 19), "pages of the printed book");
+    const grouped = new Set(G.ruleGroups.flatMap(gr => gr.ids)); for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
+    assert.strictEqual(G.ranking.length, 10, "ten hand rankings (p. 9)");
+    assert.strictEqual(G.ranking[0][0], "Роял-флеш"); assert.strictEqual(G.ranking[9][0], "Старшая карта");
+  });
+  console.log(`the gang: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

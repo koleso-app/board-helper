@@ -101,6 +101,12 @@
       V.ask = async () => ({ answer: "Да, можно. Остановившийся игрок не защищён: его карты остаются в раунде, и на него можно сыграть любое действие, кроме тех, что требуют активного игрока.", quote: "Карты остановившегося игрока остаются в раунде до самого конца, и их всё ещё можно украсть, поменять или сбросить.", page: "11–12", ref: (BH.game(S.sessions[0] && S.sessions[0].gameId) || BH.games[0]).rules[0].id, found: true });
       for (const s of S.sessions.filter(x => x.status === "playing")) {
         await visit("#/s/" + s.id + "/play");
+        // a cooperative game: the choice of a card, the finish dialog — looked at only, nothing is pressed in them
+        if (document.querySelector('[data-act="heist"]')) {
+          const cp = document.querySelector('[data-act="coop-pick"]'); if (cp) { cp.click(); await wait(300); out.push(...scan(`${s.id} [выбор карты]`)); await closeOverlay(); }
+          const fm = document.querySelector('[data-act="finish-menu"]'); if (fm) { fm.click(); await wait(300); out.push(...scan(`${s.id} [завершить]`)); await closeOverlay(); }
+          continue;
+        }
         // a game scored at the end: its score sheet, reached from «Завершить»
         if (!document.querySelector('[data-act="new-round"]')) {
           const fm = document.querySelector('[data-act="finish-menu"]'); if (fm) { fm.click(); await wait(300); out.push(...scan(`${s.id} [завершить]`)); }

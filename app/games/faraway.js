@@ -59,6 +59,7 @@
       cover: "cover-square",
       // composed from the English rulebook and aid with our Russian labels (scripts/assets/faraway-compose.mjs)
       steps: { deal: ["setup"], center: ["center"], sanctuaries: ["decks"], pad: ["tableau"] },
+      icons: ["ic-clue"],
       rules: {
         goal: ["tableau"], components: ["decks"], regions: ["card"], biomes: ["biomes"], resources: ["wonders"], quests: ["quest"],
         "quest-types": ["scoring-icons"], sanctuaries: ["sanctuaries", "sanct-biome"],

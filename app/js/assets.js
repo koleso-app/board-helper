@@ -69,4 +69,19 @@
     }
   };
   A.clear = async () => { try { await caches.delete(CACHE); } catch (e) {} urls.clear(); failed.clear(); };
+  // every picture of every game, loaded ahead while online, so a game opened later without a connection still has them;
+  // one at a time, quietly, once per page load (what is in the cache already costs nothing)
+  let ahead = false;
+  A.loadAhead = async () => {
+    if (ahead || !(BH.cloud && BH.cloud.cfg) || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+    ahead = true;
+    const ids = new Set();
+    for (const g of BH.games) {
+      const im = g.images || {};
+      if (im.cover) ids.add(g.id + "/" + im.cover);
+      for (const part of [im.steps, im.rules]) for (const list of Object.values(part || {})) for (const n of list) ids.add(g.id + "/" + n.split("@")[0]);
+      for (const n of im.icons || []) ids.add(g.id + "/" + n);
+    }
+    for (const id of ids) { await load(id); await new Promise(r => setTimeout(r, 120)); }
+  };
 })();

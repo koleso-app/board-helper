@@ -17,10 +17,11 @@ function cheatSheet(gameFile) {
 }
 
 /* ---------- the rulebook text with printed page numbers ---------- */
-// printed: pdf page N carries printed page N-1 (page 1 is the cover); pdf: the page of the PDF file itself
+// printed: pdf page N carries printed page N-1 (page 1 is the cover); pdf: the page of the PDF file itself;
+// plus1: pdf page N carries printed page N+1 (the file starts at printed page 2)
 function rulebook(file, pages) {
   if (!fs.existsSync(file)) return "";
-  return fs.readFileSync(file, "utf8").replace(/===== СТРАНИЦА (\d+) =====/g, (m, n) => (pages === "pdf" ? `[стр. ${n}]` : n === "1" ? "[обложка]" : `[стр. ${n - 1}]`));
+  return fs.readFileSync(file, "utf8").replace(/\u0000/g, "").replace(/===== СТРАНИЦА (\d+) =====/g, (m, n) => (pages === "pdf" ? `[стр. ${n}]` : pages === "plus1" ? `[стр. ${+n + 1}]` : n === "1" ? "[обложка]" : `[стр. ${n - 1}]`));
 }
 
 const games = [
@@ -30,6 +31,8 @@ const games = [
     bookNote: "на английском, основной источник; отвечай по-русски и называй карты так, как в шпаргалке. Числа «x12 x8 x3…» на стр. 2–3 распознаны вперемешку — состав колоды бери из шпаргалки. Последняя страница — задняя обложка без номера" },
   { js: "games/faraway.js", book: path.join(root, "sources", "faraway-rules-ru2.txt"), title: "Дальние дали (Faraway)", pages: "pdf",
     bookNote: "официальный русский перевод («Эврикус»), основной источник; номера страниц напечатаны и совпадают со страницами PDF. Значки в книге нарисованы, поэтому часть текста неполная — виды заданий и святилища сверяй со шпаргалкой. Называй всё словами этой книги: подсказка, время исследования, игровая область, рынок карт регионов, удду, окико, золотолоз" },
+  { js: "games/thegang.js", book: path.join(root, "sources", "thegang-rules-en.txt"), title: "The Gang", pages: "plus1",
+    bookNote: "английская книга правил, основной источник; номера страниц — как напечатаны (файл начинается со стр. 2). Отвечай по-русски и называй всё словами шпаргалки: ограбление, фишки, карманные и общие карты, вскрытие, хранилище, сигнализация, испытания и специалисты" },
 ];
 const files = [["index.js", fs.readFileSync(path.join(root, "functions", "voice", "index.js"))]];
 for (const g of games) {

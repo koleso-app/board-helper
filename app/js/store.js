@@ -18,6 +18,12 @@
   const ids = (v, allowed) => [...new Set(arr(v).filter(x => typeof x === "string" && ID.test(x) && (!allowed || allowed.has(x))))];
   const STATUS = new Set(["setup", "first", "playing", "finished"]);
 
+  function cleanCoop(c) {
+    if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+    const card = v => (Number.isInteger(v) && v >= 1 && v <= 10 ? v : 0);
+    const list = (v, max) => (Array.isArray(v) ? [...new Set(v.map(card).filter(Boolean))].slice(0, max) : []);
+    return { ch: list(c.ch, 2), sp: card(c.sp), perm: list(c.perm, 1), nCh: card(c.nCh) || 1, nSp: card(c.nSp) || 1 };
+  }
   function cleanSel(d) {
     if (!isObj(d)) return null;
     const sel = isObj(d.sel) ? d.sel : {}, picks = {}, flags = {};
@@ -62,6 +68,9 @@
         const sc = isObj(r.scores) ? r.scores : {}, fl = isObj(r.flags) ? r.flags : {}, de = isObj(r.detail) ? r.detail : {};
         const out = { at: time(r.at) || 0, scores: {}, flags: {}, detail: {} };
         if (typeof r.leader === "string" && allowed.has(r.leader)) out.leader = r.leader;
+        // a heist of a cooperative game: how it ended, and the cards that were in play then
+        if (r.heist === "ok" || r.heist === "fail") out.heist = r.heist;
+        const co = cleanCoop(r.coop); if (co) out.coop = co;
         for (const id of pl) {
           out.scores[id] = num(sc[id]);
           out.flags[id] = { bust: !!(isObj(fl[id]) && fl[id].bust), flip7: !!(isObj(fl[id]) && fl[id].flip7) };
@@ -77,6 +86,7 @@
         placeId: typeof x.placeId === "string" && placeIds.has(x.placeId) ? x.placeId : null,
         created: time(x.created) || Date.now(), startedAt: time(x.startedAt), finishedAt: time(x.finishedAt),
         status, setupDone, rounds,
+        ...(cleanCoop(x.coop) ? { coop: cleanCoop(x.coop) } : {}),
         first: typeof x.first === "string" && allowed.has(x.first) ? x.first : null,
         winners: ids(x.winners, allowed),
         opts: (() => { const o = {}; for (const [k, v] of Object.entries(isObj(x.opts) ? x.opts : {})) if (ID.test(k)) o[k] = !!v; return o; })(),

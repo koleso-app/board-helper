@@ -105,9 +105,10 @@ async function askModel(iam, rules, question, extra, game) {
     "Делай очевидные выводы из правил: например, если у нескольких игроков 200 и больше, побеждает тот, у кого больше очков.",
     "found=false — только если ни один раздел базы не помогает ответить. Не выдумывай правил, которых нет в базе.",
     "Ответ — по-русски, не длиннее 200 символов (1–2 коротких предложения), чтобы его было удобно прослушать. Без markdown и списков.",
-    "quote — точная дословная цитата (до 300 символов), на которой основан ответ. Бери её из раздела КНИГА ПРАВИЛ; из ШПАРГАЛКИ — только если в книге этого нет. page — номер страницы из ближайшей пометки [стр. N] перед цитатой, иначе null.",
-    "Если ответа в правилах нет: found=false, answer — одна фраза для игрока, например «В правилах об этом ничего не сказано.», quote — пустая строка.",
-    "Верни только JSON вида {\"answer\": string, \"quote\": string, \"page\": number|null, \"found\": boolean}.",
+    "section — id раздела ШПАРГАЛКИ, на котором основан ответ: он стоит в пометке [раздел id · …] перед разделом; у частых вопросов — в пометке [раздел id] в начале строки. Только id из пометок, без выдумок.",
+    "quote — короткая дословная цитата (до 300 символов) на русском, на которой основан ответ: из КНИГИ ПРАВИЛ, если книга на русском и там это есть, иначе из этого раздела ШПАРГАЛКИ. Номер страницы не пиши — его найдут по цитате.",
+    "Если ответа в правилах нет: found=false, answer — одна фраза для игрока, например «В правилах об этом ничего не сказано.», quote — пустая строка, section — пустая строка.",
+    "Верни только JSON вида {\"answer\": string, \"quote\": string, \"section\": string, \"found\": boolean}.",
     "",
     rules,
   ].join("\n");
@@ -128,21 +129,60 @@ async function askModel(iam, rules, question, extra, game) {
   if (!res.ok) throw Object.assign(new Error("Нейросеть ответила ошибкой " + res.status + ": " + text.slice(0, 300)), { status: 502, code: "llm" });
   let content = "";
   try { content = JSON.parse(text).choices[0].message.content || ""; } catch (e) { throw Object.assign(new Error("Непонятный ответ нейросети"), { status: 502, code: "llm" }); }
-  return parseAnswer(content);
+  return locate(parseAnswer(content), rules);
+}
+
+/* ---------- where the answer is in the rules: by code, never by the model ----------
+   The quote is looked up in the book (pages marked [стр. N]); found there — that page. Otherwise the
+   page of the cheat sheet section the model named ([раздел id · стр. N]). Not found — no page. */
+const squash = t => String(t || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/g, "");
+const parsed = new Map();
+function index(rules) {
+  if (parsed.has(rules)) return parsed.get(rules);
+  const cut = rules.indexOf("ШПАРГАЛКА"), bookPart = cut > 0 ? rules.slice(0, cut) : "", sheet = cut > 0 ? rules.slice(cut) : rules;
+  const pages = [];
+  const re = /\[стр\. ([^\]]{1,12})\]/g;
+  let m, last = null, from = 0;
+  while ((m = re.exec(bookPart))) { if (last) pages.push({ page: last, text: squash(bookPart.slice(from, m.index)) }); last = m[1]; from = re.lastIndex; }
+  if (last) pages.push({ page: last, text: squash(bookPart.slice(from)) });
+  const sections = new Map();
+  const sr = /\[раздел ([a-z0-9-]{1,40})(?: · стр\. ([^\]]{1,12}))?\]/g;
+  while ((m = sr.exec(sheet))) if (!sections.has(m[1]) || m[2]) sections.set(m[1], m[2] || sections.get(m[1]) || null);
+  const out = { pages, sections };
+  parsed.set(rules, out);
+  return out;
+}
+const pageValue = p => (/^\d+$/.test(p) ? Number(p) : p);
+function locate(a, rules) {
+  if (!a.found) return Object.assign(a, { page: null, ref: null });
+  const { pages, sections } = index(rules);
+  const ref = sections.has(a.section) ? a.section : null;
+  let page = null;
+  const q = squash(a.quote);
+  if (q.length >= 12) {
+    // the longest piece of the quote that is found on one page (a quote may run over a page break)
+    for (const len of [q.length, 80, 50, 30]) {
+      const piece = q.slice(0, Math.min(len, q.length));
+      const hit = pages.find(p => p.text.includes(piece));
+      if (hit) { page = hit.page; break; }
+    }
+  }
+  if (!page && ref) page = sections.get(ref);
+  return Object.assign(a, { page: page ? pageValue(page) : null, ref });
 }
 function parseAnswer(content) {
   const m = String(content).match(/\{[\s\S]*\}/);
   let j = null;
   try { j = JSON.parse(m ? m[0] : content); } catch (e) {}
-  if (!j || typeof j !== "object") return { answer: String(content).trim().slice(0, 600), quote: "", page: null, found: true };
+  if (!j || typeof j !== "object") return { answer: String(content).trim().slice(0, 600), quote: "", section: "", page: null, found: true };
   // JSON without a usable answer: "nothing found", never the raw JSON read aloud and saved
-  if (typeof j.answer !== "string") return { answer: NOT_FOUND, quote: "", page: null, found: false };
-  const page = Number.isInteger(j.page) && j.page > 0 && j.page < 500 ? j.page : null;
+  if (typeof j.answer !== "string") return { answer: NOT_FOUND, quote: "", section: "", page: null, found: false };
   const found = !(j.found === false || j.found === "false");
+  const section = typeof j.section === "string" && /^[a-z0-9-]{1,40}$/.test(j.section.trim()) ? j.section.trim() : "";
   // models sometimes echo the JSON fields into the sentence ("found=false, ...")
-  let answer = j.answer.replace(/\b(found|quote|page)\s*[=:]\s*\S+[,.;]?\s*/gi, "").trim();
+  let answer = j.answer.replace(/\b(found|quote|page|section)\s*[=:]\s*\S+[,.;]?\s*/gi, "").trim();
   if (!found || !answer) answer = NOT_FOUND;
-  return { answer: answer.slice(0, 600), quote: found ? String(j.quote || "").trim().slice(0, 400) : "", page: found ? page : null, found };
+  return { answer: answer.slice(0, 600), quote: found ? String(j.quote || "").trim().slice(0, 400) : "", section: found ? section : "", page: null, found };
 }
 
 /* ---------- SpeechKit v3: text -> mp3 ---------- */
@@ -205,4 +245,4 @@ module.exports.handler = async function (event, context) {
     return fail(e.status || 500, e.code || "error", e.message || String(e), origin);
   }
 };
-module.exports._test = { parseAnswer, checkCaller, authCache, ENV };
+module.exports._test = { parseAnswer, locate, checkCaller, authCache, ENV };

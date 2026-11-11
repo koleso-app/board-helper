@@ -199,6 +199,13 @@
 
   /* ---------- round calculator: generic card picker, the game supplies groups and compute() ---------- */
   BH.emptySel = () => ({ picks: {}, flags: {} });
+  // how many cards of a limited kind are picked: groups with the same pool share one max
+  // (Flip 7: With A Vengeance — the numbers and the special numbers, seven in all)
+  BH.pickLimit = (g, picks, grp) => {
+    const pool = grp.pool || grp.id, groups = g.calc.groups.filter(x => (x.pool || x.id) === pool);
+    return { max: (groups.find(x => x.max) || {}).max || 0, count: groups.reduce((n, x) => n + ((picks || {})[x.id] || []).length, 0) };
+  };
+
   BH.calcScore = (g, sel, ctx) => {
     if (!g.calc) return { score: 0, notes: [] };
     return g.calc.compute(sel || BH.emptySel(), ctx);

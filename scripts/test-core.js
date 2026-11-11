@@ -264,6 +264,15 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const r = score({ num: [13, 1, 2, 3, 4, 5], special: ["l13"] });
     assert.strictEqual(r.flip7, true); assert.strictEqual(r.score, 13 + 15 + 13 + 15);
   });
+  t("vengeance: the special numbers count toward the seven number cards", () => {
+    const num = v.calc.groups.find(x => x.id === "num"), sp = v.calc.groups.find(x => x.id === "special"), mods = v.calc.groups.find(x => x.id === "minus");
+    const picks = { num: [7, 8, 9, 10, 11, 12], special: ["zero"], minus: [2] };
+    assert.deepStrictEqual(JSON.stringify(BH.pickLimit(v, picks, num)), JSON.stringify({ max: 7, count: 7 }));
+    assert.deepStrictEqual(JSON.stringify(BH.pickLimit(v, picks, sp)), JSON.stringify({ max: 7, count: 7 }));
+    assert.strictEqual(BH.pickLimit(v, picks, mods).max, 0, "the minus cards have no limit");
+    const f = BH.game("flip7");
+    assert.strictEqual(BH.pickLimit(f, { num: [1, 2] }, f.calc.groups.find(x => x.id === "num")).count, 2);
+  });
   t("vengeance: a bust is 0, or minus the modifiers given in the brutal mode; −15 flags", () => {
     const shim = (picks, flags, brutal) => { const c = score(picks, flags, brutal); return flags.bust ? c.bustScore : c.score; };
     assert.strictEqual(shim({ num: [5], minus: [6] }, { bust: true }, false), 0);

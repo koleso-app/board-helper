@@ -12,7 +12,8 @@ function cheatSheet(gameFile) {
   for (const f of ["js/util.js", "js/games.js", "js/art.js", gameFile]) vm.runInContext(fs.readFileSync(path.join(root, "app", f), "utf8"), ctx);
   const g = ctx.BH.games[0];
   const plain = h => h.replace(/<li>/g, "\n- ").replace(/<\/(p|ul|ol)>/g, "\n").replace(/<[^>]+>/g, "").replace(/\n{2,}/g, "\n").trim();
-  return { id: g.id, text: g.rules.map(r => `${r.page ? `[стр. ${r.page}] ` : ""}${r.title}\n${plain(r.body)}`).join("\n\n") + "\n\nЧАСТЫЕ ВОПРОСЫ\n" + g.faq.map(f => `- ${f.q} ${f.a}${f.src && ctx.BH.FAQ_SRC[f.src] ? ` (${ctx.BH.FAQ_SRC[f.src]})` : ""}`).join("\n") };
+  // [раздел id · стр. N]: the model names the section, the function finds the page (functions/voice)
+  return { id: g.id, text: g.rules.map(r => `[раздел ${r.id}${r.page ? ` · стр. ${r.page}` : ""}] ${r.title}\n${plain(r.body)}`).join("\n\n") + "\n\nЧАСТЫЕ ВОПРОСЫ\n" + g.faq.map(f => `- ${f.ref ? `[раздел ${f.ref}] ` : ""}${f.q} ${f.a}${f.src && ctx.BH.FAQ_SRC[f.src] ? ` (${ctx.BH.FAQ_SRC[f.src]})` : ""}`).join("\n") };
 }
 
 /* ---------- the rulebook text with printed page numbers ---------- */
@@ -36,6 +37,7 @@ for (const g of games) {
     (bookText ? `КНИГА ПРАВИЛ (${g.bookNote})\n${bookText}\n\n` : "") +
     `ШПАРГАЛКА (проверенный пересказ правил; номера страниц — по книге)\n${sheet.text}\n`;
   files.push([`rules/${sheet.id}.txt`, Buffer.from(text, "utf8")]);
+  fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, `rules-${sheet.id}.txt`), text);   // to look at; dist/ is not published
   console.log(`${sheet.id}: ${text.length} символов`);
 }
 

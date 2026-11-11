@@ -125,6 +125,13 @@
     if (st.focus) { const n = BH.$(st.focus); if (n) n.focus({ preventScroll: true }); }
   }
   let renderedHash = null;
+  let pendingRule = null;   // a rule section to open once its page is drawn (from a voice answer)
+  function openRule(id) {
+    const n = BH.$("details#rule-" + id); if (!n) return;
+    for (let p = n.parentElement; p; p = p.parentElement) if (p.matches("details.fold-sec, details.fold-grp")) p.open = true;
+    n.open = true; n.classList.add("hit");
+    setTimeout(() => n.scrollIntoView({ block: "start" }), 50);   // after the screen's own scroll to the top
+  }
   function render() {
     const r = route();
     let html = "", nav = "home", inGame = false, after = null;
@@ -178,6 +185,7 @@
     updateSync();
     BH.assets.hydrate(main);
     curState = history.state;
+    if (pendingRule) { const id = pendingRule; pendingRule = null; openRule(id); }
   }
   // the sync waits while the user is in the middle of something
   let spinning = false;
@@ -729,7 +737,7 @@
 
     return `<div class="stack">
       <div>${backToOrigin()}
-        <div class="spread">${sessionTitle(s, g)}<div class="row">${s.rounds.length ? "" : `<a class="btn ghost sm" href="#/s/${esc(s.id)}/first">${I.wheel}Первый</a>`}<button class="btn ghost sm" data-act="finish-menu">${I.flag}Завершить</button></div></div>
+        <div class="sess-top">${sessionTitle(s, g)}<div class="row">${s.rounds.length ? "" : `<a class="btn ghost sm" href="#/s/${esc(s.id)}/first">${I.wheel}Первый</a>`}<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button></div></div>
         <div class="round-head" style="margin-top:6px">
           <div><span class="label">Раунд</span><div class="round-no">${r + 1}</div></div>
           ${leader ? `<div class="leader">${BH.avatar(leader, "sm")}<div><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><div style="font-weight:600">${esc(leader.name)}</div></div></div>` : ""}
@@ -1233,11 +1241,12 @@
     const a = ask, r = a.result;
     const mic = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
     let body = "";
-    if (a.phase === "listening") body = `<div class="ask-live"><span class="ask-pulse" aria-hidden="true">${mic}</span><p id="ask-heard" class="ask-heard">${esc(a.text || "Слушаю…")}</p><p class="tiny muted">Говорите спокойно, паузы не страшны. Когда закончите, нажмите «Отправить». Например: «можно ли сыграть заморозь на себя?»</p></div>`;
+    if (a.phase === "listening") body = `<div class="ask-live"><span class="ask-pulse" aria-hidden="true">${mic}</span><p id="ask-heard" class="ask-heard">${esc(a.text || "Слушаю…")}</p><p class="tiny muted">Говорите спокойно, паузы не страшны. Когда закончите, нажмите «Отправить». Например: «${esc((BH.game(a.gameId) || {}).searchExample || "как считать очки?")}»</p></div>`;
     else if (a.phase === "thinking") body = `<div class="ask-live"><p class="ask-q">«${esc(a.text)}»</p><p class="muted">Ищу в правилах…</p></div>`;
     else if (a.phase === "answer") body = `<p class="ask-q">«${esc(a.text)}»</p>
         <div class="ask-answer ${r.found ? "" : "nf"}">${esc(r.answer)}</div>
-        ${r.quote ? `<details class="small"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Где это в правилах${r.page ? `: стр. ${esc(r.page)}` : ""}</summary><blockquote class="ask-quote" style="margin-top:8px">${esc(r.quote)}${r.page ? `<cite>Книга правил, стр. ${esc(r.page)}</cite>` : ""}</blockquote></details>` : ""}
+        ${r.quote ? `<details class="small"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Где это в правилах${r.page ? `: стр. ${esc(r.page)}` : ""}</summary><blockquote class="ask-quote" style="margin-top:8px">${esc(r.quote)}${r.page ? `<cite>Стр. ${esc(r.page)} в книге правил</cite>` : ""}</blockquote></details>` : ""}
+        ${r.ref && (BH.game(a.gameId) || { rules: [] }).rules.some(x => x.id === r.ref) ? `<button type="button" class="btn ghost sm" data-act="ask-rule" data-id="${esc(r.ref)}">${I.book}Раздел правил: ${esc(BH.game(a.gameId).rules.find(x => x.id === r.ref).title)}</button>` : ""}
         ${r.ttsError && BH.voice.speaks() ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}
         ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали — ответ сохранён, бесплатно.</p>` : ""}`;
     else if (a.phase === "error") body = `${a.text ? `<p class="ask-q">«${esc(a.text)}»</p>` : ""}<div class="note">${esc(a.error)}</div>
@@ -1431,9 +1440,10 @@
           const mine = e.sel.picks[grp.id] || [];
           const uniq = grp.uniqueAcross && grp.uniqueAcross(ctx);
           const taken = uniq ? new Set(s.players.filter(o => o !== id).flatMap(o => (sheet.entries[o].sel.picks[grp.id] || []))) : new Set();
-          return `<div class="grp"><span class="label">${esc(grp.label)}${grp.max ? ` · ${mine.length} из ${grp.max}` : ""}</span><div class="cards">${grp.items.map(v => {
+          const lim = BH.pickLimit(g, e.sel.picks, grp);
+          return `<div class="grp"><span class="label">${esc(grp.label)}${grp.max ? ` · ${lim.count} из ${lim.max}` : ""}</span><div class="cards">${grp.items.map(v => {
             const on = mine.includes(v);
-            const dis = !on && ((grp.max && mine.length >= grp.max) || taken.has(v));
+            const dis = !on && ((lim.max && lim.count >= lim.max) || taken.has(v));
             return `<button type="button" class="card-t ${grp.style === "mod" ? "mod" : ""}" data-act="pick" data-p="${id}" data-g="${grp.id}" data-v="${esc(JSON.stringify(v))}" aria-pressed="${on}" ${dis ? "disabled" : ""} title="${taken.has(v) ? "Эта карта уже у другого игрока" : ""}">${esc(grp.show ? grp.show(v) : v)}</button>`;
           }).join("")}</div></div>`;
         }).join("")}</div>`;
@@ -1644,7 +1654,9 @@
       case "pick": {
         const en = sheet.entries[el.dataset.p], gid = el.dataset.g, v = JSON.parse(el.dataset.v);
         const arr = en.sel.picks[gid] = en.sel.picks[gid] || [];
-        const i = arr.indexOf(v); i >= 0 ? arr.splice(i, 1) : arr.push(v);
+        const i = arr.indexOf(v);
+        if (i < 0) { const sg = BH.game(BH.session(sheet.sid).gameId), lim = BH.pickLimit(sg, en.sel.picks, sg.calc.groups.find(x => x.id === gid)); if (lim.max && lim.count >= lim.max) break; }
+        i >= 0 ? arr.splice(i, 1) : arr.push(v);
         arr.sort((a, b) => (typeof a === "number" && typeof b === "number" ? a - b : 0));
         en.manual = null;
         renderOverlay();
@@ -1733,6 +1745,17 @@
       }
       case "export": BH.exportData(); break;
       case "reload": location.reload(); break;
+      case "ask-rule": {
+        const gid = ask && ask.gameId, sid = ask && ask.sid; if (!gid) break;
+        stopListening(); if (askCtl) askCtl.abort(); askCtl = null; BH.voice.stopAudio(); ask = null;
+        pendingRule = el.dataset.id;
+        const inSession = sid && BH.session(sid), to = inSession ? "#/s/" + sid + "/rules" : "#/games/" + gid;
+        if (!inSession) gcard = { id: gid, tab: "rules", period: gcard.period };
+        // the same page: closing the sheet drops its history entry, then the page is redrawn;
+        // another page takes the sheet's entry (go), so Back returns to where the question was asked
+        if (normHash(location.hash) === normHash(to)) render(); else go(to);
+        break;
+      }
       case "nav-back": {
         const href = el.dataset.href;
         if (backIs(href)) { e.preventDefault(); history.back(); }
@@ -1936,7 +1959,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.14.2";
+  BH.version = "0.14.3";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

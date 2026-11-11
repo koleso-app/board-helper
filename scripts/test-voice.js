@@ -15,7 +15,7 @@ global.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
     assert.ok(body.messages[0].content.includes("ЗАМОРОЗЬ"), "rules reach the model");
     assert.strictEqual(body.model, "gpt://folder1/aliceai-llm-flash");
-    return json(200, { choices: [{ message: { content: '{"answer":"Да, можно сыграть на себя.","quote":"Карты действий можно использовать на любого активного игрока, включая самого себя.","page":6,"found":true}' } }] });
+    return json(200, { choices: [{ message: { content: '{"answer":"Да, можно сыграть на себя.","quote":"Карты действий можно использовать на любого активного игрока, включая самого себя.","page":13,"section":"target","found":true}' } }] });
   }
   if (url.includes("utteranceSynthesis")) {
     const a = Buffer.from("ID3-part1").toString("base64"), b = Buffer.from("-part2").toString("base64");
@@ -27,7 +27,17 @@ global.fetch = async (url, init) => {
 // the function reads rules/<game>.txt next to itself; use the built zip's text if present
 const fnDir = path.join(__dirname, "..", "functions", "voice"), rulesDir = path.join(fnDir, "rules");
 fs.mkdirSync(rulesDir, { recursive: true });
-fs.writeFileSync(path.join(rulesDir, "flip7.txt"), "[стр. 6] ЗАМОРОЗЬ! Карты действий можно использовать на любого активного игрока, включая самого себя.");
+fs.writeFileSync(path.join(rulesDir, "flip7.txt"), [
+  "КНИГА ПРАВИЛ",
+  "[стр. 5] Раздача.",
+  "[стр. 6] ЗАМОРОЗЬ! Карты действий можно использовать на любого активного игрока, включая самого себя.",
+  "",
+  "ШПАРГАЛКА",
+  "[раздел target · стр. 9] Кому отдать карту действия",
+  "На любого активного.",
+  "[раздел tie] Ничья",
+  "Не описана.",
+].join("\n"));
 const fn = require(path.join(fnDir, "index.js"));
 const ctx = { token: { access_token: "iam-token" } };
 const call = (body, headers) => fn.handler({ httpMethod: "POST", headers: Object.assign({ Origin: "https://koleso-app.github.io" }, headers), body: JSON.stringify(body) }, ctx);
@@ -54,7 +64,8 @@ const t = async (name, f) => { try { await f(); passed++; } catch (e) { console.
     const r = await call({ action: "ask", game: "flip7", question: "Можно ли сыграть заморозь на себя?", gh });
     assert.strictEqual(r.statusCode, 200);
     const b = JSON.parse(r.body);
-    assert.strictEqual(b.page, 6); assert.ok(b.quote.includes("включая самого себя")); assert.strictEqual(b.found, true);
+    assert.strictEqual(b.page, 6, "the page where the quote stands in the book, not the model's 13 nor the section's 9"); assert.strictEqual(b.ref, "target");
+    assert.ok(b.quote.includes("включая самого себя")); assert.strictEqual(b.found, true);
     assert.strictEqual(Buffer.from(b.audio, "base64").toString(), "ID3-part1-part2");
   });
   await t("the token check is remembered (one GitHub call per half hour)", async () => {
@@ -113,6 +124,14 @@ const t = async (name, f) => { try { await f(); passed++; } catch (e) { console.
     const empty = fn._test.parseAnswer('{"answer":null,"found":false}');
     assert.strictEqual(empty.found, false); assert.strictEqual(empty.answer, "В правилах об этом ничего не сказано.");
     assert.strictEqual(fn._test.parseAnswer('{"answer":"Нет данных","found":"false"}').found, false);
+  });
+  await t("no quote in the book: the page of the named section; an unknown section: no page", async () => {
+    const rules = fs.readFileSync(path.join(rulesDir, "flip7.txt"), "utf8");
+    const a = fn._test.locate({ found: true, quote: "Совсем другая фраза из шпаргалки", section: "target" }, rules);
+    assert.strictEqual(a.page, 9); assert.strictEqual(a.ref, "target");
+    const b = fn._test.locate({ found: true, quote: "Совсем другая фраза", section: "invented" }, rules);
+    assert.strictEqual(b.page, null); assert.strictEqual(b.ref, null);
+    assert.strictEqual(fn._test.locate({ found: true, quote: "", section: "tie" }, rules).page, null);
   });
   fs.rmSync(rulesDir, { recursive: true, force: true });
   console.log(`voice: ${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

@@ -86,7 +86,11 @@
     }
     // answers of the voice assistant, kept so the same question costs nothing again (synced too)
     out.answers = arr(s.answers).filter(a => isObj(a) && typeof a.id === "string" && ID.test(a.id) && typeof a.game === "string" && ID.test(a.game) && typeof a.answer === "string")
-      .map(a => ({ id: a.id, game: a.game, q: str(a.q, 400), answer: str(a.answer, 600), quote: str(a.quote, 400), page: Number.isInteger(a.page) && a.page > 0 && a.page < 500 ? a.page : null, at: time(a.at) || 0 }));
+      .map(a => ({ id: a.id, game: a.game, q: str(a.q, 400), answer: str(a.answer, 600), quote: str(a.quote, 400),
+        // a page, or pages like «11–12» / «1, 7»; the rule section it comes from; v2 = page found by code
+        page: Number.isInteger(a.page) && a.page > 0 && a.page < 500 ? a.page : typeof a.page === "string" && /^[0-9][0-9–, ]{0,11}$/.test(a.page) ? a.page : null,
+        ref: typeof a.ref === "string" && ID.test(a.ref) ? a.ref : null, v: a.v === 2 ? 2 : 1,
+        at: time(a.at) || 0 }));
     // "this is me": which player is the owner of the app (home screen profile). A record of its own,
     // synced with its own stamp: the latest choice wins, and a device that does not know it cannot erase it
     const meRec = arr(s.profile).find(r => isObj(r) && r.id === "me" && typeof r.player === "string" && ID.test(r.player));

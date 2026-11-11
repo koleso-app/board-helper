@@ -48,15 +48,16 @@
   V.answerId = (game, question) => "a" + fnv(game + "|" + norm(question)) + fnv(norm(question) + "|" + game);
   V.ask = async (game, question, situation, signal) => {
     const id = V.answerId(game, question);
-    const saved = (BH.state.answers || []).find(a => a.id === id);
+    // answers saved before the page was found by code (v2) may show a wrong page: those are asked again
+    const saved = (BH.state.answers || []).find(a => a.id === id && a.v === 2);
     if (saved) {
       const audio = V.speaks() ? await cached(saved.answer) : null;
-      return { answer: saved.answer, quote: saved.quote, page: saved.page, found: true, audio, fromDevice: true };
+      return { answer: saved.answer, quote: saved.quote, page: saved.page, ref: saved.ref || null, found: true, audio, fromDevice: true };
     }
     const r = await call({ action: "ask", game, question, situation, speak: V.speaks() }, signal);
     if (r && r.found && r.answer) {
       const list = BH.state.answers = (BH.state.answers || []).filter(a => a.id !== id);
-      list.unshift({ id, game, q: String(question).slice(0, 400), answer: r.answer, quote: r.quote || "", page: r.page || null, at: Date.now() });
+      list.unshift({ id, game, q: String(question).slice(0, 400), answer: r.answer, quote: r.quote || "", page: r.page || null, ref: r.ref || null, v: 2, at: Date.now() });
       if (list.length > 300) list.length = 300;           // keep the latest 300
       BH.saveNow();
     }

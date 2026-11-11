@@ -30,13 +30,12 @@
   function normalize(s) {
     s = isObj(s) ? s : {};
     const players = [], seen = new Set();
+    let oldMe = null;   // 0.8.0 kept "this is me" as a flag on the player; it moved to its own record
     for (const p of arr(s.players)) {
       if (!isObj(p) || typeof p.id !== "string" || !ID.test(p.id) || seen.has(p.id) || !str(p.name)) continue;
       seen.add(p.id);
-      const rec = { id: p.id, name: str(p.name), color: COLOR.test(p.color) ? p.color : BH.COLORS[players.length % BH.COLORS.length], created: time(p.created) || Date.now(), hidden: !!p.hidden };
-      // "this is me": the owner of the app, shown on the home screen; only one player can be it
-      if (p.me === true && !players.some(x => x.me)) rec.me = true;
-      players.push(rec);
+      if (p.me === true && !oldMe) oldMe = p.id;
+      players.push({ id: p.id, name: str(p.name), color: COLOR.test(p.color) ? p.color : BH.COLORS[players.length % BH.COLORS.length], created: time(p.created) || Date.now(), hidden: !!p.hidden });
     }
     const places = arr(s.places).filter(p => isObj(p) && typeof p.id === "string" && ID.test(p.id) && str(p.name)).map(p => ({ id: p.id, name: str(p.name) }));
     const st = isObj(s.settings) ? s.settings : {};
@@ -88,8 +87,12 @@
     // answers of the voice assistant, kept so the same question costs nothing again (synced too)
     out.answers = arr(s.answers).filter(a => isObj(a) && typeof a.id === "string" && ID.test(a.id) && typeof a.game === "string" && ID.test(a.game) && typeof a.answer === "string")
       .map(a => ({ id: a.id, game: a.game, q: str(a.q, 400), answer: str(a.answer, 600), quote: str(a.quote, 400), page: Number.isInteger(a.page) && a.page > 0 && a.page < 500 ? a.page : null, at: time(a.at) || 0 }));
+    // "this is me": which player is the owner of the app (home screen profile). A record of its own,
+    // synced with its own stamp: the latest choice wins, and a device that does not know it cannot erase it
+    const meRec = arr(s.profile).find(r => isObj(r) && r.id === "me" && typeof r.player === "string" && ID.test(r.player));
+    out.profile = meRec ? [{ id: "me", player: meRec.player }] : oldMe ? [{ id: "me", player: oldMe }] : [];
     // sync stamps: when each record last changed / was deleted (see js/sync.js)
-    const META_KEY = /^(p|pl|s|q):[A-Za-z0-9_-]{1,40}$/;
+    const META_KEY = /^(p|pl|s|q|pr):[A-Za-z0-9_-]{1,40}$/;
     const m = isObj(s.meta) ? s.meta : {};
     out.meta = { u: {}, del: {} };
     for (const part of ["u", "del"]) for (const [k, t] of Object.entries(isObj(m[part]) ? m[part] : {}))
@@ -141,9 +144,10 @@
 
   /* ---------- lookups ---------- */
   BH.player = id => BH.state.players.find(p => p.id === id) || null;
-  BH.me = () => BH.state.players.find(p => p.me) || null;
-  // marks one player as "me" (or nobody, with a falsy id); the flag exists only on that player
-  BH.setMe = id => { for (const p of BH.state.players) { if (p.id === id) p.me = true; else delete p.me; } };
+  BH.meId = () => { const r = (BH.state.profile || [])[0]; return r ? r.player : null; };
+  BH.me = () => (BH.meId() && BH.player(BH.meId())) || null;
+  // marks one player as "me" (or nobody, with a falsy id)
+  BH.setMe = id => { BH.state.profile = id ? [{ id: "me", player: id }] : []; };
   BH.place = id => BH.state.places.find(p => p.id === id) || null;
   BH.session = id => BH.state.sessions.find(s => s.id === id) || null;
 

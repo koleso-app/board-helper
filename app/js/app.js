@@ -39,18 +39,24 @@
   /* Every app entry in the history remembers the screen right before it ({back: "#/..."}, null for
      the first one). "Back" links and "go back after saving" use it to step back instead of piling up
      new entries, and never leave the app by mistake. */
-  let ovPushed = false, pendingReplace = null, carry = null;   // carry: {back} for the entry a replace creates
+  /* The screens of one game (the form, setup, wheel, play, result) also carry {origin}: the screen
+     outside the game it was opened from (home, the calendar, a game's page). It passes from screen to
+     screen of the game, so its back link and a deletion return there wherever the player went inside. */
+  let ovPushed = false, pendingReplace = null, carry = null;   // carry: {back, origin} for the entry a replace creates
+  let curState = null;        // the state of the entry shown before the latest navigation
   const SCREENS = ["setup", "first", "play", "rules", "done", "edit"];
   const urlOf = h => location.pathname + location.search + h;
   const normHash = h => (!h || h === "#" || h === "#/") ? "#/" : h;
+  const inGameFlow = h => /^#\/(s\/|new)/.test(h || "");
   const backOf = () => { const st = history.state; return st && typeof st.back === "string" ? st.back : null; };
+  const originState = () => { const st = history.state; return st && typeof st.origin === "string" ? st.origin : null; };
   const backIs = h => backOf() !== null && normHash(backOf()) === normHash(h);
-  function ovOpen() { if (!ovPushed) { history.pushState({ ov: 1, back: backOf() }, ""); ovPushed = true; } }
+  function ovOpen() { if (!ovPushed) { history.pushState({ ov: 1, back: backOf(), origin: originState() }, ""); ovPushed = true; } }
   function ovSync() {   // all overlays closed by a button: remove their history entry
     if (ovPushed && !sheet && !dialog && !ask) { ovPushed = false; if (history.state && history.state.ov) history.back(); }
   }
   window.addEventListener("popstate", e => {
-    if (pendingReplace) { const h = pendingReplace; pendingReplace = null; carry = { back: backOf() }; location.replace(urlOf(h)); return; }
+    if (pendingReplace) { const h = pendingReplace; pendingReplace = null; carry = { back: backOf(), origin: originState() }; location.replace(urlOf(h)); return; }
     if (ovPushed && !(e.state && e.state.ov)) {   // Back pressed while an overlay is open: just close it
       ovPushed = false;
       if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; BH.voice.stopAudio(); ask = null; }
@@ -71,7 +77,7 @@
       return;
     }
     if (ovPushed) { ovPushed = false; pendingReplace = h; history.back(); return; }   // drop the overlay entry, then replace the screen
-    if (location.hash === h) render(); else { carry = { back: backOf() }; location.replace(urlOf(h)); }
+    if (location.hash === h) render(); else { carry = { back: backOf(), origin: originState() }; location.replace(urlOf(h)); }
   };
   function route() {
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
@@ -107,7 +113,10 @@
       else if (r.a === "s") {
         const s = BH.session(r.b);
         nav = "sessions";
-        if (!s) html = notFound("Партия не найдена. Возможно, её удалили.");
+        // a game deleted meanwhile, reached with Back: skip its entry instead of showing a dead page
+        // (only inside the app's own history; a link from outside still gets the message)
+        if (!s && backOf() !== null && !ovPushed) { history.back(); html = ""; }
+        else if (!s) html = notFound("Партия не найдена. Возможно, её удалили.");
         else {
           inGame = r.c !== "done";
           const res = viewSession(s, r.c);
@@ -131,6 +140,7 @@
     renderOverlay();
     updateSync();
     BH.assets.hydrate(main);
+    curState = history.state;
   }
   // the sync waits while the user is in the middle of something
   let spinning = false;
@@ -146,13 +156,24 @@
   // a game session can be opened from the home screen, the sessions calendar or a game's page:
   // its back link leads to where it was opened from (remembered in the history), home otherwise
   function originOf() {
-    const b = backOf(), seg = b ? normHash(b).replace(/^#\/?/, "").split("/") : [];
+    const b = originState() || backOf(), seg = b ? normHash(b).replace(/^#\/?/, "").split("/") : [];
     if (seg[0] === "sessions") return { href: b, label: "Партии" };
     if (seg[0] === "games") { const g = seg[1] && BH.game(seg[1]); return { href: b, label: g ? g.name : "Игры" }; }
-    if (seg[0] === "stats") return { href: b, label: "Статистика" };
     return { href: "#/", label: "Главная" };
   }
   const backToOrigin = label => { const o = originOf(); return backLink(o.href, label || o.label); };
+  // pages reached from several places (a game's page, players…): back to the main screen we came
+  // from when it is one, else to the usual parent
+  function backSmart(href, label) {
+    const b = backOf(), seg = b ? normHash(b).replace(/^#\/?/, "").split("/") : null;
+    if (seg) {
+      if (seg[0] === "") return backLink("#/", "Главная");
+      if (seg[0] === "games" && !seg[1]) return backLink(b, "Игры");
+      if (seg[0] === "sessions") return backLink(b, "Партии");
+      if (seg[0] === "menu") return backLink(b, "Меню");
+    }
+    return backLink(href, label);
+  }
 
   /* ---------- shared bits of the lists ---------- */
   const IC = {
@@ -627,7 +648,7 @@
   }
   function viewGame(g) {
     return `<div class="stack">
-      <div>${backLink("#/games", "Игры")}
+      <div>${backSmart("#/games", "Игры")}
         <div class="game" style="cursor:default;border:none;padding:0;background:none"><span class="cover" style="width:80px;height:80px"${BH.assets.cover(g)}>${g.cover || ""}</span>
           <span><h1>${esc(g.name)}</h1><span>${esc(g.publisher || "")}${g.year ? ", " + g.year : ""} · от ${g.players.recommendedMin || g.players.min} игроков · ${esc(g.time || "")} · ${esc(g.age || "")}</span></span></div></div>
       ${g.tagline ? `<p>${esc(g.tagline)}</p>` : ""}
@@ -637,7 +658,7 @@
   }
 
   /* ---------- players & places ---------- */
-  let editPlayer = null;
+  let editPlayer = null, editKeep = null;   // editKeep: what was typed in the open form, kept over a redraw
   function viewPlayers() {
     const fin = S().sessions.filter(s => s.status === "finished");
     const all = S().players;
@@ -645,18 +666,18 @@
       const played = fin.filter(s => s.players.includes(p.id)).length, wins = fin.filter(s => s.winners.includes(p.id)).length;
       if (editPlayer === p.id) {
         return `<form class="panel stack" data-form="edit-player" data-id="${p.id}" style="margin:8px 0">
-          <label class="field">Имя<input class="input" name="name" value="${esc(p.name)}" maxlength="40" required></label>
+          <label class="field">Имя<input class="input" name="name" value="${esc(editKeep && editKeep.id === p.id ? editKeep.name : p.name)}" maxlength="40" required></label>
           <div class="field">Цвет<div class="swatches">${BH.COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-act="pick-color" data-id="${p.id}" data-c="${c}" aria-pressed="${p.color === c}" aria-label="Цвет ${c}"></button>`).join("")}</div></div>
-          <label class="check" style="font-weight:500"><input type="checkbox" name="me" ${p.me ? "checked" : ""}> Это я — мой профиль и статистика на главной</label>
+          <label class="check" style="font-weight:500"><input type="checkbox" name="me" ${(editKeep && editKeep.id === p.id ? editKeep.me : BH.meId() === p.id) ? "checked" : ""}> Это я — мой профиль и статистика на главной</label>
           <div class="actions"><button class="btn primary" type="submit">Сохранить</button><button class="btn" type="button" data-act="edit-player" data-id="">Отмена</button>
             <button class="btn ghost" type="button" data-act="hide-player" data-id="${p.id}">${p.hidden ? "Вернуть в список" : played ? "Скрыть из выбора" : "Удалить"}</button></div>
         </form>`;
       }
-      return `<div class="item" style="${p.hidden ? "opacity:.55" : ""}">${BH.avatar(p)}<div class="t"><b>${esc(p.name)}${p.me ? ' <span class="badge accent">это я</span>' : ""}</b><span>${played ? `${played} ${BH.plural(played, "партия", "партии", "партий")} · ${wins} ${BH.plural(wins, "победа", "победы", "побед")}` : "ещё не играл(а)"}${p.hidden ? " · скрыт" : ""}</span></div>
+      return `<div class="item" style="${p.hidden ? "opacity:.55" : ""}">${BH.avatar(p)}<div class="t"><b>${esc(p.name)}</b>${BH.meId() === p.id ? '<span class="badge accent me-badge">это я</span>' : ""}<span>${played ? `${played} ${BH.plural(played, "партия", "партии", "партий")} · ${wins} ${BH.plural(wins, "победа", "победы", "побед")}` : "ещё не играл(а)"}${p.hidden ? " · скрыт" : ""}</span></div>
         <button class="icon-btn" data-act="edit-player" data-id="${p.id}" aria-label="Изменить ${esc(p.name)}">${I.edit}</button></div>`;
     };
     return `<div class="stack">
-      <div>${backLink("#/menu", "Меню")}<div class="page-head"><div><h1>Игроки</h1><p class="sub">Друзья и семья, с кем вы играете.</p></div></div></div>
+      <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Игроки</h1><p class="sub">Друзья и семья, с кем вы играете.</p></div></div></div>
       ${all.length && !BH.me() ? `<div class="note info small">Отметьте себя: нажмите ✎ у своего имени и поставьте галочку «Это я» — тогда на главной будет ваш профиль и ваши партии.</div>` : ""}
       <section class="panel">
         <form class="row" data-form="add-player-page" style="margin-bottom:6px"><input class="input" name="name" placeholder="Имя игрока" maxlength="40" aria-label="Имя игрока"><button class="btn primary" type="submit">Добавить</button></form>
@@ -665,9 +686,9 @@
     </div>`;
   }
   function viewPlaces() {
-    const fin = S().sessions.filter(s => s.status === "finished");
+    const fin = finishedSessions();
     return `<div class="stack">
-      <div>${backLink("#/menu", "Меню")}<div class="page-head"><div><h1>Места</h1><p class="sub">Где вы играете — для статистики.</p></div></div></div>
+      <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Места</h1><p class="sub">Где вы играете — для статистики.</p></div></div></div>
       <section class="panel">
         <div class="list">${S().places.length ? S().places.map(p => { const n = fin.filter(s => s.placeId === p.id).length; return `<div class="item"><div class="t"><b>${esc(p.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играли"}</span></div>${n ? "" : `<button class="icon-btn" data-act="del-place" data-id="${p.id}" aria-label="Удалить место ${esc(p.name)}">${I.trash}</button>`}</div>`; }).join("") : `<p class="muted small" style="padding:8px 0">Мест пока нет.</p>`}</div>
         <form class="row" data-form="add-place" style="margin-top:8px"><input class="input" name="name" placeholder="Новое место" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>
@@ -691,7 +712,7 @@
     const byPlace = [...S().places, { id: null, name: "Не указано" }].map(p => ({ p, n: fin.filter(s => (s.placeId || null) === p.id).length })).filter(x => x.n);
     const opts = `<option value="">Все игры</option>${BH.games.map(g => `<option value="${g.id}" ${g.id === statsGame ? "selected" : ""}>${esc(g.name)}</option>`).join("")}`;
     return `<div class="stack">
-      <div>${backLink("#/menu", "Меню")}<div class="page-head"><div><h1>Статистика</h1><p class="sub">По завершённым партиям.</p></div>
+      <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Статистика</h1><p class="sub">По завершённым партиям.</p></div>
         <select class="input" style="width:auto" data-act="stats-game" aria-label="Игра">${opts}</select></div></div>
       <div class="kpis">
         <div class="kpi"><b>${fin.length}</b><span>${BH.plural(fin.length, "партия", "партии", "партий")}</span></div>
@@ -730,7 +751,7 @@
           <label class="btn">Загрузить из копии<input type="file" accept="application/json,.json" data-act="import" hidden></label></div>
       </section>`;
     else return viewMenu();
-    return `<div class="stack"><div>${backLink("#/menu", "Меню")}</div>${body}</div>`;
+    return `<div class="stack"><div>${backSmart("#/menu", "Меню")}</div>${body}</div>`;
   }
 
   /* ---------- voice assistant: settings ---------- */
@@ -739,7 +760,7 @@
     const seg = (key, val, label) => `<button type="button" data-act="set" data-k="${key}" data-v="${val}" aria-pressed="${String(st[key]) === String(val)}">${label}</button>`;
     return `<section class="panel stack" id="voice-panel">
       <div class="spread"><h2>Голосовой помощник</h2>${ready ? '<span class="badge good">работает</span>' : '<span class="badge">не подключён</span>'}</div>
-      <p class="small muted">Спросите голосом во время партии: помощник найдёт ответ в книге правил, покажет короткий ответ и цитату со страницей, а если хотите — ещё и прочитает ответ вслух. Работает через ваш Yandex Cloud и только для вас: доступ даёт подключённая выше синхронизация.</p>
+      <p class="small muted">Спросите голосом во время партии: помощник найдёт ответ в книге правил, покажет короткий ответ и цитату со страницей, а если хотите — ещё и прочитает ответ вслух. Работает через ваш Yandex Cloud и только для вас: доступ даёт синхронизация с GitHub (Меню → Синхронизация).</p>
       ${ready ? "" : `<p class="note info small">${esc(V.why())}</p>`}
       <div class="spread"><span class="small"><b>Озвучивать ответы</b><br><span class="muted">${st.speakAnswers ? "Ответ звучит вслух и виден на экране." : "Ответ только на экране — так дешевле и тише."}</span></span><div class="seg">${seg("speakAnswers", true, "Вкл")}${seg("speakAnswers", false, "Выкл")}</div></div>
       ${st.speakAnswers ? `<label class="field">Голос
@@ -1240,8 +1261,13 @@
       case "fold-all": { const box = document.getElementById(el.dataset.in); if (box) box.querySelectorAll("details.fold, details.fold-grp").forEach(d => { d.open = el.dataset.open === "1"; }); break; }
 
       /* players */
-      case "edit-player": editPlayer = el.dataset.id || null; render(); break;
-      case "pick-color": { const p = BH.player(el.dataset.id); if (p) { p.color = el.dataset.c; BH.save(); render(); } break; }
+      case "edit-player": editPlayer = el.dataset.id || null; editKeep = null; render(); break;
+      case "pick-color": {
+        const p = BH.player(el.dataset.id), f = el.closest("form");
+        if (f && f.elements.name) editKeep = { id: el.dataset.id, name: f.elements.name.value, me: !!(f.elements.me && f.elements.me.checked) };   // the redraw keeps what was typed
+        if (p) { p.color = el.dataset.c; BH.save(); render(); }
+        break;
+      }
       case "hide-player": {
         const p = BH.player(el.dataset.id); if (!p) break;
         const used = S().sessions.some(x => x.players.includes(p.id));
@@ -1388,10 +1414,10 @@
       if (p && name) {
         p.name = name.slice(0, 40);
         const me = !!(f.elements.me && f.elements.me.checked);
-        if (me) BH.setMe(p.id); else if (p.me) BH.setMe(null);
+        if (me) BH.setMe(p.id); else if (BH.meId() === p.id) BH.setMe(null);
         BH.saveNow();
       }
-      editPlayer = null; render();
+      editPlayer = null; editKeep = null; render();
     }
   });
 
@@ -1413,7 +1439,12 @@
   window.addEventListener("hashchange", e => {
     prevHash = e.oldURL && e.oldURL.includes("#") ? "#" + e.oldURL.split("#")[1] : "";
     // a new entry (a link, or a replace): remember the screen before it; entries we step back to keep theirs
-    if (!history.state || !("back" in history.state)) history.replaceState({ back: carry ? carry.back : prevHash }, "");
+    if (!history.state || !("back" in history.state)) {
+      const st = { back: carry ? carry.back : prevHash };
+      // a screen of a game: where the game was opened from — kept while moving inside the game
+      if (inGameFlow(location.hash)) st.origin = carry ? carry.origin : inGameFlow(prevHash) ? (curState && typeof curState.origin === "string" ? curState.origin : null) : prevHash;
+      history.replaceState(st, "");
+    }
     carry = null;
     // key moments for the sync: a game form or the players / settings page is left,
     // a game reaches its result, or we are back on the home screen (e.g. after a delete)
@@ -1435,7 +1466,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.8.0";
+  BH.version = "0.8.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

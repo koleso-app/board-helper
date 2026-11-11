@@ -110,10 +110,10 @@
   /* ---------- merge: per record, last writer wins, deletions remembered ----------
    * meta.u[key]   = when the record was last changed on any device
    * meta.del[key] = when it was deleted
-   * keys: p:<player>  pl:<place>  s:<session>
+   * keys: p:<player>  pl:<place>  s:<session>  q:<answer>  pr:me (which player is "me")
    * Equal stamps: the remote copy wins, so every device ends with the same data.
    * Settings (theme, voice speed) belong to the device and are never synced. */
-  const COLLECTIONS = [["players", "p:"], ["places", "pl:"], ["sessions", "s:"], ["answers", "q:"]];
+  const COLLECTIONS = [["players", "p:"], ["places", "pl:"], ["sessions", "s:"], ["answers", "q:"], ["profile", "pr:"]];
   function merge(L, R) {
     L = L || {}; R = R || {};
     const u = {}, del = {};
@@ -143,6 +143,7 @@
     out.places.sort((a, b) => (a.id === "home" ? -1 : b.id === "home" ? 1 : byId(a, b)));
     out.sessions.sort((a, b) => (b.created || 0) - (a.created || 0) || byId(a, b));
     out.answers.sort((a, b) => (b.at || 0) - (a.at || 0) || byId(a, b));
+    out.profile.sort(byId);
     return out;
   }
 
@@ -173,7 +174,7 @@
     return JSON.stringify(v);
   }
   /* what travels: everything but this device's own settings */
-  const shared = s => ({ v: 1, players: s.players || [], places: s.places || [], sessions: s.sessions || [], answers: s.answers || [], meta: s.meta || { u: {}, del: {} } });
+  const shared = s => ({ v: 1, players: s.players || [], places: s.places || [], sessions: s.sessions || [], answers: s.answers || [], profile: s.profile || [], meta: s.meta || { u: {}, del: {} } });
   // the same records and stamps, whatever their order in the lists
   const sameData = (a, b) => {
     const A = recordMap(a), B = recordMap(b);

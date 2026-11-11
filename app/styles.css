@@ -128,11 +128,6 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 
 /* ---------- home ---------- */
-.hero{display:grid;gap:14px;background:var(--accent);color:var(--accent-ink);border-radius:20px;padding:20px;position:relative;overflow:hidden}
-.hero h1{font-size:24px}
-.hero p{opacity:.88;max-width:46ch}
-.hero .btn{background:var(--accent-ink);color:var(--accent);border-color:var(--accent-ink);justify-self:start}
-.hero .deco{position:absolute;right:-18px;bottom:-26px;width:150px;opacity:.22;pointer-events:none}
 .list{display:flex;flex-direction:column}
 .list .item{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);text-decoration:none;color:inherit;min-width:0}
 .list .item:first-child{border-top:none}
@@ -357,13 +352,13 @@ body.in-game #toast-root{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
 /* ---------- home, games, sessions calendar, menu ---------- */
-.stroke-ic svg,.profile-stats svg,.gcard-count svg,.gcard-win svg,.gcard-meta svg,.won>svg,.grow-n svg,.menu-ic svg,.menu-chev svg,.tile-ic svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.profile-stats svg,.gcard-count svg,.gcard-win svg,.gcard-meta svg,.won>svg,.grow-n svg,.menu-ic svg,.menu-chev svg,.tile-ic svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .cover svg{width:100%;height:100%}
 .profile{display:flex;align-items:center;gap:16px;padding:4px 2px}
 .avatar.xl{width:76px;height:76px;font-size:28px}
 .avatar-empty{background:var(--sunk);color:var(--muted);text-shadow:none}
 .profile-t{min-width:0;display:flex;flex-direction:column;gap:6px}
-.profile-t h1{font-size:26px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-t h1{font-size:clamp(20px,6.2vw,26px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .profile-stats{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--ink);font-size:15.5px}
 .profile-stats span{display:inline-flex;align-items:center;gap:6px}
 .profile-stats svg{width:20px;height:20px}
@@ -391,12 +386,12 @@ body.in-game #toast-root{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .won{display:inline-flex;align-items:center;gap:4px;color:#C99700;flex:none}
 .won>svg{width:20px;height:20px}
 .glist{display:flex;flex-direction:column;gap:10px}
-.grow{position:relative;display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface);text-decoration:none;color:inherit;min-width:0}
-.grow[hidden]{display:none}
-.grow .cover{width:64px;height:64px;border-radius:12px;overflow:hidden;flex:none;display:grid;place-items:center;background:var(--sunk)}
-.grow .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.grow .t b{font-family:var(--f-display);font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.grow .t span{font-size:14px;color:var(--muted)}
+.glist .grow{position:relative;display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface);text-decoration:none;color:inherit;min-width:0}
+.glist .grow[hidden]{display:none}
+.glist .grow .cover{width:64px;height:64px;border-radius:12px;overflow:hidden;flex:none;display:grid;place-items:center;background:var(--sunk)}
+.glist .grow .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.glist .grow .t b{font-family:var(--f-display);font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glist .grow .t span{font-size:14px;color:var(--muted)}
 .grow-n{position:absolute;top:-1px;right:-1px;display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 9px;border-radius:0 16px 0 12px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700}
 .grow-n svg{width:15px;height:15px}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
@@ -416,3 +411,4 @@ body.in-game #toast-root{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .menu-chev{color:var(--muted);flex:none}
 .menu-chev svg{width:18px;height:18px}
 @media (min-width:900px){.hscroll{margin:0;padding:2px 0 6px}}
+.list .item .t .me-badge{display:inline-flex;margin:2px 6px 2px 0;font-size:12px;color:var(--accent);vertical-align:1px}

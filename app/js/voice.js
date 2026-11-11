@@ -20,7 +20,7 @@
     setVoice: v => write(LS_VOICE, v),
     // ready when there is a function address and the sync connection that grants access
     ready: () => !!(V.url() && BH.cloud && BH.cloud.cfg),
-    why: () => !V.url() ? "Голосовой помощник ещё не подключён: нет адреса функции." : !(BH.cloud && BH.cloud.cfg) ? "Подключите синхронизацию с GitHub в настройках: она же даёт доступ к голосовому помощнику." : "",
+    why: () => !V.url() ? "Голосовой помощник ещё не подключён: нет адреса функции." : !(BH.cloud && BH.cloud.cfg) ? "Подключите синхронизацию с GitHub (Меню → Синхронизация): она же даёт доступ к голосовому помощнику." : "",
     canListen: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
     // answers read aloud? Off: the function is not even asked for sound, so speech costs nothing
     speaks: () => !(BH.state && BH.state.settings && BH.state.settings.speakAnswers === false),

@@ -43,7 +43,7 @@ function device(name, storage) {
   ctx.fetch = fakeFetchFor(dev);
   vm.createContext(ctx);
   for (const f of FILES) vm.runInContext(fs.readFileSync(path.join(APP, f), "utf8"), ctx, { filename: f });
-  dev.BH = ctx.BH;
+  dev.BH = ctx.BH; dev.ctx = ctx;
   dev.fire = t => (listeners[t] || []).forEach(f => f());
   return dev;
 }
@@ -194,6 +194,29 @@ async function t(name, fn) { try { await fn(); passed++; } catch (e) { console.e
     const w = gh.writes;
     await A.BH.cloud.syncNow();
     assert.strictEqual(gh.writes, w, "and nothing more is written");
+  });
+  await t("'this is me': the latest choice wins on every device", async () => {
+    const ann = A.BH.state.players.find(p => p.name === "Аннушка").id, bor = A.BH.state.players.find(p => p.name === "Боря").id;
+    A.BH.setMe(ann); A.BH.saveNow();
+    await A.BH.cloud.syncNow();
+    await new Promise(r => setTimeout(r, 5));
+    await B.BH.cloud.syncNow();
+    B.BH.setMe(bor); B.BH.saveNow();            // later, on the other device, someone else is picked
+    await B.BH.cloud.syncNow(); await A.BH.cloud.syncNow();
+    assert.strictEqual(A.BH.meId(), bor); assert.strictEqual(B.BH.meId(), bor);
+  });
+  await t("a device that does not know 'this is me' (older version) cannot erase it", async () => {
+    const O = device("OLD", JSON.parse(JSON.stringify(B.store)));
+    // an older version neither keeps nor sends the record: strip it from what it writes
+    const L = vm.runInContext("BHSync", O.ctx);
+    const shared = L.shared;
+    L.shared = s => { const x = shared(s); x.profile = []; for (const part of ["u", "del"]) for (const k of Object.keys(x.meta[part])) if (k.startsWith("pr:")) delete x.meta[part][k]; return x; };
+    await addGame(O, "Глеб");                    // the old device records a game and sends everything it knows
+    await O.BH.cloud.syncNow();
+    assert.strictEqual(gh.lastWriter, "OLD", "the old device did write the file without the record");
+    await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();
+    const bor = A.BH.state.players.find(p => p.name === "Боря").id;
+    assert.strictEqual(A.BH.meId(), bor); assert.strictEqual(B.BH.meId(), bor);
   });
   await t("nothing to send means no write", async () => {
     await A.BH.cloud.syncNow(); await B.BH.cloud.syncNow();

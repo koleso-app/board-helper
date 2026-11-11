@@ -112,7 +112,6 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:8px 14px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;font-weight:500;font-size:15px}
 .chip[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
-.chip.add{border-style:dashed;color:var(--muted)}
 .dot{width:12px;height:12px;border-radius:50%;flex:none;display:inline-block}
 .avatar{width:36px;height:36px;border-radius:50%;display:inline-grid;place-items:center;color:#fff;font-weight:700;font-family:var(--f-display);font-size:14px;flex:none;text-shadow:0 1px 1px rgba(0,0,0,.25)}
 .avatar.sm{width:28px;height:28px;font-size:12px}
@@ -141,9 +140,7 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (min-width:900px){.cols{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
 
 /* ---------- game cards ---------- */
-.games{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .game{display:flex;gap:14px;align-items:center;padding:14px;border-radius:var(--r);border:1.5px solid var(--line);background:var(--surface);cursor:pointer;text-align:left;width:100%;text-decoration:none;color:inherit}
-.game[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
 .game .cover{width:64px;height:64px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden}
 .game .cover svg{width:100%;height:100%}
 .game b{display:block;font-family:var(--f-display);font-weight:600;font-size:16px}
@@ -151,24 +148,16 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .game h1{color:var(--ink)}
 
 /* ---------- wizard ---------- */
-.steps-bar{display:flex;gap:6px;margin:4px 0 2px}
-.steps-bar i{height:5px;flex:1;border-radius:99px;background:var(--line)}
-.steps-bar i.on{background:var(--accent)}
 .seat{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .seat:first-child{border-top:none}
 .seat .n{width:22px;text-align:center;color:var(--muted);font-weight:600;font-size:14px}
 .seat .mv{display:flex;gap:2px}
+.seat>span:not(.n):not(.mv){min-width:0;overflow-wrap:anywhere}
 .sticky-foot{position:sticky;bottom:0;z-index:5;margin:0 -16px -32px;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
   background:linear-gradient(to top,var(--bg) 70%,transparent)}
 @media (min-width:900px){.sticky-foot{margin:0;padding:12px 0 16px}}
 
 /* ---------- new game form: numbered sections ---------- */
-.form-sec{display:flex;flex-direction:column;gap:10px}
-.sec-head{display:flex;gap:12px;align-items:flex-start}
-.sec-head h2{font-size:17px;margin-top:3px}
-.sec-n{width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:13px;flex:none}
-.game-mini{width:48px;height:48px;border-radius:10px;overflow:hidden;flex:none;display:block}
-.game-mini svg,.game-mini img{width:100%;height:100%;object-fit:cover;display:block}
 input[type="datetime-local"].input{min-height:48px}
 
 /* ---------- setup steps ---------- */
@@ -180,7 +169,7 @@ input[type="datetime-local"].input{min-height:48px}
 /* rulebook pictures (private, see js/assets.js) replace the drawn schematic when available */
 .art.has-img{aspect-ratio:auto;display:flex;flex-direction:column;gap:6px;padding:6px;background:#FDF6E3}
 .art.has-img img,.rule-img img.a-wide{width:100%;height:auto;display:block;border-radius:8px}
-.cover.has-img img,.game-mini.has-img img{width:100%;height:100%;object-fit:cover;display:block}
+.cover.has-img img{width:100%;height:100%;object-fit:cover;display:block}
 .rule-img{display:flex;flex-wrap:wrap;gap:8px}
 .rule-img:empty{display:none}
 .rule-img img.a-card{width:96px;height:auto;border-radius:8px;display:block}
@@ -466,7 +455,7 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 
 /* ---------- new game: steps ---------- */
 .stepper{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:4px 14px}
-.step{position:relative}
+.step{position:relative;scroll-margin:12px 0 130px}
 .step:not(:last-child)::before{content:"";position:absolute;left:15px;top:44px;bottom:-12px;width:2px;background:var(--line)}
 .step.open::before{background:var(--accent)}
 .step-head{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px 0;background:none;border:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
@@ -477,16 +466,17 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .step-n svg{width:18px;height:18px;stroke-width:2.6}
 .step-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .step-t b{font-size:16px;font-weight:600}
-.step-sum{display:flex;align-items:center;gap:6px;min-width:0;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step-sum{display:block;min-width:0;font-size:14px;line-height:24px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step-sum .faces{display:inline-flex;vertical-align:middle;margin-right:6px}
 .step-sum .faces .avatar{width:22px;height:22px;font-size:9px;margin-left:-6px;border-width:1.5px}
 .step-sum .faces .avatar:first-child{margin-left:0}
-.sum-cover{width:22px;height:22px;border-radius:5px;overflow:hidden;flex:none;display:inline-grid;place-items:center}
+.sum-cover{width:22px;height:22px;border-radius:5px;overflow:hidden;display:inline-grid;place-items:center;vertical-align:middle;margin-right:6px}
 .warn-t{color:var(--warn);font-weight:600}
 .step-chev{color:var(--muted);flex:none}
 .step-chev svg{width:20px;height:20px;stroke-width:2;transition:transform .2s}
 .step.open .step-chev svg{transform:rotate(180deg)}
 .step-body{display:flex;flex-direction:column;gap:10px;padding:0 0 16px 44px;min-width:0}
-.pick-list{display:flex;flex-direction:column;gap:2px;max-height:min(52vh,430px);overflow-y:auto;margin:0 -6px;padding:0 6px;overscroll-behavior:contain}
+.pick-list{display:flex;flex-direction:column;gap:2px;max-height:min(42vh,380px);overflow-y:auto;margin:0 -6px;padding:0 6px}
 .pick-row{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:8px;border:none;border-radius:12px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .pick-row[aria-pressed="true"]{background:var(--accent-soft)}
 .pick-row .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -498,5 +488,5 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .pick-on{color:var(--accent);flex:none}
 .pick-on svg{width:22px;height:22px;stroke-width:2.6}
 .last-btn{align-self:flex-start;white-space:normal;text-align:left;height:auto;min-height:40px;line-height:1.3}
-.foot-hint{display:table;margin:0 auto 8px;padding:4px 12px;border-radius:999px;background:var(--warn-soft);font-size:13.5px;color:var(--warn);font-weight:600}
-@media (max-width:420px){.step-body{padding-left:0;position:relative;z-index:1;background:var(--surface)}}
+.foot-hint{display:table;margin:0 auto 8px;padding:4px 12px;border-radius:999px;background:var(--warn-soft);font-size:13.5px;color:var(--ink);font-weight:600}
+@media (max-width:420px){.step-body{padding-left:0;position:relative;z-index:1;background:var(--surface)}.step.open::before{display:none}}

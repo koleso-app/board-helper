@@ -44,6 +44,8 @@
      screen of the game, so its back link and a deletion return there wherever the player went inside. */
   let ovPushed = false, pendingReplace = null, carry = null;   // carry: {back, origin} for the entry a replace creates
   let curState = null;        // the state of the entry shown before the latest navigation
+  let quietUntil = 0;         // taps are ignored until then: the screen has just changed under the finger
+  const quiet = () => { quietUntil = Date.now() + 350; };
   const SCREENS = ["setup", "first", "play", "rules", "done", "edit"];
   const urlOf = h => location.pathname + location.search + h;
   const normHash = h => (!h || h === "#" || h === "#/") ? "#/" : h;
@@ -101,6 +103,28 @@
       { label: "Отмена", run: closeDialog }] });
   }
 
+  // what a redraw of the same screen would lose: list scroll, typed text, the focused control
+  const keyOf = el => {
+    if (!el || !el.tagName) return null;
+    const f = el.closest("form[data-form]");
+    if (f && el.name) return `form[data-form="${f.dataset.form}"] [name="${el.name}"]`;
+    if (!el.dataset || !el.dataset.act) return null;
+    let k = `[data-act="${el.dataset.act}"]`;
+    for (const a of ["id", "step", "list", "tab", "p", "i"]) if (el.dataset[a] !== undefined) k += `[data-${a}="${CSS.escape(el.dataset[a])}"]`;
+    return k;
+  };
+  function keepState() {
+    const st = { scroll: [], values: [], focus: keyOf(main.contains(document.activeElement) ? document.activeElement : null) };
+    main.querySelectorAll(".pick-list[data-list]").forEach(l => st.scroll.push([l.dataset.list, l.scrollTop]));
+    main.querySelectorAll('input[data-act="pick-q"], form[data-form] input[name="name"]:not([type=hidden])').forEach(i => { if (i.value) st.values.push([keyOf(i), i.value]); });
+    return st;
+  }
+  function restoreState(st) {
+    for (const [k, v] of st.values) { const i = k && BH.$(k); if (i && !i.value) { i.value = v; if (i.dataset.act === "pick-q") i.dispatchEvent(new Event("input", { bubbles: true })); } }
+    for (const [list, top] of st.scroll) { const l = BH.$('.pick-list[data-list="' + list + '"]'); if (l) l.scrollTop = top; }
+    if (st.focus) { const n = BH.$(st.focus); if (n) n.focus({ preventScroll: true }); }
+  }
+  let renderedHash = null;
   function render() {
     const r = route();
     let html = "", nav = "home", inGame = false, after = null;
@@ -138,7 +162,10 @@
       console.error(e);
       html = `<div class="note">Что-то пошло не так: ${esc(e.message)}. <a href="#/">На главную</a></div>`;
     }
+    const same = renderedHash === location.hash, kept = same ? keepState() : null;
     main.innerHTML = html;
+    renderedHash = location.hash;
+    if (kept) restoreState(kept);
     document.body.classList.toggle("in-game", inGame);
     BH.$$("[data-nav]").forEach(a => { if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     if (after) after();
@@ -351,14 +378,18 @@
      (#/s/<id>/edit). A date in the past turns it into "record a game you already played". */
   const PAST_MS = 3 * 3600 * 1000;
   const visiblePlayers = ids => ids.filter(id => { const p = BH.player(id); return p && !p.hidden; });
+  // the game to take "as last time" from: the latest finished one of this game, else the latest finished one
+  function lastSessionFor(gameId) {
+    const fin = finishedSessions().sort((a, b) => (b.created || 0) - (a.created || 0));
+    return (gameId && fin.find(x => x.gameId === gameId)) || fin[0] || null;
+  }
   function startDraft(gameId, from) {
     if (from) {
       draft = { editId: from.id, date: from.created, gameId: from.gameId, exp: from.exp.slice(), placeId: from.placeId, players: from.players.slice(), opts: Object.assign({}, from.opts), final: {}, winners: [], step: null, lastPlayers: [] };
       return;
     }
-    const byDate = S().sessions.slice().sort((a, b) => (b.created || 0) - (a.created || 0));
-    const last = byDate[0], lastSame = gameId ? byDate.find(s => s.gameId === gameId) : null;
-    const gid = gameId || (BH.games.length === 1 ? BH.games[0].id : null);
+    const gid = (gameId && BH.game(gameId) ? gameId : null) || (BH.games.length === 1 ? BH.games[0].id : null);
+    const last = lastSessionFor(gid), lastSame = last && last.gameId === gid ? last : null;
     const me = BH.me();
     draft = {
       date: Date.now(),
@@ -366,7 +397,7 @@
       exp: lastSame ? lastSame.exp.slice() : [],
       placeId: (last && BH.place(last.placeId) ? last.placeId : (S().places[0] || {}).id) || null,
       players: me && !me.hidden ? [me.id] : [],                    // me first; the rest in one tap
-      lastPlayers: visiblePlayers((lastSame || last || { players: [] }).players),
+      lastPlayers: visiblePlayers(last ? last.players : []),
       opts: {}, final: {}, winners: [],
     };
     draft.step = nextStep();
@@ -389,9 +420,13 @@
     if (n > g.players.max) return `Для ${g.name} не больше ${g.players.max} игроков`;
     return "";
   }
-  // the first step that still needs something, or none
   function pickDraftGame(id) {
-    if (draft.gameId !== id) { const last = S().sessions.find(x => x.gameId === id); draft.gameId = id; draft.exp = last ? last.exp.slice() : []; draft.opts = {}; }
+    if (draft.gameId !== id) {
+      const last = lastSessionFor(id);
+      draft.gameId = id; draft.opts = {};
+      draft.exp = last && last.gameId === id ? last.exp.slice() : [];
+      if (!draft.editId) draft.lastPlayers = visiblePlayers(last ? last.players : []);
+    }
     draft.step = nextStep();
   }
   // the first step that still needs something: the game, then the players until there are as many
@@ -404,10 +439,10 @@
     if (ts >= prev.getTime() && ts < start) return "Вчера, " + t;
     return BH.fmtDate(ts) + ", " + t;
   };
-  const playsOf = (field, id) => finishedSessions().filter(s => field === "game" ? s.gameId === id : field === "place" ? s.placeId === id : s.players.includes(id)).length;
+  const playsOf = (field, id) => finishedSessions().filter(s => field === "place" ? s.placeId === id : s.players.includes(id)).length;
 
   function viewNew() {
-    if (!draft) startDraft();
+    if (!draft) startDraft(route().b || null);   // #/new/<game> keeps the game over a reload or Back / Forward
     const g = BH.game(draft.gameId), past = draftPast(), cnt = draft.players.length;
     let num = 0;
     // a step: its head (number or a tick when filled in, title, one line of what is chosen) and,
@@ -427,14 +462,14 @@
     const dateSec = step2("date", "Дата игры", esc(whenText(draft.date)) + (past ? ' · <span class="warn-t">сыгранная: сразу итог</span>' : ""),
       `<div class="row"><input class="input" type="datetime-local" data-act="draft-date" value="${localInput(draft.date)}" max="${localInput(Date.now() + 86400000)}" aria-label="Дата и время игры">
         <button type="button" class="btn sm" data-act="draft-now">Сейчас</button></div>
-       <p class="small muted">Поставьте прошлую дату, чтобы записать уже сыгранную партию: без подготовки и раундов, сразу очки и победитель.</p>`, true);
+       ${draft.editId ? "" : `<p class="small muted">Поставьте прошлую дату, чтобы записать уже сыгранную партию: без подготовки и раундов, сразу очки и победитель.</p>`}`, true);
 
     // game: search, most played first, a random pick that fits the players
     const ranked = gamesByPlays();
     const gameBody = draft.editId ? `<p class="small muted">Игру у созданной партии не поменять: для другой игры создайте новую партию.</p>` : `
       ${BH.games.length > 6 ? `<div class="search">${I.search}<input class="input" type="search" data-act="pick-q" data-list="games" placeholder="Найти игру" aria-label="Найти игру" autocomplete="off"></div>` : ""}
       <div class="pick-list" data-list="games">${ranked.map(({ g: x, n: k }) => `<button type="button" class="pick-row" data-act="pick-game" data-id="${esc(x.id)}" data-name="${esc(x.name.toLowerCase())}" aria-pressed="${x.id === draft.gameId}">
-        ${coverOf(x, "mini")}<span class="t"><b>${esc(x.name)}</b><span>${k ? k + " " + BH.plural(k, "партия", "партии", "партий") + " · " : ""}${x.players.min}–${x.players.max} игроков · ${esc(x.time || "")}</span></span>
+        ${coverOf(x, "mini")}<span class="t"><b>${esc(x.name)}</b><span>${k ? k + " " + BH.plural(k, "партия", "партии", "партий") + " · " : ""}${x.players.min === x.players.max ? x.players.min : x.players.min + "–" + x.players.max} ${BH.plural(x.players.max, "игрок", "игрока", "игроков")} · ${esc(x.time || "")}</span></span>
         ${x.id === draft.gameId ? `<span class="pick-on">${I.check}</span>` : ""}</button>`).join("")}</div>
       ${BH.games.length > 1 ? `<button type="button" class="btn ghost sm" data-act="draft-random">${IC.dice}Случайная игра</button>` : ""}`;
     const expBody = g && g.expansions.length ? `<div class="label" style="margin-top:6px">Дополнения</div><div class="chips">${g.expansions.map(e => `<button class="chip" data-act="toggle-exp" data-id="${e.id}" aria-pressed="${draft.exp.includes(e.id)}">${esc(e.name)}</button>`).join("")}</div>` : "";
@@ -454,7 +489,7 @@
       const meId = BH.me() ? BH.meId() : null;
       const pool = S().players.filter(p => !p.hidden || draft.players.includes(p.id))
         .map(p => ({ p, k: playsOf("player", p.id) })).sort((a, b) => (b.p.id === meId) - (a.p.id === meId) || b.k - a.k || a.p.name.localeCompare(b.p.name, "ru"));
-      const lastAdd = draft.lastPlayers.filter(id => !draft.players.includes(id));
+      const lastAdd = draft.lastPlayers.filter(id => BH.player(id) && !draft.players.includes(id));
       const opts = g ? draftOptions(g) : [];
       playersBody = `
         ${lastAdd.length ? `<button type="button" class="btn sm last-btn" data-act="draft-last-players">${I.plus}Как в прошлой партии: ${esc(lastAdd.map(id => BH.player(id).name).join(", "))}</button>` : ""}
@@ -489,15 +524,16 @@
     return `<div class="stack">
       <div>${back}<div class="page-head"><div><h1>${draft.editId ? "Партия" : past ? "Сыгранная партия" : "Новая партия"}</h1></div></div></div>
       <div class="stepper">${dateSec}${gameSec}${placeSec}${playersSec}${resultSec}</div>
-      <div class="sticky-foot">${problem ? `<p class="foot-hint">${esc(problem)}</p>` : ""}<button class="btn primary big block" data-act="draft-save" ${problem ? "disabled" : ""}>${label}</button></div>
+      <div class="sticky-foot">${problem ? `<p class="foot-hint" id="foot-hint" role="status">${esc(problem)}</p>` : ""}<button class="btn primary big block" data-act="draft-save" ${problem ? 'disabled aria-describedby="foot-hint"' : ""}>${label}</button></div>
     </div>`;
   }
 
   function saveDraft() {
+    if (!draft) return;
     const g = BH.game(draft.gameId);
     if (!g) return;
     const opts = {};
-    for (const o of BH.gameOptions(g, draftCtx())) opts[o.id] = !!draft.opts[o.id];
+    if (!draftPast()) for (const o of BH.gameOptions(g, draftCtx())) opts[o.id] = !!draft.opts[o.id];   // a recorded game has no options in play
     if (draft.editId) {
       const s = BH.session(draft.editId);
       if (!s) { draft = null; go("#/"); return; }
@@ -1292,6 +1328,7 @@
 
   /* ---------- events ---------- */
   document.addEventListener("click", e => {
+    if (e.detail > 0 && Date.now() < quietUntil) { e.preventDefault(); e.stopPropagation(); return; }   // keyboard clicks (detail 0) pass
     const el = e.target.closest("[data-act]");
     if (!el) return;
     const act = el.dataset.act, r = route(), s = r.a === "s" ? BH.session(r.b) : null;
@@ -1299,25 +1336,40 @@
 
     switch (act) {
       /* wizard */
-      case "pick-game": pickDraftGame(el.dataset.id); render(); break;
-      case "draft-step": { const id = el.dataset.step; draft.step = draft.step === id ? null : id; render(); const n = BH.$("#step-" + id); if (n && draft.step) n.scrollIntoView({ block: "nearest" }); break; }
+      case "pick-game": pickDraftGame(el.dataset.id); quiet(); render(); break;
+      case "draft-step": {
+        const id = el.dataset.step; draft.step = draft.step === id ? null : id; quiet(); render();
+        refocus('[data-act="draft-step"][data-step="' + id + '"]');
+        const n = BH.$("#step-" + id); if (n && draft.step) n.scrollIntoView({ block: "nearest" });
+        break;
+      }
       case "draft-now": draft.date = Date.now(); render(); break;
       case "draft-random": {   // a random game from the collection that fits the players already chosen
         const n = draft.players.length, fits = BH.games.filter(x => !n || (n >= x.players.min && n <= x.players.max));
-        const pool = (fits.length ? fits : BH.games).filter((x, i, a) => a.length < 2 || x.id !== draft.gameId);
+        if (!fits.length) { BH.toast(`Нет игр на ${n} ${BH.plural(n, "игрока", "игроков", "игроков")}`); break; }
+        const pool = fits.filter((x, i, a) => a.length < 2 || x.id !== draft.gameId);
         const pick = pool[Math.floor(Math.random() * pool.length)];
         if (pick) { pickDraftGame(pick.id); render(); BH.toast("Случайная игра: " + pick.name); }
         break;
       }
-      case "draft-last-players": for (const id of draft.lastPlayers) if (!draft.players.includes(id) && BH.player(id)) draft.players.push(id); render(); break;
+      case "draft-last-players": {   // the seats as last time, then whoever was added on top
+        const last = draft.lastPlayers.filter(id => BH.player(id));
+        draft.players = last.concat(draft.players.filter(id => !last.includes(id)));
+        render(); break;
+      }
       case "draft-winner": { const i = draft.winners.indexOf(el.dataset.id); i >= 0 ? draft.winners.splice(i, 1) : draft.winners.push(el.dataset.id); render(); break; }
-      case "draft-save": saveDraft(); break;
+      case "draft-save": if (el.disabled || !draft) break; el.disabled = true; saveDraft(); break;   // a double tap creates one game
       case "draft-opt": break; // handled on change
       case "toggle-exp": { const i = draft.exp.indexOf(el.dataset.id); i >= 0 ? draft.exp.splice(i, 1) : draft.exp.push(el.dataset.id); render(); break; }
-      case "pick-place": draft.placeId = el.dataset.id || null; draft.step = nextStep(); render(); break;
-      case "toggle-player": { const i = draft.players.indexOf(el.dataset.id); i >= 0 ? draft.players.splice(i, 1) : draft.players.push(el.dataset.id); render(); break; }
+      case "pick-place": draft.placeId = el.dataset.id || null; draft.step = nextStep(); quiet(); render(); break;
+      case "toggle-player": {
+        const id = el.dataset.id, i = draft.players.indexOf(id);
+        if (i >= 0) { draft.players.splice(i, 1); draft.winners = draft.winners.filter(x => x !== id); delete draft.final[id]; }   // nobody left behind in the result
+        else draft.players.push(id);
+        render(); break;
+      }
       case "seat-up": case "seat-down": { const i = +el.dataset.i, j = act === "seat-up" ? i - 1 : i + 1; const a = draft.players; [a[i], a[j]] = [a[j], a[i]]; render(); break; }
-      case "new-with": startDraft(el.dataset.id); go("#/new"); break;
+      case "new-with": startDraft(el.dataset.id); go("#/new/" + el.dataset.id); break;
 
       /* setup */
       case "setup-check": break; // handled on change
@@ -1411,7 +1463,7 @@
       case "delete-session": confirmDelete(s); break;
       case "repeat": {   // home: the latest game again — the form opens filled in, nothing is created yet
         const from = BH.session(el.dataset.sid); if (!from) break;
-        startDraft(from.gameId); Object.assign(draft, { exp: from.exp.slice(), placeId: from.placeId, players: from.players.filter(id => BH.player(id)), opts: Object.assign({}, from.opts) }); draft.step = nextStep();
+        startDraft(from.gameId); Object.assign(draft, { exp: from.exp.slice(), placeId: from.placeId, players: visiblePlayers(from.players), lastPlayers: visiblePlayers(from.players), opts: Object.assign({}, from.opts) }); draft.step = nextStep();
         go("#/new"); break;
       }
 
@@ -1498,7 +1550,15 @@
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
     if (el.dataset.act === "pc-period") { pcard.period = el.value; render(); refocus('[data-act="pc-period"]'); }
     if (el.dataset.act === "pc-sort") { pcard.sort = el.value; render(); refocus('[data-act="pc-sort"]'); }
-    if (el.dataset.act === "draft-date" && draft) { const t = new Date(el.value).getTime(); if (Number.isFinite(t)) { draft.date = t; render(); } }
+    if (el.dataset.act === "draft-date" && draft) {
+      const t = new Date(el.value).getTime();
+      if (Number.isFinite(t)) {
+        draft.date = t;
+        // typing the date part by part (PC): redraw when the field is left, not after every part
+        if (document.activeElement === el && !matchMedia("(pointer: coarse)").matches) { const sum = BH.$("#step-date .step-sum"); if (sum) sum.textContent = whenText(t); }
+        else render();
+      }
+    }
     if (el.dataset.act === "draft-opt" && draft) { draft.opts[el.dataset.id] = el.checked; }
     if (el.dataset.act === "voice-name") { BH.voice.setVoice(el.value); BH.toast("Голос: " + el.options[el.selectedIndex].text); }
     if (el.dataset.act === "sync-same") { const own = document.getElementById(el.dataset.target || "own-pass"); if (own) own.hidden = el.checked; }
@@ -1516,6 +1576,11 @@
           { label: "Отмена", run: closeDialog }] });
       }).catch(err => BH.toast("Не загрузилось: " + err.message));
     }
+  });
+
+  document.addEventListener("focusout", e => {
+    const el = e.target;
+    if (el && el.dataset && el.dataset.act === "draft-date" && draft && route().a === "new") setTimeout(() => { if (draft && route().a === "new") render(); }, 0);
   });
 
   document.addEventListener("input", e => {
@@ -1583,6 +1648,7 @@
       return;
     }
     const name = (f.elements.name && f.elements.name.value || "").trim();
+    if (f.elements.name) f.elements.name.value = "";   // the redraw keeps typed text; this one is done
     if (form === "add-player" || form === "add-player-page") {
       if (!name) return;
       const ex = S().players.find(p => p.name.toLowerCase() === name.toLowerCase());
@@ -1646,7 +1712,7 @@
     const rt = route();
     if (rt.a !== "new" && !(rt.a === "s" && rt.c === "edit" && draft && draft.editId === rt.b)) draft = null;
     editPlayer = null; editKeep = null;   // an open player form closes on any move
-    sheet = null; dialog = null; ovPushed = false;
+    sheet = null; dialog = null; ovPushed = false; quiet();
     if (ask) { stopListening(); if (askCtl) askCtl.abort(); askCtl = null; ask = null; }
     render();
     window.scrollTo(0, 0);
@@ -1654,13 +1720,13 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.10.0";
+  BH.version = "0.10.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();
   else if (!history.state || !("back" in history.state)) history.replaceState({ back: null }, "");
   // a file that failed to load (e.g. a 503 while the site publishes an update) must not leave a half-working app
-  if (route().a === "new") startDraft();
+  if (route().a === "new") startDraft(route().b || null);
   render();
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname)) {
     navigator.serviceWorker.register("sw.js").catch(() => {});

@@ -125,6 +125,7 @@
       }
       else if (r.a === "games" && r.b) { const g = BH.game(r.b); nav = "games"; if (g) { html = viewGame(g); after = () => BH.rulesUI.bind(main, g); } else html = notFound("Такой игры нет в каталоге."); }
       else if (r.a === "games") { html = viewGames(); nav = "games"; }
+      else if (r.a === "players" && r.b) { const p = BH.player(r.b); html = p ? viewPlayer(p) : notFound("Такого игрока нет."); nav = "menu"; }
       else if (r.a === "players") { html = viewPlayers(); nav = "menu"; }
       else if (r.a === "stats") { html = viewStats(); nav = "menu"; }
       else if (r.a === "settings") { html = viewSettings(r.b); nav = "menu"; }
@@ -171,6 +172,8 @@
       if (seg[0] === "games" && !seg[1]) return backLink(b, "Игры");
       if (seg[0] === "sessions") return backLink(b, "Партии");
       if (seg[0] === "menu") return backLink(b, "Меню");
+      if (seg[0] === "players" && !seg[1]) return backLink(b, "Игроки");
+      if (seg[0] === "players" && seg[1] && seg[1] !== route().b) { const q = BH.player(seg[1]); if (q) return backLink(b, q.name); }
     }
     return backLink(href, label);
   }
@@ -245,14 +248,14 @@
     const ranked = gamesByPlays(), top = ranked.filter(x => x.n).slice(0, 10), shelf = ranked.filter(x => !x.n);
     const nGames = BH.games.length;
     return `<div class="stack home">
-      <section class="profile">
+      <a class="profile" href="#/players${me ? "/" + esc(me.id) : ""}">
         ${me ? BH.avatar(me, "xl") : `<span class="avatar xl avatar-empty" aria-hidden="true">?</span>`}
         <div class="profile-t">
           <h1>${me ? esc(me.name) : "Мои настолки"}</h1>
           <div class="profile-stats"><span>${IC.dice}${nGames} ${BH.plural(nGames, "игра", "игры", "игр")}</span><span>${IC.people}${mine.length} ${BH.plural(mine.length, "партия", "партии", "партий")}</span></div>
-          ${me ? "" : `<a class="small" href="#/players">Отметьте себя в игроках — галочка «Это я»</a>`}
+          ${me ? "" : `<span class="small profile-hint">Отметьте себя в игроках — галочка «Это я»</span>`}
         </div>
-      </section>
+      </a>
       ${live.length ? `<section class="panel"><h2 style="margin-bottom:4px">Идут сейчас</h2><div class="list">${live.map(sessionLine).join("")}</div></section>` : ""}
       <section>
         <h2 class="shelf-h">Последние игры</h2>
@@ -659,31 +662,131 @@
 
   /* ---------- players & places ---------- */
   let editPlayer = null, editKeep = null;   // editKeep: what was typed in the open form, kept over a redraw
+  // the edit form of a player (name, colour, "this is me", hide / delete), shown on the player's card
+  function playerEditForm(p) {
+    const played = S().sessions.some(s => s.players.includes(p.id));
+    const kept = editKeep && editKeep.id === p.id ? editKeep : null;
+    return `<form class="panel stack" data-form="edit-player" data-id="${p.id}">
+      <label class="field">Имя<input class="input" name="name" value="${esc(kept ? kept.name : p.name)}" maxlength="40" required></label>
+      <div class="field">Цвет<div class="swatches">${BH.COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-act="pick-color" data-id="${p.id}" data-c="${c}" aria-pressed="${p.color === c}" aria-label="Цвет ${c}"></button>`).join("")}</div></div>
+      <label class="check" style="font-weight:500"><input type="checkbox" name="me" ${(kept ? kept.me : BH.meId() === p.id) ? "checked" : ""}> Это я — мой профиль и статистика на главной</label>
+      <div class="actions"><button class="btn primary" type="submit">Сохранить</button><button class="btn" type="button" data-act="edit-player" data-id="">Отмена</button>
+        <button class="btn ghost" type="button" data-act="hide-player" data-id="${p.id}">${p.hidden ? "Вернуть в список" : played ? "Скрыть из выбора" : "Удалить"}</button></div>
+    </form>`;
+  }
+  const STAR = '<span class="me-star" title="Это вы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg></span>';
+
+  /* players: a grid of faces, most played first (or by name), tap one for the player's card */
+  let playersSort = "plays";
   function viewPlayers() {
-    const fin = S().sessions.filter(s => s.status === "finished");
-    const all = S().players;
-    const row = p => {
-      const played = fin.filter(s => s.players.includes(p.id)).length, wins = fin.filter(s => s.winners.includes(p.id)).length;
-      if (editPlayer === p.id) {
-        return `<form class="panel stack" data-form="edit-player" data-id="${p.id}" style="margin:8px 0">
-          <label class="field">Имя<input class="input" name="name" value="${esc(editKeep && editKeep.id === p.id ? editKeep.name : p.name)}" maxlength="40" required></label>
-          <div class="field">Цвет<div class="swatches">${BH.COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-act="pick-color" data-id="${p.id}" data-c="${c}" aria-pressed="${p.color === c}" aria-label="Цвет ${c}"></button>`).join("")}</div></div>
-          <label class="check" style="font-weight:500"><input type="checkbox" name="me" ${(editKeep && editKeep.id === p.id ? editKeep.me : BH.meId() === p.id) ? "checked" : ""}> Это я — мой профиль и статистика на главной</label>
-          <div class="actions"><button class="btn primary" type="submit">Сохранить</button><button class="btn" type="button" data-act="edit-player" data-id="">Отмена</button>
-            <button class="btn ghost" type="button" data-act="hide-player" data-id="${p.id}">${p.hidden ? "Вернуть в список" : played ? "Скрыть из выбора" : "Удалить"}</button></div>
-        </form>`;
-      }
-      return `<div class="item" style="${p.hidden ? "opacity:.55" : ""}">${BH.avatar(p)}<div class="t"><b>${esc(p.name)}</b>${BH.meId() === p.id ? '<span class="badge accent me-badge">это я</span>' : ""}<span>${played ? `${played} ${BH.plural(played, "партия", "партии", "партий")} · ${wins} ${BH.plural(wins, "победа", "победы", "побед")}` : "ещё не играл(а)"}${p.hidden ? " · скрыт" : ""}</span></div>
-        <button class="icon-btn" data-act="edit-player" data-id="${p.id}" aria-label="Изменить ${esc(p.name)}">${I.edit}</button></div>`;
-    };
+    const fin = finishedSessions(), meId = BH.meId();
+    const count = id => fin.filter(s => s.players.includes(id)).length;
+    const list = S().players.map(p => ({ p, n: count(p.id) }))
+      .sort((a, b) => (a.p.hidden - b.p.hidden) || (playersSort === "name" ? 0 : b.n - a.n) || a.p.name.localeCompare(b.p.name, "ru"));
+    const visible = S().players.filter(p => !p.hidden).length;
     return `<div class="stack">
-      <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Игроки</h1><p class="sub">Друзья и семья, с кем вы играете.</p></div></div></div>
-      ${all.length && !BH.me() ? `<div class="note info small">Отметьте себя: нажмите ✎ у своего имени и поставьте галочку «Это я» — тогда на главной будет ваш профиль и ваши партии.</div>` : ""}
-      <section class="panel">
-        <form class="row" data-form="add-player-page" style="margin-bottom:6px"><input class="input" name="name" placeholder="Имя игрока" maxlength="40" aria-label="Имя игрока"><button class="btn primary" type="submit">Добавить</button></form>
-        <div class="list">${all.length ? all.map(row).join("") : `<p class="muted small" style="padding:8px 0">Пока никого. Игроков можно добавить и при создании партии.</p>`}</div>
-      </section>
+      <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Игроки</h1><p class="sub">${visible} ${BH.plural(visible, "игрок", "игрока", "игроков")} · друзья и семья, с кем вы играете</p></div>
+        ${list.length > 1 ? `<button class="btn ghost sm" data-act="players-sort">${playersSort === "name" ? "По числу партий" : "По имени А–Я"}</button>` : ""}</div></div>
+      ${list.length && !meId ? `<div class="note info small">Отметьте себя: откройте свою карточку, нажмите «Изменить» и поставьте галочку «Это я» — тогда на главной будет ваш профиль.</div>` : ""}
+      <form class="row" data-form="add-player-page"><input class="input" name="name" placeholder="Имя нового игрока" maxlength="40" aria-label="Имя нового игрока"><button class="btn primary" type="submit">Добавить</button></form>
+      ${list.length > 9 ? `<div class="search">${I.search}<input class="input" type="search" data-act="players-q" placeholder="Поиск по имени" aria-label="Поиск игрока" autocomplete="off"></div>` : ""}
+      ${list.length ? `<div class="pgrid">${list.map(({ p, n }) => `<a class="pcell${p.hidden ? " off" : ""}" href="#/players/${esc(p.id)}" data-name="${esc(p.name.toLowerCase())}">
+          <span class="pcell-av">${BH.avatar(p, "xl")}${p.id === meId ? STAR : ""}</span>
+          <b>${esc(p.name)}</b><span>${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играл(а)"}${p.hidden ? " · скрыт" : ""}</span>
+        </a>`).join("")}</div><p class="muted small" id="players-none" hidden>Никого не нашлось.</p>`
+        : `<p class="muted small">Пока никого. Игроков можно добавить здесь или при создании партии.</p>`}
     </div>`;
+  }
+
+  /* the player's card: totals, win rate, a period, and tabs with info, games, sessions and wins */
+  let pcard = { id: null, tab: "info", sort: "plays", period: "all" };
+  const PERIODS = { all: "Всё время", "30d": "Последние 30 дней", "365d": "Последние 12 месяцев" };
+  function inPeriod(s, period) {
+    const t = BH.sessionDate(s);
+    if (period === "30d") return t >= Date.now() - 30 * 864e5;
+    if (period === "365d") return t >= Date.now() - 365 * 864e5;
+    if (/^y\d{4}$/.test(period)) return new Date(t).getFullYear() === Number(period.slice(1));
+    return true;
+  }
+  function viewPlayer(p) {
+    if (pcard.id !== p.id) pcard = { id: p.id, tab: "info", sort: pcard.sort, period: pcard.period };
+    const fin = finishedSessions();
+    const years = [...new Set(fin.map(s => new Date(BH.sessionDate(s)).getFullYear()))].sort((a, b) => b - a);
+    const opts = Object.assign({}, PERIODS); for (const y of years) opts["y" + y] = y + " год";
+    if (!(pcard.period in opts)) pcard.period = "all";
+    const st = BH.playerStats(p.id, fin.filter(s => inPeriod(s, pcard.period)));
+    const isMe = BH.meId() === p.id, pct = Math.round(100 * st.rate);
+    const tabs = [["info", "Инфо"], ["games", "Игры"], ["sessions", "Партии"], ["wins", "Победы"]];
+    let body = "";
+    if (pcard.tab === "games") body = playerGames(st);
+    else if (pcard.tab === "sessions" || pcard.tab === "wins") {
+      const list = pcard.tab === "wins" ? st.sessions.filter(s => s.winners.includes(p.id)) : st.sessions;
+      body = list.length ? `<section class="panel"><div class="list">${list.map(sessionLine).join("")}</div></section>`
+        : `<p class="muted small">${pcard.tab === "wins" ? "Побед за этот период нет." : "Партий за этот период нет."}</p>`;
+    } else body = playerInfo(p, st);
+    return `<div class="stack">
+      <div>${backSmart("#/players", "Игроки")}</div>
+      <section class="pc-head" style="--pc:${esc(p.color)}">
+        <span class="pc-av">${BH.avatar(p, "xxl")}${isMe ? STAR : ""}</span>
+        <div class="pc-name"><h1>${esc(p.name)}</h1>${isMe ? '<span class="badge accent">это вы</span>' : ""}${p.hidden ? '<span class="badge">скрыт из выбора</span>' : ""}</div>
+        ${editPlayer === p.id ? "" : `<button class="btn ghost sm" data-act="edit-player" data-id="${esc(p.id)}">${I.edit}Изменить</button>`}
+      </section>
+      ${editPlayer === p.id ? playerEditForm(p) : ""}
+      <section class="panel pc-sum">
+        <div class="pc-top">
+          <div class="pc-rate" style="--pc:${esc(p.color)}"><b>${pct}%</b><span>побед</span></div>
+          <div class="pc-top-t">
+            <label class="small muted">Период<select class="input" data-act="pc-period" aria-label="Период">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === pcard.period ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+            <span class="badge" title="Сколько игр сыграно хотя бы столько же раз">H-индекс: ${st.hIndex}</span>
+          </div>
+        </div>
+        <div class="pc-bar" role="img" aria-label="${st.wins} побед из ${st.played} партий"><i style="width:${st.played ? pct : 0}%"></i>
+          <span>${st.wins} ${BH.plural(st.wins, "победа", "победы", "побед")}</span><span>${st.played} ${BH.plural(st.played, "партия", "партии", "партий")}</span></div>
+      </section>
+      <div class="seg pc-tabs" role="tablist">${tabs.map(([k, v]) => `<button type="button" role="tab" data-act="pc-tab" data-tab="${k}" aria-pressed="${pcard.tab === k}" aria-selected="${pcard.tab === k}">${v}</button>`).join("")}</div>
+      ${body}
+    </div>`;
+  }
+  function playerInfo(p, st) {
+    if (!st.played) return `<p class="muted small">За этот период у игрока нет сыгранных партий.</p>`;
+    const name = id => { const g = BH.game(id); return g ? g.name : id; };
+    const fav = st.games.slice().sort((a, b) => b.n - a.n)[0];
+    const best = st.games.filter(e => e.n >= 3).sort((a, b) => b.rate - a.rate || b.n - a.n)[0];
+    const place = st.favPlace && BH.place(st.favPlace.id);
+    const kpi = (v, label) => `<div class="kpi"><b>${v}</b><span>${label}</span></div>`;
+    const line = (label, v) => v ? `<div class="pc-line"><span>${label}</span><b>${v}</b></div>` : "";
+    const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
+    const rivals = st.opponents.slice(0, 8).map(o => { const q = BH.player(o.id); return q ? `<a class="item" href="#/players/${esc(q.id)}">${BH.avatar(q)}<div class="t"><b>${esc(q.name)}</b><span>${parties(o.n)} вместе · побед: ${o.myWins} против ${o.theirWins}</span></div></a>` : ""; }).join("");
+    return `<div class="kpis">
+        ${kpi(st.played, BH.plural(st.played, "партия", "партии", "партий"))}
+        ${kpi(st.wins, BH.plural(st.wins, "победа", "победы", "побед"))}
+        ${kpi(st.games.length, BH.plural(st.games.length, "игра", "игры", "игр"))}
+        ${st.time ? kpi((st.time / 3600000).toFixed(1).replace(".", ",") + " ч", "за столом") : ""}
+        ${kpi(st.longestStreak, "лучшая серия побед")}
+        ${kpi(st.currentStreak, "побед подряд сейчас")}
+      </div>
+      <section class="panel">
+        ${line("Первая партия", BH.fmtDate(st.first))}
+        ${line("Последняя партия", BH.fmtDate(st.last))}
+        ${line("Любимая игра", fav ? esc(name(fav.gameId)) + " · " + parties(fav.n) : "")}
+        ${line("Лучше всего получается", best ? esc(name(best.gameId)) + " · " + Math.round(100 * best.rate) + "% побед" : "")}
+        ${line("Любимое место", place ? esc(place.name) + " · " + parties(st.favPlace.n) : "")}
+      </section>
+      ${rivals ? `<section class="panel"><h2 style="margin-bottom:4px">С кем играет чаще всего</h2><div class="list">${rivals}</div></section>` : ""}`;
+  }
+  const GAME_SORTS = { plays: "Количество партий", wins: "Победы", rate: "Процент побед", last: "Последняя партия", name: "Название" };
+  function playerGames(st) {
+    if (!st.games.length) return `<p class="muted small">Партий за этот период нет.</p>`;
+    const nameOf = e => { const g = BH.game(e.gameId); return g ? g.name : e.gameId; };
+    const by = { plays: (a, b) => b.n - a.n, wins: (a, b) => b.wins - a.wins || b.n - a.n, rate: (a, b) => b.rate - a.rate || b.n - a.n, last: (a, b) => b.last - a.last, name: () => 0 }[pcard.sort] || ((a, b) => b.n - a.n);
+    const list = st.games.slice().sort((a, b) => by(a, b) || nameOf(a).localeCompare(nameOf(b), "ru"));
+    return `<label class="small muted pc-sort">Сортировать<select class="input" data-act="pc-sort" aria-label="Сортировка игр">${Object.entries(GAME_SORTS).map(([k, v]) => `<option value="${k}" ${k === pcard.sort ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+      <p class="small muted" style="text-align:center">Всего: ${st.games.length} ${BH.plural(st.games.length, "игра", "игры", "игр")} · ${st.played} ${BH.plural(st.played, "партия", "партии", "партий")}${st.time ? " · " + BH.fmtDuration(st.time) : ""}</p>
+      <div class="pc-games">${list.map((e, i) => { const g = BH.game(e.gameId); return `<a class="pc-game" href="${g ? "#/games/" + esc(g.id) : "#/games"}">
+        ${coverOf(g)}
+        <span class="t"><span class="pc-g1"><i class="rank">${i + 1}</i><b>${esc(nameOf(e))}</b><span class="badge">${e.n} ${BH.plural(e.n, "партия", "партии", "партий")}</span></span>
+          <span class="pc-g2"><span>${IC.trophy}${e.wins} · ${Math.round(100 * e.rate)}%</span>${e.time ? `<span>${BH.fmtDuration(e.time)}</span>` : ""}<span>ср. ${e.avg} · лучший ${e.best}</span></span></span>
+      </a>`; }).join("")}</div>`;
   }
   function viewPlaces() {
     const fin = finishedSessions();
@@ -1262,6 +1365,8 @@
 
       /* players */
       case "edit-player": editPlayer = el.dataset.id || null; editKeep = null; render(); break;
+      case "players-sort": playersSort = playersSort === "name" ? "plays" : "name"; render(); break;
+      case "pc-tab": pcard.tab = el.dataset.tab; render(); break;
       case "pick-color": {
         const p = BH.player(el.dataset.id), f = el.closest("form");
         if (f && f.elements.name) editKeep = { id: el.dataset.id, name: f.elements.name.value, me: !!(f.elements.me && f.elements.me.checked) };   // the redraw keeps what was typed
@@ -1271,8 +1376,11 @@
       case "hide-player": {
         const p = BH.player(el.dataset.id); if (!p) break;
         const used = S().sessions.some(x => x.players.includes(p.id));
-        if (used) p.hidden = !p.hidden; else S().players = S().players.filter(x => x !== p);
-        editPlayer = null; BH.saveNow(); render(); break;
+        if (used) p.hidden = !p.hidden; else { S().players = S().players.filter(x => x !== p); if (BH.meId() === p.id) BH.setMe(null); }
+        editPlayer = null; BH.saveNow();
+        if (r.a === "players" && r.b === p.id && !BH.player(p.id)) goReplace("#/players");   // deleted from its own card
+        else render();
+        break;
       }
       case "del-place": S().places = S().places.filter(x => x.id !== el.dataset.id); BH.saveNow(); render(); break;
 
@@ -1316,6 +1424,8 @@
       if (el.checked) { const nx = steps.find(x => !s.setupDone[x.id]); const n = nx && BH.$("#step-" + nx.id); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
     }
     if (el.dataset.act === "stats-game") { statsGame = el.value; render(); }
+    if (el.dataset.act === "pc-period") { pcard.period = el.value; render(); }
+    if (el.dataset.act === "pc-sort") { pcard.sort = el.value; render(); }
     if (el.dataset.act === "draft-date" && draft) { const t = new Date(el.value).getTime(); if (Number.isFinite(t)) { draft.date = t; render(); } }
     if (el.dataset.act === "draft-opt" && draft) { draft.opts[el.dataset.id] = el.checked; }
     if (el.dataset.act === "voice-name") { BH.voice.setVoice(el.value); BH.toast("Голос: " + el.options[el.selectedIndex].text); }
@@ -1339,6 +1449,12 @@
   document.addEventListener("input", e => {
     const el = e.target;
     if (el.dataset.act === "draft-final" && draft) { draft.final[el.dataset.p] = el.value; return; }
+    if (el.dataset.act === "players-q") {   // players grid: filter in place
+      const q = el.value.trim().toLowerCase(); let any = false;
+      BH.$(".pgrid .pcell").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
+      const none = BH.$("#players-none"); if (none) none.hidden = any;
+      return;
+    }
     if (el.dataset.act === "games-q") {   // games list: filter in place, no redraw while typing
       const q = el.value.trim().toLowerCase(); let any = false;
       BH.$$(".glist .grow").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
@@ -1466,7 +1582,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.8.1";
+  BH.version = "0.9.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

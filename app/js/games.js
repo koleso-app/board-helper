@@ -54,6 +54,48 @@
     return t;
   };
 
+  /* everything the player card shows, from the finished games the player took part in.
+     sessions: the games to count (already narrowed to a period by the caller). */
+  BH.sessionDate = s => s.finishedAt || s.created || 0;
+  BH.playerStats = (pid, sessions) => {
+    const mine = (sessions || []).filter(s => s.status === "finished" && s.players.includes(pid)).sort((a, b) => BH.sessionDate(a) - BH.sessionDate(b));
+    const isWin = s => s.winners.includes(pid);
+    const dur = s => (s.finishedAt && s.startedAt && s.finishedAt > s.startedAt ? s.finishedAt - s.startedAt : 0);
+    const games = new Map(), opp = new Map(), places = new Map();
+    let longest = 0, run = 0;
+    for (const s of mine) {
+      const g = BH.game(s.gameId), lower = !!(g && g.scoring && g.scoring.lowerWins);
+      const e = games.get(s.gameId) || { gameId: s.gameId, n: 0, wins: 0, time: 0, sum: 0, best: null, last: 0, lower };
+      const score = BH.totals(s)[pid];
+      e.n++; e.time += dur(s); e.sum += score; e.last = Math.max(e.last, BH.sessionDate(s));
+      if (isWin(s)) e.wins++;
+      if (e.best === null || (lower ? score < e.best : score > e.best)) e.best = score;
+      games.set(s.gameId, e);
+      for (const o of s.players) if (o !== pid) {
+        const x = opp.get(o) || { id: o, n: 0, myWins: 0, theirWins: 0 };
+        x.n++; if (isWin(s)) x.myWins++; if (s.winners.includes(o)) x.theirWins++;
+        opp.set(o, x);
+      }
+      if (s.placeId) places.set(s.placeId, (places.get(s.placeId) || 0) + 1);
+      run = isWin(s) ? run + 1 : 0; longest = Math.max(longest, run);
+    }
+    let current = 0; for (let i = mine.length - 1; i >= 0 && isWin(mine[i]); i--) current++;
+    const list = [...games.values()].map(e => Object.assign(e, { avg: e.n ? Math.round(e.sum / e.n) : 0, rate: e.n ? e.wins / e.n : 0 }));
+    // H-index: h games played at least h times each
+    const counts = list.map(e => e.n).sort((a, b) => b - a);
+    let h = 0; while (h < counts.length && counts[h] >= h + 1) h++;
+    const wins = mine.filter(isWin).length;
+    const favPlace = [...places.entries()].sort((a, b) => b[1] - a[1])[0];
+    return {
+      played: mine.length, wins, rate: mine.length ? wins / mine.length : 0,
+      time: mine.reduce((a, s) => a + dur(s), 0), hIndex: h, longestStreak: longest, currentStreak: current,
+      games: list, opponents: [...opp.values()].sort((a, b) => b.n - a.n || b.myWins - a.myWins),
+      favPlace: favPlace ? { id: favPlace[0], n: favPlace[1] } : null,
+      first: mine.length ? BH.sessionDate(mine[0]) : 0, last: mine.length ? BH.sessionDate(mine[mine.length - 1]) : 0,
+      sessions: mine.slice().reverse(),
+    };
+  };
+
   /* players sorted best first, with shared places for equal totals */
   BH.standings = s => {
     const g = BH.game(s.gameId), t = BH.totals(s), high = !(g && g.scoring && g.scoring.lowerWins);

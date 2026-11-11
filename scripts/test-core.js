@@ -125,6 +125,31 @@ t("players' questions are found: 200 mid-round, tie", () => {
   assert.ok(BH.searchRules(g, "ничья").slice(0, 3).some(h => /Ничья/.test(h.title)));
 });
 
+t("player stats: games, wins, streaks, H-index, rivals, place, time", () => {
+  const H = 3600000, day = d => Date.UTC(2026, 9, d, 18);
+  const mk = (id, d, gameId, players, winners, final, place, minutes) => ({ id, gameId, players, winners, status: "finished", rounds: [], final,
+    created: day(d), startedAt: day(d), finishedAt: day(d) + (minutes || 0) * 60000, placeId: place || null });
+  const ss = [
+    mk("s1", 1, "flip7", ["a", "b"], ["a"], { a: 210, b: 100 }, "home", 30),
+    mk("s2", 2, "flip7", ["a", "b"], ["b"], { a: 150, b: 205 }, "home", 30),
+    mk("s3", 3, "flip7", ["a", "c"], ["a"], { a: 230, c: 90 }, "dacha", 0),
+    mk("s4", 4, "flip7", ["a", "b", "c"], ["a"], { a: 201, b: 1, c: 2 }, "home", 60),
+    mk("s5", 5, "other", ["b", "c"], ["b"], { b: 1, c: 0 }),
+    Object.assign(mk("s6", 6, "flip7", ["a", "b"], [], {}), { status: "playing" }),
+  ];
+  const st = BH.playerStats("a", ss);
+  assert.strictEqual(st.played, 4); assert.strictEqual(st.wins, 3); assert.strictEqual(st.rate, 0.75);
+  assert.strictEqual(st.longestStreak, 2); assert.strictEqual(st.currentStreak, 2);
+  assert.strictEqual(st.time, 2 * H);
+  assert.strictEqual(st.hIndex, 1, "one game played 4 times: h = 1");
+  const f = st.games.find(x => x.gameId === "flip7");
+  assert.strictEqual(f.n, 4); assert.strictEqual(f.wins, 3); assert.strictEqual(f.best, 230); assert.strictEqual(f.avg, Math.round((210 + 150 + 230 + 201) / 4));
+  assert.strictEqual(st.opponents[0].id, "b"); assert.strictEqual(st.opponents[0].n, 3); assert.strictEqual(st.opponents[0].myWins, 2); assert.strictEqual(st.opponents[0].theirWins, 1);
+  assert.strictEqual(st.favPlace.id, "home"); assert.strictEqual(st.favPlace.n, 3);
+  assert.strictEqual(st.sessions[0].id, "s4", "newest first");
+  assert.strictEqual(BH.playerStats("zz", ss).played, 0);
+  assert.strictEqual(BH.playerStats("zz", ss).hIndex, 0);
+});
 t("one deck has only one 0 and one 1", () => {
   const w = g.calc.roundWarnings([{}, {}], [sel([0, 1, 5]), sel([0, 2, 5])], { players: 4 });
   assert.strictEqual(w.length, 1); assert.ok(w[0].includes("«0»")); assert.ok(!w[0].includes("«5»"));

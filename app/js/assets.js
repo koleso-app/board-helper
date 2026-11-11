@@ -7,9 +7,9 @@
 (function () {
   "use strict";
   const BH = window.BH;
-  const CACHE = "nastolki-img-v4";   // v4: the new pictures of Flip 7 and Vengeance (same names, new content)
+  const CACHE = "nastolki-img-v5";   // v5: Faraway in the official terms, the setup from the publisher, the clue icon
   // the previous set (a few pictures were re-cut since): dropped, the new one loads on demand
-  if ("caches" in window) for (const old of ["nastolki-img-v1", "nastolki-img-v2", "nastolki-img-v3"]) caches.delete(old).catch(() => {});
+  if ("caches" in window) for (const old of ["nastolki-img-v1", "nastolki-img-v2", "nastolki-img-v3", "nastolki-img-v4"]) caches.delete(old).catch(() => {});
   const EXT = ".webp";   // small: the whole Flip 7 set is about 230 KB, loaded once
   const urls = new Map();      // "game/name" -> object URL (this page load)
   const failed = new Set();    // missing on the server: do not ask again this page load
@@ -63,7 +63,7 @@
       Promise.all(items.map(it => load(it.id))).then(list => {
         const ok = items.map((it, i) => ({ it, u: list[i] })).filter(x => x.u);
         if (!ok.length || !el.isConnected) return;
-        el.innerHTML = ok.map(x => `<img src="${x.u}" alt="" class="${x.it.kind === "card" ? "a-card" : "a-wide"}" loading="lazy" decoding="async">`).join("");
+        el.innerHTML = ok.map(x => `<img src="${x.u}" alt="" class="${x.it.kind === "card" ? "a-card" : x.it.kind === "icon" ? "a-icon" : "a-wide"}" loading="lazy" decoding="async">`).join("");
         el.classList.add("has-img");
       });
     }

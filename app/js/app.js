@@ -717,7 +717,7 @@
         <div class="art" data-act="art-zoom" title="Нажмите, чтобы увеличить"${BH.assets.attr(g.id, ((g.images || {}).steps || {})[st.id])}>${st.art || ""}</div>
         <div class="setup-text">
           <h2>${esc(st.title)}${isDone ? ` <button type="button" class="badge good badge-btn" data-act="setup-undo" title="Снять отметку" aria-label="Готово. Снять отметку">${I.check}готово ${I.x}</button>` : ""}</h2>
-          <p>${esc(st.text)}</p>
+          ${textHTML(st.text, g.id)}
         </div>
       </section>
       <div class="game-bar setup-bar">
@@ -854,12 +854,15 @@
         busts: fl.filter(f => f.bust).length, sevens: fl.filter(f => f.flip7).length };
     });
   }
-  // a short line of a step; *word* is set in bold (a number, the key word)
-  const fmtStep = t => esc(t).replace(/\*([^*]+)\*/g, "<b>$1</b>");
-  const stepsHTML = list => `<ul class="ph-steps">${list.map(t => `<li>${fmtStep(t)}</li>`).join("")}</ul>`;
+  // a short line of a step: *word* in bold (a number, the key word); {name|word} — the game's icon «ic-name» in place of the word
+  const fmtStep = (t, gid) => esc(t).replace(/\*([^*]+)\*/g, "<b>$1</b>")
+    .replace(/\{([a-z0-9-]+)\|([^}]+)\}/g, (m, name, word) => gid ? `<span class="ic-inline" role="img" aria-label="${word}" title="${word}" data-asset="${gid}/ic-${name}@icon">${word}</span>` : word);
+  const stepsHTML = (list, gid) => `<ul class="ph-steps">${list.map(t => `<li>${fmtStep(t, gid)}</li>`).join("")}</ul>`;
+  // a text of a game: lines (\n) become a list of steps, one line stays a paragraph
+  const textHTML = (t, gid) => String(t).includes("\n") ? stepsHTML(String(t).split("\n"), gid) : `<p>${fmtStep(t, gid)}</p>`;
   // what to do once the round is over: a list from the game (a function of the round, or the same every round)
   const afterOf = (g, ctx, r, last) => (typeof g.rounds.after === "function" ? g.rounds.after(ctx, r, last) : g.rounds.after) || [];
-  const afterHTML = list => list.length ? `<div class="ph-after"><span class="ph-after-h">После раунда</span>${stepsHTML(list)}</div>` : "";
+  const afterHTML = (list, gid) => list.length ? `<div class="ph-after"><span class="ph-after-h">После раунда</span>${stepsHTML(list, gid)}</div>` : "";
   /* a game scored at the end (Faraway): the rounds are only counted, with what to do in each phase;
      the fame is written in after the last round, as on the score pad */
   function viewPlayEnd(s, g) {
@@ -877,7 +880,7 @@
       <div class="play">
         <div class="stack">
           ${over ? `<section class="note good end-ready">${I.check}<span>Все ${last} раундов сыграны. Переверните свои Регионы и считайте славу — с последней карты к первой.</span></section>`
-            : `<section class="panel"><div class="sec-h"><h2>Раунд ${cur}: что делать</h2></div><ol class="phase-list">${phases.map(p => `<li><b>${esc(p.title)}</b>${stepsHTML(p.steps || [p.text])}</li>`).join("")}</ol>${afterHTML(afterOf(g, ctx, cur, last))}</section>`}
+            : `<section class="panel"><div class="sec-h"><h2>Раунд ${cur}: что делать</h2></div><ol class="phase-list">${phases.map(p => `<li><b>${esc(p.title)}</b>${stepsHTML(p.steps || [p.text], g.id)}</li>`).join("")}</ol>${afterHTML(afterOf(g, ctx, cur, last), g.id)}</section>`}
         </div>
         <div class="stack">
           <section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
@@ -928,7 +931,7 @@
       <div class="play">
         <div class="stack">
           <div class="board">${board}</div>
-          ${g.rounds.reminder ? `<details class="panel" ${r === 0 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0))}</div></details>` : ""}
+          ${g.rounds.reminder ? `<details class="panel" ${r === 0 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0), g.id)}</div></details>` : ""}
           ${hist}
         </div>
         <div class="stack">
@@ -1694,7 +1697,7 @@
     return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
       <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">Подсчёт славы</h2></div><button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div>
       <div class="sheet-body">
-        <details class="note info small end-how"${s.players.some(id => BH.endFilled(g, sheet.entries[id])) ? "" : " open"}><summary>Как считать</summary><ol>${e.steps.map(t => `<li>${esc(t)}</li>`).join("")}</ol></details>
+        <details class="note info small end-how"${s.players.some(id => BH.endFilled(g, sheet.entries[id])) ? "" : " open"}><summary>Как считать</summary><ol>${e.steps.map(t => `<li>${fmtStep(t, g.id)}</li>`).join("")}</ol></details>
         ${body}
         <div class="note" id="end-tie" hidden></div>
       </div>
@@ -2312,7 +2315,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.16.5";
+  BH.version = "0.16.6";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

@@ -1,7 +1,8 @@
 // Builds the Faraway illustrations from the sharp English rulebook and player aid: cards, icons and drawings
 // are cut out without the English text and set together with our Russian labels.
 // Input (private, not published): sources/faraway-en-hi (rulebook spreads rendered at scale 5, render.mjs),
-// sources/faraway-aid-en-x6 (the aid at scale 6). Output: sources/assets/faraway/<name>.webp (for the private repo).
+// sources/faraway-aid-en-x6 (the aid at scale 6), sources/dl-faraway-press/png (the publisher's press pictures, Catch Up Games).
+// Output: sources/assets/faraway/<name>.webp (for the private repo). The words are the official Russian edition's («Эврикус»).
 // Boxes are in the units of the scale-1 render (a spread is 624×482, the aid page 312×482).
 // Run: node scripts/assets/faraway-compose.mjs [--grid]   (--grid draws a coordinate grid to place labels)
 import fs from "node:fs";
@@ -95,17 +96,17 @@ const jobs = {
   // the example of the player aid: the cards of each step, the words ours (checked against the English aid)
   async example() {
     const steps = [
-      [[20, 68, 295, 116], "Первой открывается последняя карта, 28: 3 славы за каждую химеру. Химер нет — 0."],
+      [[20, 68, 295, 116], "Первой открывается последняя карта, 28: 3 славы за каждый окико. Окико нет — 0."],
       [[20, 152, 295, 201], "Вторая, 14: 2 славы за каждую ночную карту. Ночная одна — 28, итого 2."],
-      [[20, 249, 295, 296], "Третья, 49: 12 славы, если есть 2 камня и чертополох. Чертополох — на 14, камни — на 28 и на левом Святилище: 12."],
-      [[20, 367, 295, 415], "Четвёртая, 44: камень и чертополох есть. 2 славы за каждый Город и каждую Пустыню: Город 44, Пустыня 49 и Святилище-Пустыня — 6."],
+      [[20, 249, 295, 296], "Третья, 49: 12 славы, если есть 2 удду и золотолоз. Золотолоз — на 14, удду — на 28 и на левом Святилище: 12."],
+      [[20, 367, 295, 415], "Четвёртая, 44: удду и золотолоз есть. 2 славы за каждый Город и каждую Пустыню: Город 44, Пустыня 49 и Святилище-Пустыня — 6."],
     ];
     const rows = []; for (const [b] of steps) rows.push(await aidBox(2, b));
     const probe = createCanvas(W, 10).getContext("2d"); probe.font = UI(24);
     const lines = t => { let n = 1, line = ""; for (const w of t.split(" ")) { const tt = line ? line + " " + w : w; if (probe.measureText(tt).width > W - 80 && line) { n++; line = w; } else line = tt; } return n; };
     const rowH = rows[0].height * W / rows[0].width;
     let H = 20; for (const [, t] of steps) H += lines(t) * 30 + 16 + rowH + 26;
-    const last = "Святилища: левое без задания — 0. Второе — 1 слава за улику: на нём самом и на 49 — 2.";
+    const last = "Святилища: левое без задания — 0. Второе — 1 слава за подсказку: на нём самом и на 49 — 2.";
     H += lines(last) * 30 + 40;
     save("example", sheet(W, Math.round(H), x => {
       let y = 20;
@@ -129,12 +130,13 @@ const jobs = {
   },
   // setup: the table of the book with its numbers, and what each number is
   async setup() {
-    const img = await book(3, [322, 37, 603, 230]);
+    const img = await loadImage(fs.readFileSync(src("dl-faraway-press/png/visuel-miseenplace.png")));
     const h = img.height * W / img.width;
-    save("setup", sheet(W, Math.round(h + 150), x => {
-      put(x, img, 0, 0, W);
-      [["1", "Раздайте по 3 карты Регионов"], ["2", "Откройте в центре игроков + 1"], ["3", "Рядом — колода Святилищ"]]
-        .forEach(([n, t], i) => { badge(x, n, 40, h + 30 + i * 42, 17); text(x, t, 70, h + 39 + i * 42, { align: "left", size: 26 }); });
+    const legend = [["1", "по 3 карты Регионов каждому"], ["2", "рынок: игроков + 1 — за столом 5, карт 6"], ["3", "колода Регионов"], ["4", "колода Святилищ"]];
+    save("setup", sheet(W, Math.round(h + 24 + 46 * legend.length), x => {
+      x.drawImage(img, 0, 0, W, h);
+      [[43, 330], [175, 205], [455, 112], [290, 106]].forEach(([X, Y], i) => badge(x, i + 1, X, Y, 19));
+      legend.forEach(([n, t], i) => { const y = h + 34 + i * 46; badge(x, n, 34, y, 17); text(x, t, 64, y + 9, { align: "left", size: 25 }); });
     }));
   },
   async center() {
@@ -143,7 +145,7 @@ const jobs = {
     save("center", sheet(W, 420, x => {
       const cw = 210, chh = 150;
       cards.forEach((c, i) => { const col = i % 3, row = Math.floor(i / 3), k = Math.min(cw / c.width, chh / c.height), w = c.width * k, h = c.height * k; x.drawImage(c, 24 + col * 232 + (cw - w) / 2, 16 + row * 170 + (chh - h) / 2, w, h); });
-      tag(x, "Например, 5 игроков — 6 карт", W / 2, 385, { size: 26 });
+      tag(x, "Рынок: 5 игроков — 6 карт", W / 2, 385, { size: 26 });
     }));
   },
   async decks() {
@@ -167,10 +169,10 @@ const jobs = {
     const img = await book(4, [165, 66, 516, 382]);
     const h = img.height * W / img.width;
     const legend = [
-      ["1", "номер — продолжительность исследования, у каждой карты свой (1–68); светлое кольцо — день"],
+      ["1", "номер — время исследования, у каждой карты свой (1–68); светлое кольцо — день"],
       ["2", "тёмное кольцо — ночь"],
-      ["3", "улика"],
-      ["4", "ресурс — здесь химера"],
+      ["3", "подсказка"],
+      ["4", "ресурс — здесь окико"],
       ["5", "условие задания: нужные ресурсы"],
       ["6", "слава за выполненное задание"],
     ];
@@ -187,9 +189,9 @@ const jobs = {
     const icons = await book(4, [512, 14, 610, 50]);
     save("wonders", sheet(W, 500, x => {
       const col = (img, cx, name) => { const hh = 250, w = img.width * hh / img.height, s2 = Math.min(1, 200 / w); x.drawImage(img, cx - w * s2 / 2, 20 + (hh - hh * s2) / 2, w * s2, hh * s2); text(x, name, cx, 310, { font: UIB(24), maxW: 220, lh: 28 }); };
-      col(st, 120, "Камень Удду"); col(ch, 360, "Химера Окико"); col(th, 600, "Чертополох Голдлог");
+      col(st, 120, "Удду"); col(ch, 360, "Окико"); col(th, 600, "Золотолоз");
       put(x, icons, 230, 365, 260);
-      text(x, "чаще всего — камни, реже всего — чертополох", W / 2, 480, { size: 23, color: MUTED });
+      text(x, "чаще всего — удду, реже всего — золотолоз", W / 2, 480, { size: 23, color: MUTED });
     }));
   },
   // a quest with a prerequisite: the resources it needs, and the fame it gives
@@ -199,7 +201,7 @@ const jobs = {
       put(x, pre, 30, 30, 300);
       arrow(x, 350, 140, 440, 140);
       put(x, fame, 470, 40, 200);
-      text(x, "условие: 2 химеры и чертополох", 180, 300, { font: UIB(24), maxW: 320, lh: 28 });
+      text(x, "условие: 2 окико и 1 золотолоз", 180, 300, { font: UIB(24), maxW: 320, lh: 28 });
       text(x, "есть — 15 славы", 570, 300, { font: UIB(24) });
     }));
   },
@@ -211,7 +213,7 @@ const jobs = {
       put(x, img, 0, 0, W);
       // the English note of the book sits in the top left corner: our Russian one in its place
       x.fillStyle = PAPER; x.fillRect(0, 0, 300, 200);
-      text(x, "Вверху — бонус: улики, ресурсы или ночь", 14, 50, { align: "left", font: UIB(27), maxW: 280, lh: 34 });
+      text(x, "Вверху — бонус: подсказки, ресурсы или ночь", 14, 50, { align: "left", font: UIB(27), maxW: 280, lh: 34 });
       text(x, "Внизу у некоторых — побочное задание на славу", W / 2, h + 44, { size: 25, maxW: W - 30 });
     }));
   },
@@ -221,7 +223,7 @@ const jobs = {
     const h = img.height * W / img.width;
     save("phases", sheet(W, Math.round(h + 80), x => {
       put(x, img, 0, 0, W);
-      [["Исследование Региона", 0.17], ["Обнаружение Святилищ", 0.5], ["Конец исследования", 0.84]].forEach(([t, f]) => text(x, t, W * f, h + 34, { font: UIB(23), maxW: 220, lh: 27 }));
+      [["Исследование Региона", 0.17], ["Обнаружение Святилищ", 0.5], ["Добор карт Регионов", 0.84]].forEach(([t, f]) => text(x, t, W * f, h + 34, { font: UIB(23), maxW: 220, lh: 27 }));
     }));
   },
   explore: () => captioned("explore", 5, [340, 250, 602, 386], "Все вместе кладут карту рубашкой вверх, затем вскрывают — справа от прошлой", { strip: 100 }),
@@ -233,7 +235,7 @@ const jobs = {
       put(x, row, 0, 0, W);
       put(x, fan, W - 300, h1 + 20, 280);
       text(x, "49 после 15 — номер больше: Святилище.", 20, h1 + 60, { align: "left", font: UIB(25), maxW: 390, lh: 31 });
-      text(x, "Улик 3 — на Святилище, на 15 и на 49. Берёте 1 + 3 = 4 карты, оставите одну.", 20, h1 + 150, { align: "left", size: 24, maxW: 390, lh: 30 });
+      text(x, "Подсказок 3 — на Святилище, на 15 и на 49. Берёте 1 + 3 = 4 карты, оставите одну.", 20, h1 + 150, { align: "left", size: 24, maxW: 390, lh: 30 });
     }));
   },
   // the end of the exploration: a card from the center in turn; the leftover goes
@@ -241,13 +243,13 @@ const jobs = {
     const take = await book(6, [478, 95, 607, 206]), gone = await book(6, [326, 338, 458, 466]);
     save("leftover", sheet(W, 480, x => {
       put(x, take, 10, 10, 340); put(x, gone, 380, 20, 330);
-      text(x, "По очереди, от наименьшего номера, — карту в руку", 180, 420, { font: UIB(22), maxW: 330, lh: 27 });
-      text(x, "Оставшуюся — из игры, затем откройте игроков + 1", 545, 420, { font: UIB(22), maxW: 330, lh: 27 });
+      text(x, "По очереди, от наименьшего номера, — карту с рынка в руку", 180, 420, { font: UIB(22), maxW: 330, lh: 27 });
+      text(x, "Оставшуюся — из игры, затем новый рынок: игроков + 1", 545, 420, { font: UIB(22), maxW: 330, lh: 27 });
     }));
   },
   // the kinds of quests: the icons of the aid with our Russian words (the Russian aid has a mistake in the first row)
   async "scoring-icons"() {
-    const rows = ["1 слава за каждую видимую улику", "4 — за каждую видимую химеру", "2 — за каждый видимый камень", "3 — за каждый видимый чертополох",
+    const rows = ["1 слава за каждую видимую подсказку", "4 — за каждый видимый окико", "2 — за каждый видимый удду", "3 — за каждый видимый золотолоз",
       "2 — за каждую карту Города и каждую — Реки", "4 — за каждую карту Леса", "10 — за каждый набор из 4 разных биомов", "4 — за каждую ночную карту", "19 — просто столько славы"];
     const icons = [];
     for (let i = 0; i < rows.length; i++) { const c = 60.5 + 26.65 * i; icons.push(await aidBox(1, [22, c - 12.5, 92, c + 12.5])); }

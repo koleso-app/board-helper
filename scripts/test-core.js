@@ -347,6 +347,7 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   const fpassed0 = passed;
   const ctxN = (n, adv) => ({ players: n, exp: new Set(), has: () => false, opt: id => id === "advanced" ? !!adv : false });
   const sheet = (cards, sanct, tie) => ({ cards: cards.map(String), sanct: sanct === undefined ? "" : String(sanct), tie: tie === undefined ? "" : String(tie) });
+  const plain = t => String(t).replace(/\*/g, "").replace(/\{[a-z0-9-]+\|([^}]+)\}/g, "$1");
   t("faraway p.1: 2–6 players, no first player, 8 rounds, scored at the end", () => {
     assert.strictEqual(F.players.min, 2); assert.strictEqual(F.players.max, 6);
     assert.ok(!F.first, "everyone plays at once — no wheel");
@@ -356,17 +357,19 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   t("faraway p.5: deal 3 (advanced: 5, keep 3); reveal players + 1", () => {
     const s = { gameId: "faraway", players: ["a", "b", "c", "d", "e"], exp: [], opts: {} };
     const st = BH.setupSteps(s);
-    assert.ok(st.find(x => x.id === "deal").text.includes("по 3"));
+    assert.ok(plain(st.find(x => x.id === "deal").text).includes("по 3"));
     const c = st.find(x => x.id === "center");
     assert.ok(c.title.includes("6"), "5 players reveal 6: " + c.title); assert.ok(c.text.includes("6"));
-    const adv = BH.setupSteps(Object.assign({}, s, { opts: { advanced: true } })).find(x => x.id === "deal").text;
+    const adv = plain(BH.setupSteps(Object.assign({}, s, { opts: { advanced: true } })).find(x => x.id === "deal").text);
     assert.ok(adv.includes("по 5") && adv.includes("выбирает 3") && adv.includes("откладывает") && adv.includes("с колодой"));
   });
   t("faraway p.10–11: round 1 has no sanctuaries; round 8 takes no card; the leftover goes, players + 1 come", () => {
     // the steps of the round and «После раунда», as one line without the bold marks
-    const ph = r => [...F.rounds.phases(ctxN(4), r, 8).flatMap(p => p.steps), ...F.rounds.after(ctxN(4), r, 8)].join(" ").replace(/\*/g, "");
+    const ph = r => plain([...F.rounds.phases(ctxN(4), r, 8).flatMap(p => p.steps), ...F.rounds.after(ctxN(4), r, 8)].join(" "));
     assert.ok(ph(1).includes("В 1-м раунде пропустите"));
-    assert.ok(ph(3).includes("больше прошлой") && ph(3).includes("1 + ещё по 1 за каждую подсказку в игровой области"));
+    assert.ok(ph(3).includes("больше прошлой") && ph(3).includes("1 + ещё по 1 за каждую подсказку на своих картах — Регионах и Святилищах"));
+    assert.ok(!plain(F.rounds.phases(ctxN(4), 1, 8)[2].steps.join(" ")).includes("Святилищ"), "round 1 finds no sanctuaries, so phase 3 says nothing of them");
+    assert.ok(F.rounds.phases(ctxN(4), 3, 8)[1].steps.join(" ").includes("{clue|"), "the clue is shown as its icon");
     assert.ok(ph(3).includes("Уберите карту, оставшуюся на рынке") && ph(3).includes("новый рынок — 5 карт"), "4 players reveal 5");
     assert.ok(ph(3).includes("от меньшего номера"), "phase 3 goes from the lowest card up");
     assert.ok(ph(8).includes("Карту с рынка не берут") && !ph(8).includes("новый рынок") && ph(8).includes("подсчёт славы"), "round 8: no card, then the fame");

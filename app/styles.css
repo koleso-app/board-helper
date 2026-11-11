@@ -665,3 +665,9 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .ph-steps li::marker{color:var(--muted)}
 .ph-after{margin-top:14px;padding:10px 14px 12px;border-radius:12px;background:var(--sunk)}
 .ph-after-h{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+/* a game's icon in a line of text (the word stays when the picture is not available) */
+.ic-inline{display:inline-block;vertical-align:-.32em;line-height:1}
+.ic-inline img.a-icon{height:1.45em;width:auto;display:block}
+.ic-inline.has-img{background:none}
+.setup-text .ph-steps{font-size:16px;margin-top:6px}
+.end-how ol b{font-weight:700}

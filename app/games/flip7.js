@@ -95,7 +95,7 @@
 
     // shown on the finish screen
     options: [
-      { id: "challenge", label: "Играть с вызовом: 200 очков меньше чем за 5 раундов", when: c => c.players <= 2, default: false },
+      { id: "challenge", label: "Играть с вызовом: 200 очков меньше чем за 5 раундов", short: "Вызов: 200 меньше чем за 5 раундов", when: c => c.players <= 2, default: false },
     ],
 
     finishNote(s) {

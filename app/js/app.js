@@ -507,29 +507,39 @@
         <button class="chip" data-act="pick-place" data-id="" aria-pressed="${!draft.placeId}">Не указывать</button></div>
       <form class="row" data-form="add-place" style="margin-top:10px"><input class="input" name="name" placeholder="Новое место: у Саши, в клубе…" maxlength="40" aria-label="Новое место"><button class="btn" type="submit">Добавить</button></form>`, true);
 
-    // players: me first, "as last time" in one tap, the regulars on top, then the seating order
+    // players: me first, "as last time" in one tap, the regulars on top
     let playersBody = "";
     {
       const meId = BH.me() ? BH.meId() : null;
       const pool = S().players.filter(p => !p.hidden || draft.players.includes(p.id))
         .map(p => ({ p, k: playsOf("player", p.id) })).sort((a, b) => (b.p.id === meId) - (a.p.id === meId) || b.k - a.k || a.p.name.localeCompare(b.p.name, "ru"));
       const lastAdd = draft.lastPlayers.filter(id => BH.player(id) && !draft.players.includes(id));
-      const opts = g ? draftOptions(g) : [];
       playersBody = `
         ${lastAdd.length ? `<button type="button" class="btn sm last-btn" data-act="draft-last-players">${I.plus}Как в прошлой партии: ${esc(lastAdd.map(id => BH.player(id).name).join(", "))}</button>` : ""}
         ${pool.length > 9 ? `<div class="search">${I.search}<input class="input" type="search" data-act="pick-q" data-list="players" placeholder="Найти игрока" aria-label="Найти игрока" autocomplete="off"></div>` : ""}
         <div class="pick-list" data-list="players">${pool.map(({ p, k }) => { const on = draft.players.includes(p.id); return `<button type="button" class="pick-row" data-act="toggle-player" data-id="${p.id}" data-name="${esc(p.name.toLowerCase())}" aria-pressed="${on}">
           <span class="pick-box" aria-hidden="true">${on ? I.check : ""}</span>${BH.avatar(p)}<span class="t"><b>${esc(p.name)}</b><span>${p.id === meId ? "это вы · " : ""}${k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "ещё не играл(а)"}</span></span></button>`; }).join("")}</div>
         <form class="row" data-form="add-player" style="margin-top:4px"><input class="input" name="name" placeholder="Новый игрок" maxlength="40" aria-label="Имя нового игрока"><button class="btn" type="submit">Добавить</button></form>
-        ${cnt > 1 ? `<div><div class="label" style="margin:8px 0 2px">За столом, по часовой стрелке</div>${draft.players.map((id, i) => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="seat"><span class="n">${i + 1}</span>${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
-            <span class="mv"><button class="icon-btn" data-act="seat-up" data-i="${i}" aria-label="Выше" ${i ? "" : "disabled"}>${I.up}</button><button class="icon-btn" data-act="seat-down" data-i="${i}" aria-label="Ниже" ${i < cnt - 1 ? "" : "disabled"}>${I.down}</button></span></div>`; }).join("")}</div>` : ""}
-        ${g && cnt >= g.players.min && g.players.recommendedMin && cnt < g.players.recommendedMin ? `<div class="note info">${esc(g.playersNote || `По правилам ${g.name} рассчитан на ${g.players.recommendedMin} и больше игроков.`)}</div>` : ""}
-        ${!past && opts.length ? `<div class="stack" style="gap:6px">${opts.map(o => `<label class="check" style="font-weight:500"><input type="checkbox" data-act="draft-opt" data-id="${esc(o.id)}" ${draft.opts[o.id] ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}</div>` : ""}`;
+        ${g && cnt >= g.players.min && g.players.recommendedMin && cnt < g.players.recommendedMin ? `<div class="note info">${esc(g.playersNote || `По правилам ${g.name} рассчитан на ${g.players.recommendedMin} и больше игроков.`)}</div>` : ""}`;
     }
     const playersOk = !!g && !draftProblem();
     const playersSum = cnt ? `<span class="faces">${draft.players.slice(0, 5).map(id => BH.avatar(BH.player(id), "sm")).join("")}</span>${cnt} ${BH.plural(cnt, "игрок", "игрока", "игроков")}${g && !playersOk ? ` · <span class="warn-t">${esc(draftProblem())}</span>` : ""}`
       : '<span class="warn-t">Никого</span>';
     const playersSec = step2("players", "Игроки", playersSum, playersBody, playersOk && cnt >= (g.players.recommendedMin || g.players.min));
+
+    // the seating order, clockwise: who sits after whom decides who deals (or starts) each round
+    const nameOf = id => (BH.player(id) || { name: "?" }).name;
+    const orderSec = cnt > 1 ? step2("order", "Порядок за столом", esc(draft.players.map(nameOf).join(" → ")),
+      `<p class="small muted">По часовой стрелке, как сидите: от этого зависит, кто сдаёт или начинает каждый раунд.</p>
+       <div>${draft.players.map((id, i) => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="seat"><span class="n">${i + 1}</span>${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
+         <span class="mv"><button class="icon-btn" data-act="seat-up" data-i="${i}" aria-label="Выше: ${esc(p.name)}" ${i ? "" : "disabled"}>${I.up}</button><button class="icon-btn" data-act="seat-down" data-i="${i}" aria-label="Ниже: ${esc(p.name)}" ${i < cnt - 1 ? "" : "disabled"}>${I.down}</button></span></div>`; }).join("")}</div>
+       <button type="button" class="btn ghost sm" data-act="seat-shuffle">${IC.dice}Рассадить случайно</button>`, true) : "";
+
+    // the game mode: the game's options (a challenge, a harder variant…); not for a game recorded afterwards
+    const opts = g && !past ? draftOptions(g) : [];
+    const on = opts.filter(o => draft.opts[o.id]);
+    const modeSec = opts.length ? step2("mode", "Режим игры", on.length ? esc(on.map(o => o.short || o.label).join(", ")) : "Обычная игра",
+      `<div class="stack" style="gap:6px">${opts.map(o => `<label class="check" style="font-weight:500"><input type="checkbox" data-act="draft-opt" data-id="${esc(o.id)}" ${draft.opts[o.id] ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}</div>`, true) : "";
 
     let resultSec = "";
     if (past && g && cnt) {
@@ -547,7 +557,7 @@
     const back = draft.editId ? backLink("#/s/" + draft.editId + "/setup", "Подготовка") : backToOrigin("Отмена");
     return `<div class="stack">
       <div>${back}<div class="page-head"><div><h1>${draft.editId ? "Партия" : past ? "Сыгранная партия" : "Новая партия"}</h1></div></div></div>
-      <div class="stepper">${dateSec}${gameSec}${placeSec}${playersSec}${resultSec}</div>
+      <div class="stepper">${dateSec}${gameSec}${placeSec}${playersSec}${orderSec}${modeSec}${resultSec}</div>
       <div class="sticky-foot">${problem ? `<p class="foot-hint" id="foot-hint" role="status">${esc(problem)}</p>` : ""}<button class="btn primary big block" data-act="draft-save" ${problem ? 'disabled aria-describedby="foot-hint"' : ""}>${label}</button></div>
     </div>`;
   }
@@ -1554,6 +1564,7 @@
         else draft.players.push(id);
         render(); break;
       }
+      case "seat-shuffle": { const a = draft.players; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } render(); break; }
       case "seat-up": case "seat-down": { const i = +el.dataset.i, j = act === "seat-up" ? i - 1 : i + 1; const a = draft.players; [a[i], a[j]] = [a[j], a[i]]; render(); break; }
       case "new-with": startDraft(el.dataset.id); go("#/new/" + el.dataset.id); break;
 
@@ -1756,7 +1767,7 @@
         else render();
       }
     }
-    if (el.dataset.act === "draft-opt" && draft) { draft.opts[el.dataset.id] = el.checked; }
+    if (el.dataset.act === "draft-opt" && draft) { draft.opts[el.dataset.id] = el.checked; render(); refocus('[data-act="draft-opt"][data-id="' + el.dataset.id + '"]'); }
     if (el.dataset.act === "voice-name") { BH.voice.setVoice(el.value); BH.toast("Голос: " + el.options[el.selectedIndex].text); }
     if (el.dataset.act === "sync-same") { const own = document.getElementById(el.dataset.target || "own-pass"); if (own) own.hidden = el.checked; }
     if (el.dataset.act === "import" && el.files && el.files[0]) {
@@ -1922,7 +1933,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.14.0";
+  BH.version = "0.14.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

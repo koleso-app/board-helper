@@ -7,7 +7,9 @@
 (function () {
   "use strict";
   const BH = window.BH;
-  const CACHE = "nastolki-img-v1";
+  const CACHE = "nastolki-img-v2";
+  // the previous set (a few pictures were re-cut since): dropped, the new one loads on demand
+  if ("caches" in window) caches.delete("nastolki-img-v1").catch(() => {});
   const EXT = ".webp";   // small: the whole Flip 7 set is about 230 KB, loaded once
   const urls = new Map();      // "game/name" -> object URL (this page load)
   const failed = new Set();    // missing on the server: do not ask again this page load

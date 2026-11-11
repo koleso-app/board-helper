@@ -14,6 +14,9 @@
 
   const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
   BH.fmtDate = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS[d.getMonth()] + (d.getFullYear() !== new Date().getFullYear() ? " " + d.getFullYear() : ""); };
+  // numbers with a real minus sign: −6, and with a sign either way: +12 / −6
+  BH.minus = n => (Number(n) < 0 ? "−" + Math.abs(Number(n)) : String(n));
+  BH.signed = n => (Number(n) < 0 ? "−" + Math.abs(Number(n)) : "+" + Number(n));
   BH.fmtTime = ts => { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
   BH.fmtDuration = ms => { const m = Math.round(ms / 60000); if (m < 1) return "меньше минуты"; if (m < 60) return m + " мин"; const h = Math.floor(m / 60), r = m % 60; return h + " ч" + (r ? " " + r + " мин" : ""); };
 

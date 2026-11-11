@@ -24,7 +24,7 @@
 
   R.results = (g, q) => {
     const hits = BH.searchRules(g, q);
-    if (!hits.length) return `<div class="note info">В шпаргалке ничего не нашлось по запросу «${esc(q)}». Попробуйте другое слово, например «перебор», «×2», «дилер», или спросите помощника голосом.</div>`;
+    if (!hits.length) return `<div class="note info">В шпаргалке ничего не нашлось по запросу «${esc(q)}». Попробуйте другое слово, например ${(g.searchWords || ["перебор", "дилер"]).map(w => "«" + esc(w) + "»").join(", ")}, или спросите помощника голосом.</div>`;
     return hits.slice(0, 6).map(h => h.kind === "faq"
       ? `<div class="qa"><b>${mark(">" + esc(h.title) + "<", q).slice(1, -1)}</b><p>${mark(">" + esc(h.item.a) + "<", q).slice(1, -1)}${srcBadge(h.item)}</p>${h.item.ref ? `<button class="btn ghost sm" data-act="goto-rule" data-id="${esc(h.item.ref)}">Раздел правил</button>` : ""}</div>`
       : R.ruleHTML(h.item, q, true, g)).join("");
@@ -33,7 +33,7 @@
   R.panel = (g, q, opts) => {
     opts = opts || {};
     return `<div class="stack">
-      <div class="search">${BH.ICON.search}<input class="input" type="search" id="rules-q" value="${esc(q || "")}" placeholder="Спросите: «можно ли Freeze на себя?»" aria-label="Поиск по правилам" autocomplete="off"></div>
+      <div class="search">${BH.ICON.search}<input class="input" type="search" id="rules-q" value="${esc(q || "")}" placeholder="Спросите: «${esc(g.searchExample || "как считать очки?")}»" aria-label="Поиск по правилам" autocomplete="off"></div>
       <div id="rules-out">${q ? R.results(g, q) : R.full(g, opts)}</div>
     </div>`;
   };

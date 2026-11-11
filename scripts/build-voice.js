@@ -26,7 +26,7 @@ const games = [
   { js: "games/flip7.js", book: path.join(root, "sources", "flip7-rules-ru.txt"), title: "Flip 7",
     bookNote: "основной источник; часть страниц со схемами подсчёта распознана с ошибками — там сверяйся со шпаргалкой" },
   { js: "games/flip7v.js", book: path.join(root, "sources", "flip7v-rules-en.txt"), title: "Flip 7: With A Vengeance",
-    bookNote: "на английском, основной источник; отвечай по-русски и называй карты так, как в шпаргалке" },
+    bookNote: "на английском, основной источник; отвечай по-русски и называй карты так, как в шпаргалке. Числа «x12 x8 x3…» на стр. 2–3 распознаны вперемешку — состав колоды бери из шпаргалки. Последняя страница — задняя обложка без номера" },
 ];
 const files = [["index.js", fs.readFileSync(path.join(root, "functions", "voice", "index.js"))]];
 for (const g of games) {

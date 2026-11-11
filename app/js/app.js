@@ -694,7 +694,7 @@
       <thead><tr><th>№</th>${s.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<th title="${esc(p.name)}">${BH.avatar(p, "sm")}<span class="hist-n">${esc(p.name)}</span></th>`; }).join("")}</tr></thead>
       <tbody>${s.rounds.map((rd, i) => { const dealer = BH.player(rd.leader || BH.leaderAt(s, i));
         return `<tr${editable ? ` class="click" data-act="edit-round" data-i="${i}" tabindex="0"` : ""}><td class="hist-r"><span>${i + 1}</span>${lead && dealer ? `<span class="hist-d" title="${esc(lead)}: ${esc(dealer.name)}">${BH.avatar(dealer, "xs")}</span>` : ""}</td>${s.players.map(id => { const f = (rd.flags || {})[id] || {}, v = Number(rd.scores[id]) || 0;
-          return `<td class="${f.bust ? "bust" : f.flip7 ? "f7" : best[i] !== null && v === best[i] ? "top" : ""}">${f.bust ? "✕" : (f.flip7 ? "★ " : "") + v}</td>`; }).join("")}</tr>`; }).join("")}</tbody>
+          return `<td class="${f.bust ? "bust" : f.flip7 ? "f7" : best[i] !== null && v === best[i] ? "top" : ""}">${f.bust ? "✕" + (v ? " " + BH.minus(v) : "") : (f.flip7 ? "★ " : "") + BH.minus(v)}</td>`; }).join("")}</tr>`; }).join("")}</tbody>
       ${editable ? "" : `<tfoot><tr><th>Итого</th>${s.players.map(id => `<th>${tot[id]}</th>`).join("")}</tr></tfoot>`}
     </table></div>${lead ? `<p class="tiny muted" style="margin-top:6px">Кружок у номера — ${esc(lead.toLowerCase())} раунда. ✕ — перебор, ★ — 7 разных чисел, жирным — лучший в раунде.</p>` : ""}`;
   }
@@ -720,7 +720,7 @@
         ${BH.avatar(p)}
         <div style="min-width:0"><div class="nm"><span>${esc(p.name)}</span>${id === leaderId ? `<span class="badge accent">${esc(g.rounds.leaderLabel || "ходит")}</span>` : ""}</div>
           ${target ? `<div class="bar"><i style="width:${pct}%;background:${p.color}"></i></div>` : ""}</div>
-        <div><div class="tot num">${t}</div><div class="last">${last ? (lf.bust ? "перебор" : (lf.flip7 ? "Flip 7! " : "") + "+" + lr) : target ? "из " + target : ""}</div></div>
+        <div><div class="tot num">${t}</div><div class="last">${last ? (lf.bust ? "перебор" + (lr ? " " + BH.signed(lr) : "") : (lf.flip7 ? "Flip 7! " : "") + BH.signed(lr)) : target ? "из " + target : ""}</div></div>
       </div>`;
     }).join("");
 
@@ -1408,7 +1408,10 @@
     const calc = BH.calcScore(g, e.sel, ctx);
     // a bust is 0 whatever was typed (a game may score a bust otherwise, e.g. the brutal mode of Flip 7: With A Vengeance)
     if (e.sel.flags && e.sel.flags.bust) return Object.assign({}, calc, { score: calc.bustScore !== undefined ? calc.bustScore : 0, bust: true });
-    if (e.manual !== null && e.manual !== undefined && e.manual !== "") return { score: Math.round(Number(e.manual)) || 0, manual: true, notes: ["введено вручную"] };
+    if (e.manual !== null && e.manual !== undefined && e.manual !== "") {
+      const fl = e.sel.flags || {}, extra = g.calc && g.calc.flags ? g.calc.flags.filter(f => f.id !== "bust" && fl[f.id] && (!f.when || f.when(ctx))) : [];
+      return { score: Math.round(Number(e.manual)) || 0, manual: true, notes: [extra.length ? "введено вручную — отметки «" + extra.map(f => f.label).join("», «") + "» не учтены, впишите итог с ними" : "введено вручную"] };
+    }
     return calc;
   }
 
@@ -1933,7 +1936,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.14.1";
+  BH.version = "0.14.2";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

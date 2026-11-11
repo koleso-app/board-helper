@@ -282,14 +282,31 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     for (const f of v.faq) { assert.ok(v.rules.some(r => r.id === f.ref), f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], f.src); }
     const ids = v.ruleGroups.flatMap(grp => grp.ids);
     for (const r of v.rules) assert.strictEqual(ids.filter(x => x === r.id).length, 1, r.id);
-    for (const r of v.rules) if (r.id !== "tie") assert.ok(r.page > 0 && r.page <= 12, r.id);
+    // a page, a range «11–12» or a list «1, 7»: every number a printed page of the book (1–12)
+    for (const r of v.rules) if (r.id !== "tie") assert.ok(String(r.page).split(/[–,\s]+/).filter(Boolean).every(n => /^\d+$/.test(n) && +n >= 1 && +n <= 12), r.id + ": " + r.page);
     for (const grp of v.faqGroups) for (const r of grp.refs) assert.ok(v.rules.some(x => x.id === r), r);
     for (const k of Object.keys(v.images.rules)) assert.ok(v.rules.some(r => r.id === k), "image for " + k);
   });
   t("vengeance: setup — brutal and challenge steps only when chosen", () => {
     const s = { gameId: "flip7v", players: ["a", "b"], exp: [], opts: {} };
     assert.ok(!BH.setupSteps(s).some(x => x.id === "brutal"));
-    assert.ok(BH.setupSteps(Object.assign({}, s, { opts: { brutal: true, challenge: true } })).some(x => x.id === "brutal" || x.id === "challenge"));
+    const both = BH.setupSteps(Object.assign({}, s, { opts: { brutal: true, challenge: true } }));
+    assert.ok(both.some(x => x.id === "brutal")); assert.ok(both.some(x => x.id === "challenge")); assert.ok(!both.some(x => x.id === "goal"));
+  });
+  t("vengeance: the Zero in the brutal mode scores like a bust (minus the cards given)", () => {
+    assert.strictEqual(score({ num: [12, 11], special: ["zero"], minus: [4] }, {}, true).score, -4);
+    assert.strictEqual(score({ num: [12, 11], special: ["zero"], minus: [4] }, {}, false).score, 0);
+    assert.ok(!Object.is(score({ num: [12], special: ["zero"] }, {}, true).score, -0));
+  });
+  t("vengeance: −15 flags that do not add up are reported; busted players skip card warnings", () => {
+    const res = [{ score: 10 }, { score: 5 }];
+    const w = v.calc.roundWarnings(res, [sel({ num: [10] }, { minus15: true }), sel({ num: [5] })], ctxOf(2, true));
+    assert.ok(w.some(x => x.includes("никто не отмечен")));
+    const w2 = v.calc.roundWarnings([{ flip7: false }, {}], [sel({ num: [10] }, { gave15: true }), sel({ num: [5] }, { minus15: true })], ctxOf(2, true));
+    assert.ok(w2.some(x => x.includes("без «Подкидного 7»")));
+    const w3 = v.calc.roundWarnings([{}, {}], [sel({ num: [7], special: ["u7"] }, { bust: true }), sel({ num: [1] })], ctxOf(2));
+    assert.ok(!w3.some(x => x.includes("Несчастливая 7")), "a busted player is not warned about");
+    assert.ok(!v.calc.flags.find(f => f.id === "gave15").when(ctxOf(1, true)), "no −15 when playing alone");
   });
   console.log(`${passed} passed (with Flip 7: With A Vengeance)${process.exitCode ? ", some FAILED" : ""}`);
 }

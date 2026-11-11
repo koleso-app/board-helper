@@ -924,7 +924,7 @@
   let gcard = { id: null, tab: "stats", period: "all" };
   function viewGame(g) {
     const fin = finishedSessions().filter(x => x.gameId === g.id);
-    if (gcard.id !== g.id) gcard = { id: g.id, tab: fin.length ? "stats" : "rules", period: gcard.period };
+    if (gcard.id !== g.id) gcard = { id: g.id, tab: fin.length ? "stats" : "rules", period: gcard.period, psort: gcard.psort };
     const years = [...new Set(fin.map(x => new Date(BH.sessionDate(x)).getFullYear()))].sort((a, b) => b - a);
     const opts = Object.assign({}, PERIODS); for (const y of years) opts["y" + y] = y + " год";
     if (!(gcard.period in opts)) gcard.period = "all";
@@ -953,6 +953,18 @@
       ${body}
     </div>`;
   }
+  // the orders of a players list: by wins (then the rate, then plays), by the win rate, by the best score
+  const PR_SORTS = { wins: "Победы", rate: "% побед", best: "Счёт" };
+  function sortPlayers(list, key, low) {
+    const by = {
+      wins: (a, b) => b.wins - a.wins || b.rate - a.rate || b.n - a.n,
+      rate: (a, b) => b.rate - a.rate || b.wins - a.wins || b.n - a.n,
+      best: (a, b) => (a.best === null) - (b.best === null) || (low ? a.best - b.best : b.best - a.best) || (low ? a.avg - b.avg : b.avg - a.avg) || b.wins - a.wins,
+    }[key] || ((a, b) => b.wins - a.wins);
+    return list.slice().sort(by);
+  }
+  // the switch of the order, right above the list (docs/ui.md: a control of a list stands at the list)
+  const prSortBar = (scope, cur, keys) => `<div class="spread pr-sort"><span class="small muted">Порядок</span><div class="seg">${keys.map(k => `<button type="button" data-act="pr-sort" data-scope="${scope}" data-v="${k}" aria-pressed="${cur === k}">${PR_SORTS[k]}</button>`).join("")}</div></div>`;
   // players with their games and wins, a bar of the win rate, and (for a game) best / average score on the right
   function playersRateList(list, withScores) {
     const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
@@ -995,7 +1007,7 @@
         ${line("Первая партия", BH.fmtDate(st.first))}
         ${line("Последняя партия", BH.fmtDate(st.last))}
       </section>
-      <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">справа — лучший и средний счёт</span></div><div class="list">${playersRateList(st.players, true)}</div></section>`;
+      <section class="panel"><h2 style="margin-bottom:8px">Игроки</h2>${st.players.length > 1 ? prSortBar("game", gcard.psort || "wins", ["wins", "rate", "best"]) : ""}<div class="list">${playersRateList(sortPlayers(st.players, gcard.psort || "wins", lowerWins(g)), true)}</div><p class="tiny muted" style="margin-top:6px">Справа — лучший и средний счёт.</p></section>`;
   }
 
   /* ---------- players & places ---------- */
@@ -1147,7 +1159,7 @@
   let plcard = { id: null, tab: "stats", period: "all" }, editPlace = null;
   function viewPlace(pl) {
     const fin = finishedSessions().filter(x => x.placeId === pl.id);
-    if (plcard.id !== pl.id) plcard = { id: pl.id, tab: fin.length ? "stats" : "sessions", period: plcard.period };
+    if (plcard.id !== pl.id) plcard = { id: pl.id, tab: fin.length ? "stats" : "sessions", period: plcard.period, psort: plcard.psort };
     const years = [...new Set(fin.map(x => new Date(BH.sessionDate(x)).getFullYear()))].sort((a, b) => b - a);
     const opts = Object.assign({}, PERIODS); for (const y of years) opts["y" + y] = y + " год";
     if (!(plcard.period in opts)) plcard.period = "all";
@@ -1181,7 +1193,7 @@
           ${line("Первая партия", BH.fmtDate(st.first))}
           ${line("Последняя партия", BH.fmtDate(st.last))}
         </section>
-        <section class="panel"><div class="spread" style="margin-bottom:4px"><h2>Игроки</h2><span class="tiny muted">процент побед</span></div><div class="list">${playersRateList(st.players, false)}</div></section>`;
+        <section class="panel"><h2 style="margin-bottom:8px">Игроки</h2>${st.players.length > 1 ? prSortBar("place", plcard.psort || "wins", ["wins", "rate"]) : ""}<div class="list">${playersRateList(sortPlayers(st.players, plcard.psort || "wins"), false)}</div></section>`;
     })() : none);
     return `<div class="stack">
       <div class="shead">
@@ -1802,6 +1814,7 @@
 
       /* players */
       case "edit-player": editPlayer = el.dataset.id || null; editKeep = null; render(); break;
+      case "pr-sort": { const v = PR_SORTS[el.dataset.v] ? el.dataset.v : "wins"; if (el.dataset.scope === "place") plcard.psort = v; else gcard.psort = v; render(); refocus(`[data-act="pr-sort"][data-v="${v}"]`); break; }
       case "players-sort": playersSort = el.dataset.v === "name" ? "name" : "plays"; render(); refocus('[data-act="players-sort"][data-v="' + playersSort + '"]'); break;
       case "gc-tab": gcard.tab = el.dataset.tab; render(); refocus('[data-act="gc-tab"][data-tab="' + gcard.tab + '"]'); break;
       case "pc-tab": pcard.tab = el.dataset.tab; render(); refocus('[data-act="pc-tab"][data-tab="' + pcard.tab + '"]'); break;
@@ -1851,7 +1864,7 @@
         stopListening(); if (askCtl) askCtl.abort(); askCtl = null; BH.voice.stopAudio(); ask = null;
         pendingRule = el.dataset.id;
         const inSession = sid && BH.session(sid), to = inSession ? "#/s/" + sid + "/rules" : "#/games/" + gid;
-        if (!inSession) gcard = { id: gid, tab: "rules", period: gcard.period };
+        if (!inSession) gcard = { id: gid, tab: "rules", period: gcard.period, psort: gcard.psort };
         // the same page: closing the sheet drops its history entry, then the page is redrawn;
         // another page takes the sheet's entry (go), so Back returns to where the question was asked
         if (normHash(location.hash) === normHash(to)) render(); else go(to);
@@ -2052,7 +2065,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.15.1";
+  BH.version = "0.15.2";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

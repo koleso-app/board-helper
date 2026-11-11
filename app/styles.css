@@ -498,16 +498,17 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .avatar.xs{width:18px;height:18px;font-size:7.5px;text-shadow:none}
 .hist tfoot th{border-top:2px solid var(--line);color:var(--ink);font-size:15px;font-weight:700;padding-top:9px}
 
-.pl-best{display:flex;flex-direction:column;align-items:flex-end;flex:none;line-height:1.2}
+.pl-best{display:flex;flex-direction:column;align-items:flex-end;flex:none;line-height:1.2;min-width:62px}
 .pl-best b{font-family:var(--f-display);font-size:17px}
 .pl-best small{font-size:12px;color:var(--muted)}
 
 /* ---------- win-rate bars; a place's page ---------- */
 .pr-row .t{display:flex;flex-direction:column;gap:3px}
 .pr-line{display:flex;align-items:center;gap:10px;margin-top:2px}
-.pr-bar{flex:1;height:6px;border-radius:999px;background:var(--sunk);overflow:hidden;max-width:220px}
+.pr-bar{flex:1;height:6px;border-radius:999px;background:var(--sunk);overflow:hidden}
+.pr-sort{margin-bottom:4px}
 .pr-bar i{display:block;height:100%;border-radius:999px}
-.pr-pct{flex:none;min-width:42px;text-align:right;font-family:var(--f-display);font-weight:700;font-size:15px}
+.pr-pct{flex:none;width:48px;text-align:right;font-family:var(--f-display);font-weight:700;font-size:15px}
 .place-ic{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;flex:none;background:var(--accent-soft);color:var(--accent)}
 .place-ic svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .pc-line b a{color:inherit;text-decoration:underline;text-underline-offset:2px}

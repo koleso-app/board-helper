@@ -94,6 +94,21 @@ t("search by the rulebook's words", () => {
   assert.ok(BH.searchRules(g, "вторая попытка").slice(0, 3).some(h => /Вторая попытка/.test(h.title)));
 });
 t("every rule from the book has a page, except our own tie note", () => { for (const r of g.rules) if (r.id !== "tie") assert.ok(r.page > 0, r.id); });
+// docs/ui.md «Помогать, а не нагружать»: what is read during play is short — a setup step in up to 30 words,
+// a line of the round (a phase step, a reminder, «После раунда») in up to 16; the details live in the rules
+t("in-game texts of every game are short", () => {
+  const words = s => String(s).replace(/\*/g, "").split(/\s+/).filter(Boolean).length;
+  const c = { players: 4, opt: () => true, has: () => true, exp: new Set() };
+  for (const game of BH.games) {
+    for (const st of game.setup || []) { const t = typeof st.text === "function" ? st.text(c) : st.text; assert.ok(words(t) <= 30, `${game.id} setup ${st.id}: ${words(t)} слов`); }
+    const R = game.rounds || {}, last = R.count || 8, lines = [...(R.reminder || [])];
+    for (let r = 1; r <= last; r++) {
+      if (R.phases) for (const p of R.phases(c, r, last)) lines.push(...(p.steps || [p.text]));
+      lines.push(...((typeof R.after === "function" ? R.after(c, r, last) : R.after) || []));
+    }
+    for (const l of lines) assert.ok(words(l) <= 16, `${game.id}: «${l}» — ${words(l)} слов`);
+  }
+});
 t("normalize keeps a default place", () => assert.strictEqual(BH._normalize({}).places[0].name, "Дома"));
 t("'this is me' is one record of its own; the old flag on a player is moved into it", () => {
   const old = BH._normalize({ players: [{ id: "a1", name: "Аня", me: true }, { id: "b2", name: "Боря", me: true }] });
@@ -348,18 +363,20 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.ok(adv.includes("по 5") && adv.includes("выбирает 3") && adv.includes("откладывает") && adv.includes("с колодой"));
   });
   t("faraway p.10–11: round 1 has no sanctuaries; round 8 takes no card; the leftover goes, players + 1 come", () => {
-    const ph = r => F.rounds.phases(ctxN(4), r, 8).map(p => p.text).join(" ");
-    assert.ok(ph(1).includes("В первом раунде Святилищ нет"));
-    assert.ok(ph(3).includes("1 карту Святилища") && ph(3).includes("за каждую подсказку") && ph(3).includes("игровой области"));
-    assert.ok(ph(3).includes("уберите из игры") && ph(3).includes("новый рынок — 5 карт"), "4 players reveal 5");
-    assert.ok(ph(3).includes("наименьшего номера"), "phase 3 goes from the lowest card up");
-    assert.ok(ph(8).includes("Новую карту Региона не берите") && !ph(8).includes("откройте"));
-    assert.ok(ph(8).includes("добавляет одно") && ph(8).includes("под колоду"), "in round 8 a sanctuary may still be added");
-    assert.ok(ph(3).includes("добавляет одно") && ph(3).includes("под колоду") && ph(3).includes("действует сразу"), "one sanctuary kept, it works at once, the rest under the deck");
-    assert.ok(ph(1).includes("одновременно") && ph(1).includes("рубашкой вверх") && ph(1).includes("справа"), "phase 1: at once, face down, to the right");
+    // the steps of the round and «После раунда», as one line without the bold marks
+    const ph = r => [...F.rounds.phases(ctxN(4), r, 8).flatMap(p => p.steps), ...F.rounds.after(ctxN(4), r, 8)].join(" ").replace(/\*/g, "");
+    assert.ok(ph(1).includes("В 1-м раунде пропустите"));
+    assert.ok(ph(3).includes("больше прошлой") && ph(3).includes("1 + ещё по 1 за каждую подсказку в игровой области"));
+    assert.ok(ph(3).includes("Уберите карту, оставшуюся на рынке") && ph(3).includes("новый рынок — 5 карт"), "4 players reveal 5");
+    assert.ok(ph(3).includes("от меньшего номера"), "phase 3 goes from the lowest card up");
+    assert.ok(ph(8).includes("Карту с рынка не берут") && !ph(8).includes("новый рынок") && ph(8).includes("подсчёт славы"), "round 8: no card, then the fame");
+    assert.ok(ph(8).includes("оставьте 1") && ph(8).includes("под колоду"), "in round 8 a sanctuary may still be added");
+    assert.ok(ph(3).includes("Возьмите 1 карту с рынка") && ph(3).includes("оставьте 1") && ph(3).includes("под колоду"), "one card from the market, one sanctuary kept, the rest under the deck");
+    assert.ok(ph(1).includes("Все разом") && ph(1).includes("рубашкой вверх") && ph(1).includes("справа"), "phase 1: at once, face down, to the right");
     assert.strictEqual(F.rounds.phases(ctxN(4), 2, 8)[1].title, "Обнаружение Святилищ");
     assert.strictEqual(F.rounds.phases(ctxN(4), 2, 8)[2].title, "Добор карт Регионов", "the official name of phase 3");
     assert.ok(ph(7).includes("Новый рынок не открывайте") && !ph(7).includes("так решают игроки"), "the book (p. 11): no market for round 8");
+    assert.ok(ph(3).includes("«Раунд 3 сыгран»"), "after the round: which button to press");
   });
   t("faraway p.12: the fame is the sum of the 8 Region cards and the sanctuaries", () => {
     assert.strictEqual(BH.endTotal(F, sheet([3, 0, 12, 6, 0, 19, 4, 8], 7)), 59);

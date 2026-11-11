@@ -192,8 +192,7 @@ input[type="datetime-local"].input{min-height:48px}
 .pl .bar i{display:block;height:100%;border-radius:99px}
 .pl .tot{font-family:var(--f-display);font-weight:700;font-size:26px;text-align:right;line-height:1}
 .pl .last{font-size:12.5px;color:var(--muted);text-align:right;margin-top:2px}
-.reminder{font-size:15px;display:flex;flex-direction:column;gap:6px}
-.reminder li{margin-left:-4px}
+.reminder{margin-top:10px}
 .hist{width:100%;border-collapse:collapse;font-size:14px}
 .hist th,.hist td{padding:7px 6px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
 .hist th:first-child,.hist td:first-child{text-align:left}
@@ -613,6 +612,7 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .phase-list li::marker{font-family:var(--f-display);font-weight:700;color:var(--accent)}
 .phase-list b{display:block;font-weight:700}
 .phase-list p{font-size:15px;margin-top:2px}
+.phase-list>li{padding-left:2px}
 .end-ready{display:flex;gap:10px;align-items:flex-start;font-weight:600}
 .end-ready svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .at-table .faces .avatar{border-color:var(--surface)}
@@ -659,3 +659,9 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .score-in.ph-word::placeholder{font-family:var(--f-ui);font-weight:600;font-size:15px;color:var(--muted);opacity:1}
 .search-ex{margin:-8px 2px 0}
 .bust-hid{margin:0}
+/* steps of a round: short lines, the key word in bold; «После раунда» on its own background */
+.ph-steps{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:15px;line-height:1.4;color:var(--ink-2,var(--muted))}
+.ph-steps b,.phase-list .ph-steps b{display:inline;color:var(--ink);font-weight:700}
+.ph-steps li::marker{color:var(--muted)}
+.ph-after{margin-top:14px;padding:10px 14px 12px;border-radius:12px;background:var(--sunk)}
+.ph-after-h{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}

@@ -854,6 +854,12 @@
         busts: fl.filter(f => f.bust).length, sevens: fl.filter(f => f.flip7).length };
     });
   }
+  // a short line of a step; *word* is set in bold (a number, the key word)
+  const fmtStep = t => esc(t).replace(/\*([^*]+)\*/g, "<b>$1</b>");
+  const stepsHTML = list => `<ul class="ph-steps">${list.map(t => `<li>${fmtStep(t)}</li>`).join("")}</ul>`;
+  // what to do once the round is over: a list from the game (a function of the round, or the same every round)
+  const afterOf = (g, ctx, r, last) => (typeof g.rounds.after === "function" ? g.rounds.after(ctx, r, last) : g.rounds.after) || [];
+  const afterHTML = list => list.length ? `<div class="ph-after"><span class="ph-after-h">После раунда</span>${stepsHTML(list)}</div>` : "";
   /* a game scored at the end (Faraway): the rounds are only counted, with what to do in each phase;
      the fame is written in after the last round, as on the score pad */
   function viewPlayEnd(s, g) {
@@ -871,7 +877,7 @@
       <div class="play">
         <div class="stack">
           ${over ? `<section class="note good end-ready">${I.check}<span>Все ${last} раундов сыграны. Переверните свои Регионы и считайте славу — с последней карты к первой.</span></section>`
-            : `<section class="panel"><div class="sec-h"><h2>Раунд ${cur}: что делать</h2></div><ol class="phase-list">${phases.map(p => `<li><b>${esc(p.title)}</b><p>${esc(p.text)}</p></li>`).join("")}</ol></section>`}
+            : `<section class="panel"><div class="sec-h"><h2>Раунд ${cur}: что делать</h2></div><ol class="phase-list">${phases.map(p => `<li><b>${esc(p.title)}</b>${stepsHTML(p.steps || [p.text])}</li>`).join("")}</ol>${afterHTML(afterOf(g, ctx, cur, last))}</section>`}
         </div>
         <div class="stack">
           <section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
@@ -922,7 +928,7 @@
       <div class="play">
         <div class="stack">
           <div class="board">${board}</div>
-          ${g.rounds.reminder ? `<details class="panel" ${r === 0 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как идёт раунд</summary><ul class="reminder" style="margin:10px 0 0;padding-left:20px">${g.rounds.reminder.map(t => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
+          ${g.rounds.reminder ? `<details class="panel" ${r === 0 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0))}</div></details>` : ""}
           ${hist}
         </div>
         <div class="stack">
@@ -2306,7 +2312,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.16.4";
+  BH.version = "0.16.5";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

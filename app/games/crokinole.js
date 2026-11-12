@@ -3,12 +3,12 @@
    - the Russian rules of the Crowd Games edition (4 pages; page = the page of the PDF) — the words and the home game:
      2 players with 12 discs each or 2 pairs with 6 discs each, a game to 100 points (or as agreed), the round's difference;
    - the official rules of the National Crokinole Association (NCA, ratified May 6, 2026) — the tournament game:
-     a game of 4 rounds, 2 points for a round won and 1 each for a tie; singles with 8 discs each;
+     a game of 4 rounds, 2 points for a round won and 1 each for a tie; singles with 8 discs each (the WCC too);
    - the rules of Crokinole Canada (crokinole.ca) — traditional and tournament scoring, a tie-breaker round after 4 rounds;
    - the rules of Crok Shop (crok.shop/blogs/news/crokinole-rules) — «Race to 9»: the round points of the NCA, the first to 9 wins;
+     it names no number of discs, so the app takes the NCA's 8;
    - the World Crokinole Championship (worldcrokinole.com) — a game of 4 rounds, a 5th round on a tie.
    The NCA has no tie-breaker: a tied game stays tied. Crokinole Canada and the WCC play one more round.
-   «До 11» is in none of them: the app has it as a house variant, marked so.
    Every rule the app enforces is listed in docs/rules-check.md with its source and its test. */
 (function () {
   "use strict";
@@ -29,23 +29,23 @@
   const art = {
     board: () => A.svg(board(160, 112, 96) + A.label(160, 230, "центр 20 · кольца 15, 10, 5")),
     discs: c => {
-      const four = c.players === 4, n = four ? 6 : c.opt("nca8") ? 8 : 12;
+      const four = c.players === 4, n = four ? 6 : discs(c);
       let s = board(160, 112, 70);
       const row = (y, col, k) => { let o = ""; for (let i = 0; i < k; i++) o += disc(40 + i * 20, y, col); return o; };
       s += four ? row(206, "#D9483B", 6) + row(222, "#1F2A44", 6) : row(206, "#D9483B", Math.min(n, 12)) + row(222, "#1F2A44", Math.min(n, 12));
       return A.svg(s, "0 0 320 240");
     },
-    goal: c => A.svg(A.table() + `<text x="160" y="118" text-anchor="middle" style="font-family:var(--f-display);font-weight:700;font-size:44px;fill:var(--accent)">${c.opt("tour") ? "4 раунда" : c.opt("race9") ? "до 9" : c.opt("race11") ? "до 11" : (c.opt("t50") ? 50 : c.opt("t200") ? 200 : 100)}</text>` + A.label(160, 170, c.opt("tour") || c.opt("race9") || c.opt("race11") ? "2 очка за раунд, ничья — по 1" : "за раунд — только разница")),
+    goal: c => A.svg(A.table() + `<text x="160" y="118" text-anchor="middle" style="font-family:var(--f-display);font-weight:700;font-size:44px;fill:var(--accent)">${c.opt("tour") ? "4 раунда" : c.opt("race9") ? "до 9" : (c.opt("t50") ? 50 : c.opt("t200") ? 200 : 100)}</text>` + A.label(160, 170, c.opt("tour") || c.opt("race9") ? "2 очка за раунд, ничья — по 1" : "за раунд — только разница")),
   };
 
   // the target and the kind of scoring (one of a group: none chosen — to 100 points)
   const tour = c => c.opt("tour");
-  // round points as in a tournament (2 / 1 / 0), the game to 9 of them (Crok Shop: «Race to 9») or to 11 (a house variant)
-  const race = c => (c.opt("race9") ? 9 : c.opt("race11") ? 11 : 0);
+  // round points as in a tournament (2 / 1 / 0), the game to 9 of them (Crok Shop: «Race to 9»)
+  const race = c => (c.opt("race9") ? 9 : 0);
   const roundPoints = c => tour(c) || !!race(c);
   const target = c => (tour(c) ? null : race(c) || (c.opt("t50") ? 50 : c.opt("t200") ? 200 : 100));
-  // discs of one side: a player alone 12 (8 by the NCA rules of 2026), a pair 6 each — 12
-  const discs = c => (c.players === 4 ? 12 : c.opt("nca8") ? 8 : 12);
+  // discs of one side: a pair 6 each — 12; a player alone — 8 in the tournament and «до 9» (NCA, WCC), 12 at home (Russian rules, CC)
+  const discs = c => (c.players === 4 ? 12 : roundPoints(c) ? 8 : 12);
 
   BH.registerGame({
     id: "crokinole",
@@ -116,12 +116,10 @@
     },
 
     options: [
-      { id: "nca8", label: "По 8 дисков — правила NCA (2026)", short: "по 8 дисков", default: false, when: c => c.players === 2 },
       { id: "t50", group: "goal", label: "Партия до 50 очков", short: "до 50", default: false },
       { id: "t200", group: "goal", label: "Партия до 200 очков", short: "до 200", default: false },
       { id: "tour", group: "goal", label: "Турнир: 4 раунда, победа в раунде — 2 очка", short: "турнир", default: false },
       { id: "race9", group: "goal", label: "До 9 очков за раунды, 2 за победу — Race to 9", short: "до 9 за раунды", default: false },
-      { id: "race11", group: "goal", label: "До 11 очков за раунды, 2 за победу — домашнее правило", short: "до 11 за раунды", default: false },
     ],
 
     rules: [
@@ -130,7 +128,7 @@
       { id: "board", page: 2, title: "Доска", keys: "доска центр кольца столбики кювет линия удара квадрант",
         body: "<ul><li><b>Центр</b> — отверстие посередине: 20 очков.</li><li><b>Кольцо 15</b> — внутреннее, до столбиков.</li><li><b>Кольцо 10</b> — среднее, за столбиками.</li><li><b>Кольцо 5</b> — внешнее, до линии удара.</li><li><b>Кювет</b> — желоб у борта: там диски вне игры, 0 очков.</li><li>Внешнее кольцо поделено на 4 <b>квадранта</b> — по одному на игрока.</li></ul>" },
       { id: "players", page: 2, title: "Вдвоём и вчетвером", keys: "двое четверо пары команда партнёры диски сколько",
-        body: "<ul><li><b>Вдвоём</b> — напротив друг друга, у каждого свой цвет. По русским правилам и Crokinole Canada — по 12 дисков; по правилам NCA (2026) — по 8.</li><li><b>Вчетвером</b> — две пары. Партнёры сидят напротив, играют одним цветом, у каждого по 6 дисков. Все диски цвета пары — общие.</li></ul><p>Если начинает пара, партнёры сами решают, кто из них щёлкнет первым (правила NCA).</p><p>Игру втроём ни один из источников не описывает.</p>" },
+        body: "<ul><li><b>Вдвоём</b> — напротив друг друга, у каждого свой цвет. Дома (партия до 100) — по 12 дисков: так в русских правилах и у Crokinole Canada. В турнире — по 8: так по правилам NCA (2026) и на чемпионате мира. «До 9» играют с подсчётом NCA, число дисков Crok Shop не называет — в приложении тоже по 8.</li><li><b>Вчетвером</b> — две пары. Партнёры сидят напротив, играют одним цветом, у каждого по 6 дисков. Все диски цвета пары — общие.</li></ul><p>Если начинает пара, партнёры сами решают, кто из них щёлкнет первым (правила NCA).</p><p>Игру втроём ни один из источников не описывает.</p>" },
       { id: "shot", page: 3, title: "Щелчок", keys: "щелчок как бить линия удара квадрант палец толкать",
         body: "<ul><li>Ходят по часовой стрелке, по одному диску.</li><li>Диск кладут на <b>линию удара</b> своего квадранта — хотя бы наполовину внутри квадранта.</li><li>По диску щёлкают пальцем. Толкать нельзя, приспособления нельзя.</li><li>Ждите, пока остановятся диски прошлого хода.</li></ul><p>Если все согласны, диск может выступать за линии квадранта — лишь бы касался своей линии удара.</p>" },
       { id: "no-hiding", page: 3, title: "Чужих дисков нет: целься в центр", keys: "нет дисков соперника прятаться кольцо 15 столбики",
@@ -146,7 +144,7 @@
       { id: "scoring", page: 4, title: "Подсчёт очков", keys: "подсчёт очки линия касается меньше разница раунд",
         body: "<ul><li>Раунд кончается, когда сыграны все диски.</li><li>Центр — 20 за каждый отложенный диск, кольцо 15 — 15, кольцо 10 — 10, кольцо 5 — 5, кювет — 0.</li><li>Диск касается линии — считается кольцо с меньшими очками.</li></ul><p><b>Дома:</b> из большего счёта вычтите меньший, разницу получает лучший. Пример из правил: 60 против 35 — лучший получает 25.</p><p><b>Турнир NCA:</b> лучший получает 2 очка, при ничьей — по 1.</p>" },
       { id: "end", page: 4, title: "Конец партии", keys: "конец партии победа 100 четыре раунда ничья",
-        body: "<ul><li><b>Дома:</b> побеждает тот, у кого набралось 100 очков или больше (или договорённое число).</li><li><b>Турнир:</b> после 4 раундов побеждает тот, у кого больше очков. Поровну — по правилам NCA это ничья, по правилам Crokinole Canada и на чемпионате мира играют ещё раунд.</li></ul><p><b>До 9 очков за раунды</b> (Race to 9, правила Crok Shop): 2 очка за победу в раунде, 1 за ничью, кто первым набрал 9 — победил. Набрали поровну — в правилах этого случая нет. <b>До 11</b> — домашний вариант: в источниках его нет.</p>" },
+        body: "<ul><li><b>Дома:</b> побеждает тот, у кого набралось 100 очков или больше (или договорённое число).</li><li><b>Турнир:</b> после 4 раундов побеждает тот, у кого больше очков. Поровну — по правилам NCA это ничья, по правилам Crokinole Canada и на чемпионате мира играют ещё раунд.</li></ul><p><b>До 9 очков за раунды</b> (Race to 9, правила Crok Shop): 2 очка за победу в раунде, 1 за ничью, кто первым набрал 9 — победил. Набрали поровну — в правилах этого случая нет.</p>" },
       { id: "next-round", page: 4, title: "Новый раунд", keys: "новый раунд кто начинает слева первый",
         body: "<p>Все забирают свои диски. Первым ходит игрок слева от того, кто начинал прошлый раунд.</p>" },
     ],
@@ -171,9 +169,9 @@
       { q: "Промахнулся по чужому диску, но свой упал в центр — считается?", a: "Нет. При промахе ваш диск и все задетые свои уходят в кювет, даже из центра.", ref: "hit", keys: "промах центр считается" },
       { q: "Сколько очков получают за раунд?", a: "Дома — только лучший и только разницу: 60 против 35 — это 25. В турнире NCA — 2 очка победителю раунда, по 1 при ничьей.", ref: "scoring", keys: "сколько очков разница раунд" },
       { q: "Кто начинает следующий раунд?", a: "Игрок слева от того, кто начинал прошлый.", ref: "next-round", keys: "кто начинает раунд" },
-      { q: "Сколько дисков у каждого?", a: "Вдвоём — по 12 (по правилам NCA 2026 — по 8). Вчетвером — по 6, у пары 12 одного цвета.", ref: "players", keys: "сколько дисков" },
+      { q: "Сколько дисков у каждого?", a: "Вдвоём дома (до 100) — по 12. В турнире и «до 9» — по 8, как по правилам NCA и на чемпионате мира. Вчетвером всегда по 6, у пары 12 одного цвета.", ref: "players", keys: "сколько дисков" },
       { q: "Можно ли играть втроём?", a: "Ни один из источников не описывает игру втроём: только вдвоём или две пары.", ref: "players", keys: "втроём три игрока" },
-      { q: "Играть до 9 или 11 очков — это по правилам?", a: "До 9 — да: «Race to 9» описан в правилах магазина Crok Shop: 2 очка за раунд, 1 за ничью, кто первым набрал 9 — победил. До 11 нет ни в одном источнике — в приложении он как домашний вариант. У NCA и на чемпионате мира партия — 4 раунда.", ref: "end", keys: "до 9 до 11 гонка race" },
+      { q: "Играть до 9 или 11 очков — это по правилам?", a: "До 9 — да: «Race to 9» описан в правилах магазина Crok Shop: 2 очка за раунд, 1 за ничью, кто первым набрал 9 — победил. До 11 нет ни в одном источнике. У NCA и на чемпионате мира партия — 4 раунда.", ref: "end", keys: "до 9 до 11 гонка race" },
       { q: "Диск закатился под доску — что делать?", a: "В русских правилах этого нет. По правилам NCA доску двигают только в конце раунда, а до тех пор бьют уже сыгранным диском, предупредив соперника.", ref: "conduct", keys: "под доску потерялся" },
     ],
   });

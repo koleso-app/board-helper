@@ -586,11 +586,11 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.strictEqual(JSON.stringify(BH.sidesOf(sess(2))), JSON.stringify([["a"], ["b"]]));
     assert.ok(BH.isTeamGame(sess(4)) && !BH.isTeamGame(sess(2)));
   });
-  t("crokinole: discs — 12 each for two (Russian rules, Crokinole Canada), 8 by NCA 2026; a pair 6 each", () => {
-    assert.strictEqual(K.sideScore.discs(cx(2)), 12);
-    assert.strictEqual(K.sideScore.discs(cx(2, "nca8")), 8);
-    assert.strictEqual(K.sideScore.discs(cx(4)), 12, "a side of two: 6 + 6");
-    assert.ok(K.options.find(o => o.id === "nca8").when(cx(2)) && !K.options.find(o => o.id === "nca8").when(cx(4)), "8 discs is a singles rule");
+  t("crokinole: discs — two at home 12 each (Russian rules, CC), in a tournament and «до 9» 8 each (NCA, WCC); a pair 6 each", () => {
+    for (const o of [undefined, "t50", "t200"]) assert.strictEqual(K.sideScore.discs(cx(2, o)), 12, "home: " + o);
+    for (const o of ["tour", "race9"]) assert.strictEqual(K.sideScore.discs(cx(2, o)), 8, o);
+    for (const o of [undefined, "tour", "race9"]) assert.strictEqual(K.sideScore.discs(cx(4, o)), 12, "a side of two: 6 + 6");
+    assert.ok(!K.options.some(o => o.id === "nca8" || o.id === "race11"), "no 8-disc switch, no «до 11» — in no source");
   });
   t("crokinole: zones 20 / 15 / 10 / 5; the round — the difference to the better (Russian rules: 60 against 35 — 25)", () => {
     assert.strictEqual(K.sideScore.zones.map(z => z.z).join(","), "20,15,10,5");
@@ -599,14 +599,14 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.strictEqual(JSON.stringify(K.sideScore.settle([40, 40], cx(2))), JSON.stringify([0, 0]), "equal — nobody scores");
   });
   t("crokinole: tournament (NCA) and Race to 9 — 2 for the round won, 1 each for a tie", () => {
-    for (const o of ["tour", "race9", "race11"]) {
+    for (const o of ["tour", "race9"]) {
       assert.strictEqual(JSON.stringify(K.sideScore.settle([60, 35], cx(2, o))), JSON.stringify([2, 0]), o);
       assert.strictEqual(JSON.stringify(K.sideScore.settle([40, 40], cx(2, o))), JSON.stringify([1, 1]), o);
     }
   });
-  t("crokinole: the end — 100 (or 50, 200) points; 4 rounds in a tournament; 9 or 11 round points", () => {
+  t("crokinole: the end — 100 (or 50, 200) points; 4 rounds in a tournament; 9 round points", () => {
     assert.strictEqual(BH.targetOf(K, cx(2)), 100); assert.strictEqual(BH.targetOf(K, cx(2, "t50")), 50); assert.strictEqual(BH.targetOf(K, cx(2, "t200")), 200);
-    assert.strictEqual(BH.targetOf(K, cx(2, "race9")), 9); assert.strictEqual(BH.targetOf(K, cx(2, "race11")), 11);
+    assert.strictEqual(BH.targetOf(K, cx(2, "race9")), 9);
     assert.strictEqual(BH.targetOf(K, cx(2, "tour")), null); assert.strictEqual(BH.roundsOf(K, cx(2, "tour")), 4);
     let e = BH.checkEnd(sess(2, {}, [rd({ a: 60, b: 0 }), rd({ a: 0, b: 30 })])); assert.strictEqual(e.over, false);
     e = BH.checkEnd(sess(2, {}, [rd({ a: 60, b: 0 }), rd({ a: 40, b: 0 })])); assert.ok(e.over && !e.tie && e.winners.join() === "a", "100 or more wins (Russian rules)");

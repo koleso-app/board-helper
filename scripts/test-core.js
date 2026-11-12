@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -101,7 +101,7 @@ t("in-game texts of every game are short", () => {
   const c = { players: 4, opt: () => true, has: () => true, exp: new Set() };
   for (const game of BH.games) {
     for (const st of game.setup || []) { const t = typeof st.text === "function" ? st.text(c) : st.text; assert.ok(words(t) <= 30, `${game.id} setup ${st.id}: ${words(t)} слов`); }
-    const R = game.rounds || {}, last = R.count || 8, lines = [...(R.reminder || [])];
+    const R = game.rounds || {}, last = R.count || 8, lines = [...(R.reminder || []), ...(game.cards || []).map(k => k.does)];
     for (let r = 1; r <= last; r++) {
       if (R.phases) for (const p of R.phases(c, r, last)) lines.push(...(p.steps || [p.text]));
       lines.push(...((typeof R.after === "function" ? R.after(c, r, last) : R.after) || []));
@@ -637,4 +637,55 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const grouped = new Set(K.ruleGroups.flatMap(gr => gr.ids)); for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
   });
   console.log(`crokinole: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // Coconuts («Кокосики»): the Russian rules of Choo Choo Games, the English rules of Mayday Games (docs/rules-check.md)
+  const C = BH.game("coconuts"), before = passed;
+  const cx = n => ({ players: n, exp: new Set(), has: () => false, opt: () => false });
+  const steps = n => BH.setupSteps({ gameId: "coconuts", players: ["a", "b", "c", "d"].slice(0, n), exp: [], opts: {} });
+  t("coconuts: 2–4 players; a race without rounds — the order of seats does not matter", () => {
+    assert.strictEqual(C.players.min, 2); assert.strictEqual(C.players.max, 4);
+    assert.ok(BH.isRace(C) && !BH.isCoop(C) && !BH.isEndScored(C)); assert.strictEqual(C.rounds.leader, false);
+  });
+  t("coconuts: each takes a launcher, a board, 2 magic cards and 8 coconuts", () => {
+    const k = steps(2).find(st => st.id === "kit").text; assert.ok(k.includes("*2* волшебные карты") && k.includes("*8* кокосов"));
+  });
+  t("coconuts: the cups — a square for 2 or 4 (corners yellow in red, centre yellow in yellow), a triangle for 3", () => {
+    for (const n of [2, 4]) { const ids = steps(n).map(st => st.id); assert.ok(ids.includes("cups4") && !ids.includes("cups3"), n); }
+    const ids3 = steps(3).map(st => st.id); assert.ok(ids3.includes("cups3") && !ids3.includes("cups4"));
+    // all 14 cups (10 yellow, 4 red) are used: the square — 4 corners of 2, the centre of 2, 4 edges of 1; the triangle — 4 places of 2, 6 of 1
+    assert.strictEqual(4 * 2 + 2 + 4 * 1, 14); assert.strictEqual(4 * 2 + 6 * 1, 14); assert.strictEqual(1 + 2 + 3 + 4, 10);
+    assert.ok(steps(2).find(st => st.id === "cups4").text.includes("*14*") && steps(3).find(st => st.id === "cups3").text.includes("*14*"));
+  });
+  t("coconuts: the end — a pyramid of 6 wins; otherwise the most coconuts, equal — who shot last", () => {
+    assert.strictEqual(C.scoring.goal, 6);
+    let r = BH.raceResult(["a", "b", "c"], { a: 5, b: 9, c: 3 }); assert.deepStrictEqual([...r.top], ["b"]); assert.strictEqual(r.best, 9);
+    r = BH.raceResult(["a", "b", "c"], { a: 7, b: 7, c: 2 }); assert.deepStrictEqual([...r.top], ["a", "b"], "a tie — the app asks who shot last");
+    assert.ok(/последним/.test(C.scoring.tieNote));
+  });
+  t("coconuts: the six magic cards, each with when to play it", () => {
+    assert.deepStrictEqual([...C.cards.map(k => k.name)], ["Ещё 1 попытка", "Замри!", "Выстрел вслепую", "Призыв ветра", "В яблочко!", "Дальний выстрел"]);
+    assert.ok(C.cards.every(k => /перед своим выстрелом|перед выстрелом другого/.test(k.when)));
+    assert.strictEqual(C.cards.filter(k => k.when === "перед своим выстрелом").length, 1, "only «Ещё 1 попытка» is your own");
+  });
+  t("coconuts: how a race ended is kept; nonsense dropped", () => {
+    BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true,
+      sessions: [{ id: "c1", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["b"], race: { how: "coconuts", counts: { a: 4, b: 6.4, z: 3 } } },
+        { id: "c2", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: { how: "pyramid", counts: { a: 1 } } },
+        { id: "c3", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: { how: "banana" } }] });
+    const by = id => BH.state.sessions.find(x => x.id === id);
+    assert.strictEqual(JSON.stringify(by("c1").race), JSON.stringify({ how: "coconuts", counts: { a: 4, b: 6 } }));
+    assert.strictEqual(JSON.stringify(by("c2").race), JSON.stringify({ how: "pyramid" }), "a pyramid has no counts");
+    assert.strictEqual(by("c3").race, undefined);
+    assert.ok(!BH.hasScore(by("c1"), "a"), "a race has no score: the statistics count only wins");
+  });
+  t("coconuts: rules, groups, questions refer to real sections; pages of the Russian rules 2–4", () => {
+    const ids = new Set(C.rules.map(r => r.id));
+    for (const gr of C.ruleGroups) for (const id of gr.ids) assert.ok(ids.has(id), "group " + id);
+    for (const gr of C.faqGroups) for (const id of gr.refs) assert.ok(ids.has(id), "faq group " + id);
+    for (const f of C.faq) { assert.ok(ids.has(f.ref), "faq ref " + f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], "faq src " + f.src); }
+    assert.ok(C.rules.every(r => r.page >= 2 && r.page <= 4));
+    const grouped = new Set(C.ruleGroups.flatMap(gr => gr.ids)); for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
+  });
+  console.log(`coconuts: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

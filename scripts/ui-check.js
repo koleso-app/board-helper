@@ -129,6 +129,15 @@
           const fm = document.querySelector('[data-act="finish-menu"]'); if (fm) { fm.click(); await wait(300); out.push(...scan(`${s.id} [завершить]`)); await closeOverlay(); }
           continue;
         }
+        // a race (Coconuts): the end dialog, then the count of coconuts with a tie — looked at only, nothing is saved
+        if (BH.isRace && BH.isRace(BH.game(s.gameId))) {
+          document.querySelector('[data-act="finish-menu"]').click(); await wait(300); out.push(...scan(`${s.id} [кто собрал пирамиду]`));
+          const cnt = document.querySelector('[data-act="dlg"][data-i="0"]'); if (cnt) { cnt.click(); await wait(350); }
+          for (const inp of document.querySelectorAll('.overlay [data-act="race-count"]')) { inp.value = "7"; inp.dispatchEvent(new Event("input", { bubbles: true })); }
+          await wait(200); out.push(...scan(`${s.id} [кокосы кончились, поровну]`));
+          await closeOverlay();
+          continue;
+        }
         // a game scored at the end: its score sheet, reached from «Завершить»
         if (!document.querySelector('[data-act="new-round"]')) {
           const fm = document.querySelector('[data-act="finish-menu"]'); if (fm) { fm.click(); await wait(300); out.push(...scan(`${s.id} [завершить]`)); }

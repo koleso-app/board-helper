@@ -73,6 +73,13 @@
   BH.isEndScored = g => !!(g && g.scoring && g.scoring.type === "end");
   // a cooperative game: the rounds are heists (ok or not), nobody has a score; the team wins or loses together
   BH.isCoop = g => !!(g && g.scoring && g.scoring.type === "coop");
+  // a race without rounds or points (Coconuts): the first to build something wins at once; otherwise a count decides —
+  // the most wins, equal — the one of them who played last
+  BH.isRace = g => !!(g && g.scoring && g.scoring.type === "race");
+  BH.raceResult = (players, counts) => {
+    const v = id => Math.max(0, Math.round(Number((counts || {})[id])) || 0), best = players.length ? Math.max(...players.map(v)) : 0;
+    return { best, top: players.filter(id => v(id) === best) };
+  };
   BH.hasScore = (s, id) => (!BH.isEndScored(BH.game(s.gameId)) && !BH.isCoop(BH.game(s.gameId)) && s.rounds.length > 0) || !!(s.final && s.final[id] !== undefined);
   // heists so far, and how many make the end: wins (vaults) and losses (alarms) from the game and its mode
   BH.coopTally = s => {

@@ -18,6 +18,16 @@
   const ids = (v, allowed) => [...new Set(arr(v).filter(x => typeof x === "string" && ID.test(x) && (!allowed || allowed.has(x))))];
   const STATUS = new Set(["setup", "first", "playing", "finished"]);
 
+  // a race (Coconuts): «pyramid» — someone built it; «coconuts» — they ran out, the coconuts in each player's cups
+  function cleanRace(r, allowed) {
+    if (!r || typeof r !== "object" || Array.isArray(r) || (r.how !== "pyramid" && r.how !== "coconuts")) return null;
+    const out = { how: r.how };
+    if (r.how === "coconuts" && r.counts && typeof r.counts === "object") {
+      const c = {}; for (const [k, v] of Object.entries(r.counts)) if (allowed.has(k)) c[k] = Math.max(0, Math.min(99, Math.round(Number(v)) || 0));
+      if (Object.keys(c).length) out.counts = c;
+    }
+    return out;
+  }
   function cleanCoop(c) {
     if (!c || typeof c !== "object" || Array.isArray(c)) return null;
     const card = v => (Number.isInteger(v) && v >= 1 && v <= 10 ? v : 0);
@@ -90,6 +100,7 @@
         created: time(x.created) || Date.now(), startedAt: time(x.startedAt), finishedAt: time(x.finishedAt),
         status, setupDone, rounds,
         ...(cleanCoop(x.coop) ? { coop: cleanCoop(x.coop) } : {}),
+        ...(cleanRace(x.race, allowed) ? { race: cleanRace(x.race, allowed) } : {}),
         ...(x.tally && typeof x.tally === "object" ? { tally: { ok: Math.max(0, Math.min(3, Math.round(Number(x.tally.ok)) || 0)), fail: Math.max(0, Math.min(3, Math.round(Number(x.tally.fail)) || 0)) } } : {}),
         first: typeof x.first === "string" && allowed.has(x.first) ? x.first : null,
         winners: ids(x.winners, allowed),

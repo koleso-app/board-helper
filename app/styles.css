@@ -732,3 +732,12 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .zone-pts{text-align:right;font-weight:700;color:var(--muted)}
 .side-foot{flex-direction:column;align-items:stretch}
 .side-result{margin:0;font-weight:600;text-align:center;overflow-wrap:anywhere}
+
+/* a race (Coconuts): the magic cards — the name, when to play it, what it does */
+.mc-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.mc-list li{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:var(--sunk)}
+.mc-list b{font-weight:700}
+.mc-when{font-size:13px;font-weight:700;color:var(--accent)}
+.mc-does{font-size:15px}
+.mc-does b{display:inline}
+.mc-foot{margin-top:10px}

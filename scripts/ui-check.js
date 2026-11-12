@@ -63,6 +63,9 @@
   async function closeOverlay() { if (document.querySelector("#overlay-root .overlay")) { history.back(); await wait(350); } }
 
   window.uiCheck = async () => {
+    const errors = [], onErr = e => errors.push((e.error && e.error.message) || e.message || String(e.reason || e));
+    const origErr = console.error; console.error = (...a) => { errors.push(a.map(x => (x && x.message) || String(x)).join(" ")); origErr.apply(console, a); };
+    window.addEventListener("error", onErr); window.addEventListener("unhandledrejection", onErr);
     const S = BH.state, out = [], vw = document.documentElement.clientWidth;
     const routes = ["#/", "#/games", "#/sessions", "#/menu", "#/players", "#/places", "#/stats", "#/settings/sync", "#/settings/voice", "#/settings/theme", "#/settings/backup"];
     for (const g of BH.games) routes.push("#/games/" + g.id);
@@ -132,6 +135,8 @@
         await closeOverlay();
       }
     } finally { Object.assign(V, keep); }
+    window.removeEventListener("error", onErr); window.removeEventListener("unhandledrejection", onErr); console.error = origErr;
+    for (const e of errors) out.push("ошибка в коде: " + e);
     return [...new Set(out)].map(x => `${vw}px · ${x}`);
   };
 })();

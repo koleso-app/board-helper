@@ -180,7 +180,7 @@
     if (kept) restoreState(kept);
     document.body.classList.toggle("in-game", inGame);
     BH.$$("[data-nav]").forEach(a => { if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
-    if (after) after();
+    if (after) { try { after(); } catch (e) { console.error(e); } }
     renderOverlay();
     updateSync();
     BH.assets.hydrate(main);
@@ -736,15 +736,16 @@
     const scr = BH.$(".setup-screen"), card = BH.$(".setup-card"), art = card && card.querySelector(".art");
     const r = route(), s = r.a === "s" ? BH.session(r.b) : null;
     if (!art || !scr || !s || card.classList.contains("zoomed")) return;
-    const y = window.scrollY, p = card.querySelector(".setup-text p"), h = card.querySelector(".setup-text h2");
+    const y = window.scrollY, box = card.querySelector(".setup-text");
     // the free room: the screen less the page drawn with no picture
     const room = () => { art.style.height = "0px"; return window.innerHeight - document.body.getBoundingClientRect().height; };
     const steps = BH.setupSteps(s), longest = steps.reduce((a, x) => (x.text.length + x.title.length > a.text.length + a.title.length ? x : a), steps[0]);
-    const keep = [p.textContent, h.innerHTML];
-    p.textContent = longest.text; h.textContent = longest.title;
+    // measured with the longest step in place (its text is a paragraph or a list of lines), then the step itself is back
+    const keep = box.innerHTML;
+    box.innerHTML = `<h2>${esc(longest.title)}</h2>${textHTML(longest.text, s.gameId)}`;
     scr.classList.remove("tight");
     if (room() < 150) scr.classList.add("tight");
-    p.textContent = keep[0]; h.innerHTML = keep[1];
+    box.innerHTML = keep;
     art.style.height = Math.max(90, Math.min(Math.round(art.clientWidth * 0.75), 380, room())) + "px";
     window.scrollTo(0, y);
   }
@@ -2449,7 +2450,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.17.0";
+  BH.version = "0.17.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

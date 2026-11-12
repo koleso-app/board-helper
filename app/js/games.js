@@ -47,6 +47,16 @@
     return (first + r) % n;
   };
   BH.leaderAt = (s, r) => s.players[BH.leaderIndex(s, r)];
+  // the sides of a game: partners play as one (crokinole for four — seats 1 and 3 against 2 and 4); otherwise each player alone
+  BH.sidesOf = s => {
+    const g = BH.game(s.gameId);
+    if (g && g.teams && g.teams(BH.ctxOf(s)) && s.players.length === 4) return [[s.players[0], s.players[2]], [s.players[1], s.players[3]]];
+    return s.players.map(id => [id]);
+  };
+  BH.isTeamGame = s => BH.sidesOf(s).some(sd => sd.length > 1);
+  // a game's target and number of rounds may depend on its options (crokinole: to 50/100/200, or a tournament of 4 rounds)
+  BH.targetOf = (g, ctx) => { const t = g && g.scoring && g.scoring.target; return typeof t === "function" ? t(ctx) : t || null; };
+  BH.roundsOf = (g, ctx) => { const n = g && g.scoring && g.scoring.roundsCount; return typeof n === "function" ? n(ctx) : n || null; };
 
   BH.totals = s => {
     const t = Object.fromEntries(s.players.map(id => [id, 0]));
@@ -209,15 +219,18 @@
 
   /* after a round: is the game over, and who won? */
   BH.checkEnd = s => {
-    const g = BH.game(s.gameId);
-    const sc = (g && g.scoring) || {};
-    if (sc.type !== "rounds" || !sc.target) return { over: false };
+    const g = BH.game(s.gameId), ctx = BH.ctxOf(s);
+    const sc = (g && g.scoring) || {}, target = BH.targetOf(g, ctx), count = BH.roundsOf(g, ctx);
+    if (sc.type !== "rounds" || (!target && !count)) return { over: false };
     const st = BH.standings(s);
-    const reached = st.some(x => x.total >= sc.target);
+    // a tournament ends after its rounds; a game to a target — when someone reaches it
+    const reached = count ? s.rounds.length >= count : st.some(x => x.total >= target);
     if (!reached) return { over: false };
     const best = st[0].total;
     const winners = st.filter(x => x.total === best).map(x => x.id);
-    return { over: true, winners, tie: winners.length > 1 };
+    // partners share one score: a tie only between different sides
+    const sides = BH.sidesOf(s).filter(sd => sd.some(id => winners.includes(id))).length;
+    return { over: true, winners, tie: sides > 1 };
   };
 
   /* ---------- scoring at the end (g.endScore): rows (the cards, last to first), extra rows, the tie-breaker ----------

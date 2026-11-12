@@ -30,7 +30,10 @@
     for (const [k, v] of Object.entries(isObj(sel.picks) ? sel.picks : {})) if (ID.test(k)) picks[k] = arr(v).filter(x => typeof x === "number" || (typeof x === "string" && x.length < 12));
     for (const [k, v] of Object.entries(isObj(sel.flags) ? sel.flags : {})) if (ID.test(k)) flags[k] = !!v;
     const manual = d.manual === null || d.manual === undefined || d.manual === "" ? null : num(d.manual);
-    return { sel: { picks, flags }, manual };
+    // discs counted by zones (crokinole): zone value → how many
+    const counts = {};
+    for (const [k, v] of Object.entries(isObj(sel.counts) ? sel.counts : {})) if (/^\d{1,3}$/.test(k)) counts[k] = Math.max(0, Math.min(99, Math.round(Number(v)) || 0));
+    return { sel: Object.keys(counts).length ? { picks, flags, counts } : { picks, flags }, manual };
   }
 
   function normalize(s) {

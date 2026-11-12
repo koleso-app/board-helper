@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -573,4 +573,68 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.strictEqual(BH.coopTally(played).ok, 1, "heists played win over a written score");
   });
   console.log(`the gang score: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // Crokinole: the Russian rules (Crowd Games), NCA 2026, Crokinole Canada, Crok Shop, the World Championship (docs/rules-check.md)
+  const K = BH.game("crokinole"), before = passed;
+  const cx = (n, opt) => ({ players: n, exp: new Set(), has: () => false, opt: id => id === opt });
+  const sess = (n, opts, rounds) => ({ gameId: "crokinole", players: ["a", "b", "c", "d"].slice(0, n), exp: [], opts: opts || {}, rounds: rounds || [] });
+  const rd = sc => ({ scores: sc, flags: {} });
+  t("crokinole: two players or two pairs; partners sit opposite (seats 1 and 3, 2 and 4)", () => {
+    assert.deepStrictEqual([...K.players.only], [2, 4]);
+    assert.strictEqual(JSON.stringify(BH.sidesOf(sess(4))), JSON.stringify([["a", "c"], ["b", "d"]]));
+    assert.strictEqual(JSON.stringify(BH.sidesOf(sess(2))), JSON.stringify([["a"], ["b"]]));
+    assert.ok(BH.isTeamGame(sess(4)) && !BH.isTeamGame(sess(2)));
+  });
+  t("crokinole: discs — 12 each for two (Russian rules, Crokinole Canada), 8 by NCA 2026; a pair 6 each", () => {
+    assert.strictEqual(K.sideScore.discs(cx(2)), 12);
+    assert.strictEqual(K.sideScore.discs(cx(2, "nca8")), 8);
+    assert.strictEqual(K.sideScore.discs(cx(4)), 12, "a side of two: 6 + 6");
+    assert.ok(K.options.find(o => o.id === "nca8").when(cx(2)) && !K.options.find(o => o.id === "nca8").when(cx(4)), "8 discs is a singles rule");
+  });
+  t("crokinole: zones 20 / 15 / 10 / 5; the round — the difference to the better (Russian rules: 60 against 35 — 25)", () => {
+    assert.strictEqual(K.sideScore.zones.map(z => z.z).join(","), "20,15,10,5");
+    assert.strictEqual(JSON.stringify(K.sideScore.settle([60, 35], cx(2))), JSON.stringify([25, 0]));
+    assert.strictEqual(JSON.stringify(K.sideScore.settle([35, 60], cx(2))), JSON.stringify([0, 25]));
+    assert.strictEqual(JSON.stringify(K.sideScore.settle([40, 40], cx(2))), JSON.stringify([0, 0]), "equal — nobody scores");
+  });
+  t("crokinole: tournament (NCA) and Race to 9 — 2 for the round won, 1 each for a tie", () => {
+    for (const o of ["tour", "race9", "race11"]) {
+      assert.strictEqual(JSON.stringify(K.sideScore.settle([60, 35], cx(2, o))), JSON.stringify([2, 0]), o);
+      assert.strictEqual(JSON.stringify(K.sideScore.settle([40, 40], cx(2, o))), JSON.stringify([1, 1]), o);
+    }
+  });
+  t("crokinole: the end — 100 (or 50, 200) points; 4 rounds in a tournament; 9 or 11 round points", () => {
+    assert.strictEqual(BH.targetOf(K, cx(2)), 100); assert.strictEqual(BH.targetOf(K, cx(2, "t50")), 50); assert.strictEqual(BH.targetOf(K, cx(2, "t200")), 200);
+    assert.strictEqual(BH.targetOf(K, cx(2, "race9")), 9); assert.strictEqual(BH.targetOf(K, cx(2, "race11")), 11);
+    assert.strictEqual(BH.targetOf(K, cx(2, "tour")), null); assert.strictEqual(BH.roundsOf(K, cx(2, "tour")), 4);
+    let e = BH.checkEnd(sess(2, {}, [rd({ a: 60, b: 0 }), rd({ a: 0, b: 30 })])); assert.strictEqual(e.over, false);
+    e = BH.checkEnd(sess(2, {}, [rd({ a: 60, b: 0 }), rd({ a: 40, b: 0 })])); assert.ok(e.over && !e.tie && e.winners.join() === "a", "100 or more wins (Russian rules)");
+    const t4 = [rd({ a: 2, b: 0 }), rd({ a: 0, b: 2 }), rd({ a: 1, b: 1 }), rd({ a: 2, b: 0 })];
+    assert.strictEqual(BH.checkEnd(sess(2, { tour: true }, t4.slice(0, 3))).over, false, "not before 4 rounds");
+    e = BH.checkEnd(sess(2, { tour: true }, t4)); assert.ok(e.over && e.winners.join() === "a");
+    e = BH.checkEnd(sess(2, { tour: true }, [rd({ a: 2, b: 0 }), rd({ a: 0, b: 2 }), rd({ a: 1, b: 1 }), rd({ a: 1, b: 1 })])); assert.ok(e.over && e.tie, "equal after 4 — the app asks for another round");
+    e = BH.checkEnd(sess(2, { race9: true }, [rd({ a: 2, b: 0 }), rd({ a: 2, b: 0 }), rd({ a: 2, b: 0 }), rd({ a: 2, b: 0 }), rd({ a: 1, b: 1 })])); assert.ok(e.over && e.winners.join() === "a", "9 round points");
+    // a tie: NCA — a draw, Crokinole Canada and the WCC — one more round; a race has no rule for it
+    assert.ok(/NCA/.test(K.scoring.tieNote(cx(2, "tour"))) && /Crokinole Canada/.test(K.scoring.tieNote(cx(2, "tour"))), "tie note names both rules");
+    assert.ok(/нет/.test(K.scoring.tieNote(cx(2, "race9"))) && !/Crokinole Canada/.test(K.scoring.tieNote(cx(2, "race9"))), "race: no rule");
+  });
+  t("crokinole: a pair wins together — no tie between partners", () => {
+    const e = BH.checkEnd(sess(4, {}, [rd({ a: 100, c: 100, b: 0, d: 0 })]));
+    assert.ok(e.over && !e.tie && e.winners.sort().join() === "a,c");
+  });
+  t("crokinole: the discs counted by zones are kept with the round", () => {
+    BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true,
+      sessions: [{ id: "k1", gameId: "crokinole", players: ["a", "b"], status: "playing", rounds: [{ scores: { a: 25, b: 0 }, detail: { a: { sel: { picks: {}, flags: {}, counts: { 20: 1, 15: 2, x: 3 } }, manual: null } } }] }] });
+    assert.strictEqual(JSON.stringify(BH.state.sessions[0].rounds[0].detail.a.sel.counts), JSON.stringify({ 15: 2, 20: 1 }), "zones kept, nonsense dropped");
+  });
+  t("crokinole: rules, groups, questions refer to real sections; pages of the Russian rules 2–4", () => {
+    const ids = new Set(K.rules.map(r => r.id));
+    for (const gr of K.ruleGroups) for (const id of gr.ids) assert.ok(ids.has(id), "group " + id);
+    for (const gr of K.faqGroups) for (const id of gr.refs) assert.ok(ids.has(id), "faq group " + id);
+    for (const f of K.faq) assert.ok(ids.has(f.ref), "faq ref " + f.ref);
+    assert.ok(K.rules.every(r => r.page >= 2 && r.page <= 4));
+    const grouped = new Set(K.ruleGroups.flatMap(gr => gr.ids)); for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
+  });
+  console.log(`crokinole: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

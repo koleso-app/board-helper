@@ -483,6 +483,7 @@
     const n = draft.players.length;
     if (n < g.players.min) return `Нужно минимум ${g.players.min} ${BH.plural(g.players.min, "игрок", "игрока", "игроков")}`;
     if (n > g.players.max) return `«${g.name}»: не больше ${g.players.max} игроков`;
+    if (g.players.only && !g.players.only.includes(n)) return `«${g.name}»: ${g.teams ? g.players.only.map(k => (k === 4 ? "4 — две пары" : `${k} игрока`)).join(" или ") : `${g.players.only.join(" или ")} игрока`}`;
     return "";
   }
   function pickDraftGame(id) {
@@ -590,6 +591,16 @@
         `<p class="small muted">Счёт можно не вписывать. 3 хранилища — победа, 3 тревоги — поражение.</p>
         ${row("ok", "Хранилища вскрыли")}${row("fail", "Тревоги")}
         <div class="chips" style="margin-top:12px"><button class="chip" data-act="draft-coop" data-v="win" aria-pressed="${draft.coop === "win"}"><span class="won">${IC.trophy}</span>Победа банды</button><button class="chip" data-act="draft-coop" data-v="lose" aria-pressed="${draft.coop === "lose"}">Поражение</button></div>`, !!draft.coop || !!sc);
+    } else if (past && g && cnt && g.teams && g.teams({ players: cnt, opt: () => false, has: () => false, exp: new Set() }) && cnt === 4) {
+      const pairs = [[draft.players[0], draft.players[2]], [draft.players[1], draft.players[3]]];
+      const nm = sd => sd.map(id => (BH.player(id) || { name: "?" }).name).join(" и ");
+      const wonPair = pairs.find(sd => sd.every(id => draft.winners.includes(id)));
+      resultSec = step2("result", "Итог", wonPair ? "Победа: " + esc(nm(wonPair)) : "Очки и победитель — по желанию",
+        `<p class="small muted">Пары — 1-й и 3-й, 2-й и 4-й игрок по порядку. Счёт пары — один на двоих.</p>
+        ${pairs.map(sd => `<div class="seat" style="grid-template-columns:auto minmax(0,1fr) auto"><span class="faces pair-faces">${sd.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span><span>${esc(nm(sd))}</span>
+          <input class="input score-in ph-word" type="number" inputmode="numeric" data-act="draft-final-pair" data-p="${sd.join(",")}" value="${draft.final[sd[0]] ?? ""}" placeholder="очки" aria-label="Очки: ${esc(nm(sd))}"></div>`).join("")}
+        <div class="label" style="margin:12px 0 6px">Победители</div>
+        <div class="chips">${pairs.map(sd => `<button class="chip" data-act="draft-winner-pair" data-p="${sd.join(",")}" aria-pressed="${sd.every(id => draft.winners.includes(id))}">${esc(nm(sd))}</button>`).join("")}</div>`, !!wonPair || draft.final[pairs[0][0]] !== undefined);
     } else if (past && g && cnt) {
       const scored = draft.players.filter(id => draft.final[id] !== undefined && draft.final[id] !== "").length;
       resultSec = step2("result", "Итог", draft.winners.length ? "Победа: " + esc(draft.winners.map(id => (BH.player(id) || { name: "?" }).name).join(", ")) : scored ? "Очки вписаны" : "Очки и победитель — по желанию",
@@ -851,15 +862,20 @@
   function roundsTable(s, g, editable) {
     const tot = BH.totals(s), low = lowerWins(g);
     // the best of each round, marked only when the round is not all the same
-    const best = s.rounds.map(rd => { const v = s.players.map(id => Number(rd.scores[id]) || 0); return new Set(v).size > 1 ? (low ? Math.min(...v) : Math.max(...v)) : null; });
+    // a pair is one column (partners share the score)
+    const cols = BH.sidesOf(s).map(sd => sd[0]), sideOf = id => BH.sidesOf(s).find(sd => sd[0] === id) || [id];
+    const best = s.rounds.map(rd => { const v = cols.map(id => Number(rd.scores[id]) || 0); return new Set(v).size > 1 ? (low ? Math.min(...v) : Math.max(...v)) : null; });
     const lead = g && g.rounds && g.rounds.leaderLabel;
+    // the legend names only the marks that are in the table (no busts or sevens in crokinole)
+    const marked = k => s.rounds.some(rd => cols.some(id => ((rd.flags || {})[id] || {})[k]));
+    const legend = [lead ? `Кружок у номера — ${esc(g.rounds.leaderLegend || lead.toLowerCase() + " раунда")}` : "", marked("bust") ? "✕ — перебор" : "", marked("flip7") ? "★ — 7 разных чисел" : "", best.some(b => b !== null) ? "жирным — лучший в раунде" : ""].filter(Boolean);
     return `<div class="scroll-x"><table class="hist">
-      <thead><tr><th>№</th>${s.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<th title="${esc(p.name)}">${BH.avatar(p, "sm")}<span class="hist-n">${esc(p.name)}</span></th>`; }).join("")}</tr></thead>
+      <thead><tr><th>№</th>${cols.map(id => { const ps = sideOf(id).map(x => BH.player(x) || { name: "?", color: "#888" }); const nm = ps.map(x => x.name).join(" и "); return `<th title="${esc(nm)}">${ps.length > 1 ? `<span class="pair-faces">${ps.map(x => BH.avatar(x, "sm")).join("")}</span>` : BH.avatar(ps[0], "sm")}<span class="hist-n">${esc(nm)}</span></th>`; }).join("")}</tr></thead>
       <tbody>${s.rounds.map((rd, i) => { const dealer = BH.player(rd.leader || BH.leaderAt(s, i));
-        return `<tr${editable ? ` class="click" data-act="edit-round" data-i="${i}" tabindex="0"` : ""}><td class="hist-r"><span>${i + 1}</span>${lead && dealer ? `<span class="hist-d" title="${esc(lead)}: ${esc(dealer.name)}">${BH.avatar(dealer, "xs")}</span>` : ""}</td>${s.players.map(id => { const f = (rd.flags || {})[id] || {}, v = Number(rd.scores[id]) || 0;
+        return `<tr${editable ? ` class="click" data-act="edit-round" data-i="${i}" tabindex="0"` : ""}><td class="hist-r"><span>${i + 1}</span>${lead && dealer ? `<span class="hist-d" title="${esc(lead)}: ${esc(dealer.name)}">${BH.avatar(dealer, "xs")}</span>` : ""}</td>${cols.map(id => { const f = (rd.flags || {})[id] || {}, v = Number(rd.scores[id]) || 0;
           return `<td class="${f.bust ? "bust" : f.flip7 ? "f7" : best[i] !== null && v === best[i] ? "top" : ""}">${f.bust ? "✕" + (v ? " " + BH.minus(v) : "") : (f.flip7 ? "★ " : "") + BH.minus(v)}</td>`; }).join("")}</tr>`; }).join("")}</tbody>
-      ${editable ? "" : `<tfoot><tr><th>Итого</th>${s.players.map(id => `<th>${tot[id]}</th>`).join("")}</tr></tfoot>`}
-    </table></div>${lead ? `<p class="tiny muted" style="margin-top:6px">Кружок у номера — ${esc(lead.toLowerCase())} раунда. ✕ — перебор, ★ — 7 разных чисел, жирным — лучший в раунде.</p>` : ""}`;
+      ${editable ? "" : `<tfoot><tr><th>Итого</th>${cols.map(id => `<th>${tot[id]}</th>`).join("")}</tr></tfoot>`}
+    </table></div>${legend.length ? `<p class="tiny muted" style="margin-top:6px">${legend.join(", ").replace(/^./, ch => ch.toUpperCase())}.</p>` : ""}`;
   }
   // per player over the rounds of one game: average, best round, busts, sevens
   function roundStats(s, g) {
@@ -965,19 +981,20 @@
     if (BH.isEndScored(g)) return viewPlayEnd(s, g);
     if (BH.isCoop(g)) return viewPlayCoop(s, g);
     const r = s.rounds.length, leaderId = BH.leaderAt(s, r), leader = BH.player(leaderId);
-    const tot = BH.totals(s), st = BH.standings(s), target = g.scoring && g.scoring.target;
+    const ctx = BH.ctxOf(s), tot = BH.totals(s), st = BH.standings(s), target = BH.targetOf(g, ctx), count = BH.roundsOf(g, ctx);
     const top = st.length && st[0].total > 0 ? st[0].total : null;
     const last = s.rounds[r - 1];
-    // after a round the best come first (seating order among equal scores); before the first round — the seating order
-    const low = lowerWins(g), seat = id => s.players.indexOf(id);
-    const order = r ? [...s.players].sort((a, b) => (low ? tot[a] - tot[b] : tot[b] - tot[a]) || seat(a) - seat(b)) : s.players;
-    const board = order.map(id => {
-      const p = BH.player(id) || { name: "?", color: "#888" };
+    // after a round the best come first (seating order among equal scores); before the first round — the seating order;
+    // a pair is one row with one score
+    const low = lowerWins(g), seat = id => s.players.indexOf(id), sides = BH.sidesOf(s);
+    const order = r ? [...sides].sort((a, b) => (low ? tot[a[0]] - tot[b[0]] : tot[b[0]] - tot[a[0]]) || seat(a[0]) - seat(b[0])) : sides;
+    const board = order.map(sd => {
+      const ps = sd.map(id => BH.player(id) || { name: "?", color: "#888" }), p = ps[0], id = sd[0];
       const t = tot[id], pct = target ? BH.clamp(100 * t / target, 0, 100) : 0;
       const lr = last ? last.scores[id] : null, lf = last && last.flags ? last.flags[id] || {} : {};
-      return `<div class="pl ${t === top ? "lead" : ""}">
-        ${BH.avatar(p)}
-        <div style="min-width:0"><div class="nm"><span>${esc(p.name)}</span></div>
+      return `<div class="pl ${t === top ? "lead" : ""}${sd.length > 1 ? " pair" : ""}">
+        ${sd.length > 1 ? `<span class="faces pair-faces">${ps.map(x => BH.avatar(x, "sm")).join("")}</span>` : BH.avatar(p)}
+        <div style="min-width:0"><div class="nm"><span>${esc(ps.map(x => x.name).join(" и "))}</span></div>
           ${target ? `<div class="bar"><i style="width:${pct}%;background:${p.color}"></i></div>` : ""}</div>
         <div><div class="tot num">${t}</div><div class="last">${last ? (lf.bust ? "перебор" + (lr ? " " + BH.signed(lr) : "") : (lf.flip7 ? "Flip 7! " : "") + BH.signed(lr)) : target ? "из " + target : ""}</div></div>
       </div>`;
@@ -991,7 +1008,7 @@
         ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
         ${sessionHero(s, g, true)}
         <div class="status-row">
-          <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${r + 1}</span></div>
+          <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${r + 1}${count ? `<small> из ${Math.max(count, r + 1)}</small>` : ""}</span></div>
           ${leader ? `<div class="stat-tile leader">${BH.avatar(leader)}<div class="leader-t"><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><b>${esc(leader.name)}</b>${s.rounds.length ? "" : `<a class="btn sm leader-wheel" href="#/s/${esc(s.id)}/first" aria-label="${esc("Колесо: " + ((g.first && g.first.label) || "первый игрок").toLowerCase())}">${I.wheel}Колесо</a>`}</div></div>` : ""}
         </div>
       </div>
@@ -1072,19 +1089,26 @@
   function viewDone(s, g) {
     if (BH.isCoop(g)) return viewDoneCoop(s, g);
     const st = BH.standings(s), w = s.winners.map(BH.player).filter(Boolean);
-    const dur = s.finishedAt && s.startedAt ? BH.fmtDuration(s.finishedAt - s.startedAt) : null;
+    const dur = s.finishedAt && s.startedAt && s.finishedAt > s.startedAt ? BH.fmtDuration(s.finishedAt - s.startedAt) : null;
+    // a game of pairs: partners win together and share one line of the result
+    const team = BH.isTeamGame(s), sidesW = BH.sidesOf(s).filter(sd => sd.some(id => s.winners.includes(id)));
+    const sideName = sd => sd.map(id => (BH.player(id) || { name: "?" }).name).join(" и ");
+    const title = team ? (sidesW.length > 1 ? "Ничья" : sidesW.length ? "Победа: " + esc(sideName(sidesW[0])) : "Партия окончена")
+      : w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена";
+    const hasBust = !!(g.calc && g.calc.flags && g.calc.flags.some(f => f.id === "bust"));
     const crown = `<svg class="crown" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 46 L12 18 L24 32 L32 12 L40 32 L52 18 L56 46 Z" style="fill:#E3A72F;stroke:#B57E14;stroke-width:2.5;stroke-linejoin:round"/><rect x="8" y="46" width="48" height="8" rx="2" style="fill:#B57E14"/></svg>`;
     // the date and the place are on the game's card, the rounds and the time in the tiles below
     return `<div class="stack">
       <div class="shead">${topline(backToOrigin(), deleteBtn)}${sessionHero(s, g)}</div>
       <section class="panel podium">
         ${crown}
-        <h1>${w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена"}</h1>
+        <h1>${title}</h1>
         ${s.rounds.length || s.finalDetail ? "" : `<p class="muted small">Записана после игры, без раундов</p>`}
         ${(() => { const n = g.finishNote && g.finishNote(s); if (!n) return ""; const note = typeof n === "string" ? { text: n, ok: true } : n; return `<p class="note podium-note ${note.ok ? "good" : ""}">${note.ok ? I.check : IC.bolt}<span>${esc(note.text)}</span></p>`; })()}
       </section>
       <section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
-        <div class="list">${st.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<a class="item" href="#/players/${esc(x.id)}"><span class="place-n">${x.place}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div>${s.winners.includes(x.id) ? `<span class="won">${IC.trophy}</span>` : ""}<span class="num" style="font-size:20px;font-weight:700">${x.total}</span></a>`; }).join("")}</div>
+        <div class="list">${team ? (() => { const tt = BH.totals(s); return [...BH.sidesOf(s)].sort((a, b) => tt[b[0]] - tt[a[0]]).map((sd, i, arr) => `<div class="item"><span class="place-n">${i && tt[sd[0]] === tt[arr[i - 1][0]] ? 1 : i + 1}</span><span class="faces pair-faces">${sd.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span><div class="t"><b>${esc(sideName(sd))}</b></div>${sd.some(id => s.winners.includes(id)) ? `<span class="won">${IC.trophy}</span>` : ""}<span class="num" style="font-size:20px;font-weight:700">${tt[sd[0]]}</span></div>`).join(""); })()
+          : st.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<a class="item" href="#/players/${esc(x.id)}"><span class="place-n">${x.place}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div>${s.winners.includes(x.id) ? `<span class="won">${IC.trophy}</span>` : ""}<span class="num" style="font-size:20px;font-weight:700">${x.total}</span></a>`; }).join("")}</div>
       </section>
       ${BH.isEndScored(g) ? endPadHTML(s, g) : s.rounds.length ? (() => {
         const rs = roundStats(s, g), anyF7 = rs.some(x => x.sevens), allR = [], low = lowerWins(g);
@@ -1094,15 +1118,16 @@
         return `<div class="kpis">
           <div class="kpi"><b>${s.rounds.length}</b><span>${BH.plural(s.rounds.length, "раунд", "раунда", "раундов")}</span></div>
           ${dur ? `<div class="kpi"><b>${dur}</b><span>длилась партия</span></div>` : ""}
-          ${top && (top.v || low) ? `<div class="kpi"><b>${top.v}</b><span>лучший раунд${topP ? ": " + esc(topP.name) + ", " + (top.i + 1) + "-й" : ""}</span></div>` : ""}
-          <div class="kpi"><b>${busts}</b><span>${BH.plural(busts, "перебор", "перебора", "переборов")}</span></div>
+          ${top && (top.v || low) && !(g.sideScore && top.v <= 2) ? `<div class="kpi"><b>${top.v}</b><span>лучший раунд${topP ? ": " + esc(team ? sideName(BH.sidesOf(s).find(sd => sd.includes(top.id)) || [top.id]) : topP.name) + ", " + (top.i + 1) + "-й" : ""}</span></div>` : ""}
+          ${hasBust ? `<div class="kpi"><b>${busts}</b><span>${BH.plural(busts, "перебор", "перебора", "переборов")}</span></div>` : ""}
+          ${g.sideScore ? (() => { const tw = s.rounds.reduce((a, rd) => a + BH.sidesOf(s).reduce((b, sd) => b + (Number(((((rd.detail || {})[sd[0]] || {}).sel || {}).counts || {})[20]) || 0), 0), 0); return tw ? `<div class="kpi"><b>${tw}</b><span>${BH.plural(tw, "диск", "диска", "дисков")} в центре</span></div>` : ""; })() : ""}
           ${sevens ? `<div class="kpi"><b>${sevens}</b><span>${BH.plural(sevens, "раз", "раза", "раз")} 7 разных чисел</span></div>` : ""}
         </div>
         <section class="panel"><h2 style="margin-bottom:6px">Раунды</h2>${roundsTable(s, g, false)}</section>
-        <section class="panel"><h2 style="margin-bottom:6px">По игрокам</h2><div class="scroll-x"><table class="tbl">
+        ${team || !hasBust ? "" : `<section class="panel"><h2 style="margin-bottom:6px">По игрокам</h2><div class="scroll-x"><table class="tbl">
           <thead><tr><th>Игрок</th><th title="Среднее за раунд">Ср.</th><th title="Лучший раунд">Лучш.</th><th title="Переборы">✕</th>${anyF7 ? "<th>★</th>" : ""}</tr></thead>
           <tbody>${rs.map(x => { const p = BH.player(x.id) || { name: "?", color: "#888" }; return `<tr><td><span class="row">${BH.avatar(p, "sm")}${esc(p.name)}</span></td><td>${x.avg}</td><td>${x.best}</td><td>${x.busts}</td>${anyF7 ? `<td>${x.sevens}</td>` : ""}</tr>`; }).join("")}</tbody>
-        </table></div><p class="tiny muted" style="margin-top:6px">Ср. — среднее за раунд, Лучш. — лучший раунд, ✕ — переборы${anyF7 ? ", ★ — 7 разных чисел" : ""}.</p></section>`;
+        </table></div><p class="tiny muted" style="margin-top:6px">Ср. — среднее за раунд, Лучш. — лучший раунд, ✕ — переборы${anyF7 ? ", ★ — 7 разных чисел" : ""}.</p></section>`}`;
       })() : ""}
       <div class="actions">
         <button class="btn primary big" data-act="rematch">${I.plus}Ещё партию теми же</button>
@@ -1715,8 +1740,76 @@
   const openDialog = d => { dialog = d; BH.clearToast(); ovOpen(); renderOverlay(); };
   const closeDialog = () => { dialog = null; renderOverlay(); };
 
+  /* a game counted by discs in zones for each side (crokinole): one entry per side, the round settled between the sides */
+  const sideRaw = (e, Z) => (e.manual !== null && e.manual !== undefined && e.manual !== "" ? Math.max(0, Math.round(Number(e.manual)) || 0) : Z.zones.reduce((a, z) => a + z.z * (e.counts[z.z] || 0), 0));
+  function openSidesSheet(s, index) {
+    const editing = index !== null && index !== undefined && s.rounds[index], entries = {};
+    for (const sd of BH.sidesOf(s)) {
+      const d = editing && s.rounds[index].detail && s.rounds[index].detail[sd[0]];
+      entries[sd[0]] = { counts: Object.assign({}, (d && d.sel && d.sel.counts) || {}), manual: d && d.manual !== null && d.manual !== undefined ? String(d.manual) : null };
+    }
+    sheet = { kind: "sides", sid: s.id, index: editing ? index : null, entries, open: null };
+    BH.clearToast(); ovOpen(); renderOverlay();
+  }
+  // what the round gives: the line under the sides
+  function sidesResult(s, g) {
+    const ctx = BH.ctxOf(s), Z = g.sideScore, sides = BH.sidesOf(s), raws = sides.map(sd => sideRaw(sheet.entries[sd[0]], Z)), got = Z.settle(raws, ctx);
+    const nm = sd => sd.map(id => (BH.player(id) || { name: "?" }).name).join(" и ");
+    const winner = got[0] === got[1] ? -1 : got[0] > got[1] ? 0 : 1;
+    const text = winner < 0 ? (got[0] ? `Поровну — по ${got[0]}` : "Поровну — очков никто не получает")
+      : `${nm(sides[winner])} ${sides[winner].length > 1 ? "получают" : "получает"} +${got[winner]}` + (got[1 - winner] ? `, ${nm(sides[1 - winner])} +${got[1 - winner]}` : "");
+    return { raws, got, text: `${raws[0]} : ${raws[1]} — ${text}` };
+  }
+  function sidesSheetHTML() {
+    const s = BH.session(sheet.sid), g = BH.game(s.gameId), ctx = BH.ctxOf(s), Z = g.sideScore, max = Z.discs(ctx);
+    const idx = sheet.index !== null ? sheet.index : s.rounds.length, sides = BH.sidesOf(s), res = sidesResult(s, g);
+    const leader = BH.player(BH.leaderAt(s, idx));
+    const body = sides.map((sd, i) => {
+      const e = sheet.entries[sd[0]], ps = sd.map(id => BH.player(id) || { name: "?", color: "#888" });
+      const used = Z.zones.reduce((a, z) => a + (e.counts[z.z] || 0), 0), typed = e.manual !== null && e.manual !== "";
+      return `<div class="entry open side-entry" data-entry="${sd[0]}">
+        <div class="entry-head">${ps.length > 1 ? `<span class="faces pair-faces">${ps.map(x => BH.avatar(x, "sm")).join("")}</span>` : BH.avatar(ps[0], "sm")}
+          <span class="nm">${esc(ps.map(x => x.name).join(" и "))}</span>
+          <input class="input score-in" type="number" inputmode="numeric" min="0" step="5" data-act="side-manual" data-p="${sd[0]}" value="${typed ? esc(e.manual) : ""}" placeholder="${res.raws[i]}" aria-label="Очки в кольцах: ${esc(ps.map(x => x.name).join(" и "))}">
+        </div>
+        <div class="zones${typed ? " off" : ""}">${Z.zones.map(z => { const n = e.counts[z.z] || 0; return `<div class="zone-row">
+          <span class="zone-l"><b>${esc(z.label)}</b>${z.hint ? `<small>${esc(z.hint)}</small>` : ""}</span>
+          <span class="cnt-step"><button type="button" class="step-btn" data-act="side-count" data-p="${sd[0]}" data-z="${z.z}" data-d="-1" ${n ? "" : "disabled"} aria-label="Меньше: ${esc(z.label)}">−</button><b class="num">${n}</b><button type="button" class="step-btn" data-act="side-count" data-p="${sd[0]}" data-z="${z.z}" data-d="1" ${used >= max ? "disabled" : ""} aria-label="Больше: ${esc(z.label)}">+</button></span>
+          <span class="zone-pts num">${n * z.z}</span></div>`; }).join("")}</div>
+        <p class="small muted">${typed ? "Очки вписаны вручную — диски не считаются." : `Дисков в центре и кольцах: ${used} из ${max}`}</p>
+      </div>`;
+    }).join("");
+    return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+      <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">${sheet.index !== null ? "Исправить раунд " + (idx + 1) : "Раунд " + (idx + 1)}</h2>${leader ? `<span class="mi accent">${BH.avatar(leader, "xs")}<span>${esc((g.rounds.leaderLabel || "Начинал") + ": " + leader.name)}</span></span>` : ""}</div>
+        <div class="row" style="gap:4px">${sheet.index !== null ? `<button class="icon-btn danger-ic" data-act="delete-round" aria-label="Удалить раунд" title="Удалить раунд">${I.trash}</button>` : ""}<button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div></div>
+      <div class="sheet-body">
+        <p class="small muted">Посчитайте диски каждой стороны в центре и кольцах. Или впишите очки справа.</p>
+        ${body}
+      </div>
+      <div class="sheet-foot side-foot">
+        <p class="side-result" id="side-result" aria-live="polite">${esc(res.text)}</p>
+        <button class="btn primary big" data-act="save-round">${I.check}Сохранить</button>
+      </div>
+    </div></div>`;
+  }
+  function saveSidesRound() {
+    const s = BH.session(sheet.sid), g = BH.game(s.gameId), sides = BH.sidesOf(s), res = sidesResult(s, g);
+    const idx = sheet.index !== null ? sheet.index : s.rounds.length;
+    const round = { at: Date.now(), leader: BH.leaderAt(s, idx), scores: {}, detail: {}, flags: {} };
+    sides.forEach((sd, i) => {
+      const e = sheet.entries[sd[0]], counts = {};
+      for (const [k, v] of Object.entries(e.counts)) if (v) counts[k] = v;
+      // stored the way normalize stores it, so a sync sees no false difference
+      const sel = Object.keys(counts).length ? { picks: {}, flags: {}, counts } : { picks: {}, flags: {} };
+      for (const id of sd) { round.scores[id] = res.got[i]; round.detail[id] = { sel, manual: e.manual === null || e.manual === "" ? null : Math.max(0, Math.round(Number(e.manual)) || 0) }; round.flags[id] = { bust: false, flip7: false }; }
+    });
+    const isNew = sheet.index === null;
+    if (isNew) s.rounds.push(round); else { round.at = s.rounds[idx].at; s.rounds[idx] = round; }
+    sheet = null; BH.saveNow(); afterRoundChange(s, isNew);
+  }
   function openSheet(s, index) {
     const g = BH.game(s.gameId);
+    if (g.sideScore) return openSidesSheet(s, index);
     const editing = index !== null && index !== undefined && s.rounds[index];
     const entries = {};
     for (const id of s.players) {
@@ -1841,6 +1934,7 @@
 
   function sheetHTML() {
     if (sheet.kind === "end") return endSheetHTML();
+    if (sheet.kind === "sides") return sidesSheetHTML();
     const s = BH.session(sheet.sid), g = BH.game(s.gameId), ctx = BH.ctxOf(s);
     const idx = sheet.index !== null ? sheet.index : s.rounds.length;
     const results = s.players.map(id => entryResult(g, s, sheet.entries[id]));
@@ -1897,6 +1991,7 @@
   }
 
   function saveRound() {
+    if (sheet.kind === "sides") return saveSidesRound();
     const s = BH.session(sheet.sid), g = BH.game(s.gameId);
     const idx = sheet.index !== null ? sheet.index : s.rounds.length;
     const round = { at: Date.now(), leader: BH.leaderAt(s, idx), scores: {}, detail: {}, flags: {} };
@@ -1925,7 +2020,7 @@
     if (end.over && end.tie && !(s.continueTie && s.rounds.length <= s.continueTie)) {
       render();
       openDialog({
-        title: "Ничья", text: ((g.scoring && g.scoring.tieNote) || "Сразу несколько игроков с лучшим счётом.") + " Сейчас поровну у: " + end.winners.map(id => (BH.player(id) || {}).name).join(", ") + ".",
+        title: "Ничья", text: ((g.scoring && (typeof g.scoring.tieNote === "function" ? g.scoring.tieNote(BH.ctxOf(s)) : g.scoring.tieNote)) || "Сразу несколько игроков с лучшим счётом.") + " Сейчас поровну у: " + BH.sidesOf(s).filter(sd => sd.some(id => end.winners.includes(id))).map(sd => sd.map(id => (BH.player(id) || {}).name).join(" и ")).join(", ") + ".",
         buttons: [
           { label: "Сыграть ещё раунд", primary: true, run: () => { const c = fresh(s); c.continueTie = c.rounds.length; BH.saveNow(); closeDialog(); render(); } },
           { label: "Записать ничью", run: () => { closeDialog(); finish(fresh(s), end.winners); } },
@@ -1998,6 +2093,8 @@
         render(); break;
       }
       case "draft-coop": draft.coop = draft.coop === el.dataset.v ? null : el.dataset.v; render(); break;
+      // a pair wins together: one chip for both partners
+      case "draft-winner-pair": { const ids = el.dataset.p.split(","), on = ids.every(id => draft.winners.includes(id)); draft.winners = draft.winners.filter(id => !ids.includes(id)); if (!on) draft.winners.push(...ids); render(); break; }
       // the score of a recorded cooperative game: three of one kind decide the result
       case "draft-tally": {
         const t = draft.tally = draft.tally || {}, k = el.dataset.k, v = +el.dataset.v;
@@ -2171,6 +2268,13 @@
       }
       case "flag": { const en = sheet.entries[el.dataset.p]; en.sel.flags[el.dataset.f] = !en.sel.flags[el.dataset.f]; if (en.sel.flags.bust) en.manual = null; renderOverlay(); break; }
       case "save-round": saveRound(); break;
+      case "side-count": {
+        const s = BH.session(sheet.sid), g = BH.game(s.gameId), Z = g.sideScore, e = sheet.entries[el.dataset.p], z = el.dataset.z, d = +el.dataset.d;
+        const used = Z.zones.reduce((a, x) => a + (e.counts[x.z] || 0), 0);
+        if (d > 0 && used >= Z.discs(BH.ctxOf(s))) break;
+        e.counts[z] = Math.max(0, (e.counts[z] || 0) + d); e.manual = null;
+        renderOverlay(); break;
+      }
       case "delete-round": { const i = sheet.index; openDialog({ title: "Удалить раунд " + (i + 1) + "?", text: "Остальные раунды сохранятся, сдающие сдвинутся.", buttons: [
         { label: "Удалить", danger: true, run: () => { const c = fresh(s); c.rounds.splice(i, 1); c.rounds.forEach((rd, j) => { rd.leader = BH.leaderAt(c, j); }); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(c, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
       case "dlg-choice": { const c = dialog && dialog.choices && dialog.choices[+el.dataset.i]; if (c) c.run(); break; }
@@ -2348,6 +2452,14 @@
       endLive();
       return;
     }
+    // a side's points typed instead of counted: the result line follows, nothing is redrawn (the cursor stays)
+    if (el.dataset.act === "draft-final-pair" && draft) { for (const id of el.dataset.p.split(",")) { if (el.value === "") delete draft.final[id]; else draft.final[id] = el.value; } }
+    if (el.dataset.act === "side-manual" && sheet && sheet.kind === "sides") {
+      const s = BH.session(sheet.sid), g = BH.game(s.gameId), e = sheet.entries[el.dataset.p];
+      e.manual = el.value === "" ? null : el.value;
+      const r = overlayRoot.querySelector("#side-result"); if (r) r.textContent = sidesResult(s, g).text;
+      const zn = el.closest(".side-entry") && el.closest(".side-entry").querySelector(".zones"); if (zn) zn.classList.toggle("off", e.manual !== null);
+    }
     if (el.dataset.act === "manual" && sheet) {
       const en = sheet.entries[el.dataset.p];
       en.manual = el.value === "" ? null : el.value;
@@ -2470,7 +2582,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.17.3";
+  BH.version = "0.17.4";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

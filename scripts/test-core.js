@@ -315,6 +315,30 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const two = v.calc.roundWarnings([{}, {}], [sel({ num: [1] }), sel({ num: [1] })], ctxOf(2));
     assert.ok(two.some(x => x.includes("обычных «1» в колоде 1, а отмечено")));
   });
+  t("flip 7 cards: the three actions and the modifiers, each with its picture or drawing (rulebook pp. 7–9)", () => {
+    const f = BH.game("flip7"), pics = Object.values(f.images.rules).flat();
+    assert.deepStrictEqual([...f.cards.map(k => k.id)], ["freeze", "flip3", "second", "plus", "x2"]);
+    for (const k of f.cards) assert.ok(k.img ? pics.includes(k.img) : /<svg/.test(k.art), k.id + ": a picture already in the private assets, or drawn");
+    assert.ok(f.cards.filter(k => k.group === "Карты действий").every(k => /активного игрока/.test(k.when)), "actions go to any active player (p. 7)");
+    const by = id => f.cards.find(k => k.id === id);
+    assert.ok(/сохраняет все набранные очки/.test(by("freeze").does), "Freeze keeps the points (p. 7)");
+    assert.ok(/\*3\* карты/.test(by("flip3").does) && /после всех трёх/.test(by("flip3").does), "Flip Three: three cards, actions after them (pp. 7–8)");
+    assert.ok(/только одна/.test(by("second").does) && /В конце раунда/.test(by("second").note), "one Second Chance each, all discarded at the round's end (p. 8)");
+    assert.ok(/Удвойте/.test(by("x2").does) && /потом добавьте другие модификаторы/.test(by("x2").does), "×2 first, the other modifiers after (p. 9)");
+  });
+  t("vengeance cards: five actions, three special numbers, the modifiers (rulebook pp. 8–12)", () => {
+    const pics = Object.values(v.images.rules).flat();
+    assert.deepStrictEqual([...v.cards.map(k => k.id)], ["just-one-more", "flip4", "swap", "steal", "discard", "zero", "unlucky7", "lucky13", "minus", "half"]);
+    for (const k of v.cards) assert.ok(k.img ? pics.includes(k.img) : /<svg/.test(k.art), k.id + ": a picture already in the private assets, or drawn");
+    for (const k of v.cards) assert.ok(v.rules.some(r => r.id === k.id) || ["minus", "half"].includes(k.id), k.id + ": the card has its rule");
+    const by = id => v.cards.find(k => k.id === id);
+    assert.ok(/игрок её разыгрывает/.test(by("just-one-more").does) && /обязан остановиться/.test(by("just-one-more").does), "Just One More: the action is resolved (p. 9: a stayed player must), then stay (p. 10)");
+    assert.ok(/он её разыгрывает/.test(v.rules.find(r => r.id === "just-one-more").body), "the rule says the same");
+    assert.ok(/\*после\* всех четырёх/.test(by("flip4").does), "Flip Four: actions and modifiers after the four (pp. 10–11)");
+    assert.ok(v.cards.filter(k => k.group === "Карты действий").every(k => /не перебрал/.test(k.when)), "actions only on players who did not bust (p. 9)");
+    assert.ok(["minus", "half"].every(id => /жестоком режиме/.test(by(id).note)), "the brutal mode gives modifiers even to the busted (p. 7)");
+    assert.ok(/округлением вниз/.test(by("half").does), "÷2 rounds down (p. 12)");
+  });
   t("vengeance: every faq points at a rule, every rule is in one topic, pages from the book", () => {
     for (const f of v.faq) { assert.ok(v.rules.some(r => r.id === f.ref), f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], f.src); }
     const ids = v.ruleGroups.flatMap(grp => grp.ids);

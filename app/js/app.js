@@ -999,10 +999,12 @@
 
   // a magic card while its picture is not loaded: a card with a star
   const MC_PIC = `<svg viewBox="0 0 120 84" aria-hidden="true"><rect x="4" y="4" width="112" height="76" rx="10" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:3"/><path d="M60 22l6 13 14 2-10 10 2 14-12-7-12 7 2-14-10-10 14-2z" style="fill:var(--accent)"/></svg>`;
+  // a card's picture: a landscape icon by default, or a whole card («name@card», shown in full)
+  const mcAsset = (g, k) => (k.img ? BH.assets.attr(g.id, [k.img.includes("@") ? k.img : k.img + "@icon"]) : "");
   // the window of one magic card: its picture, when to play it, what it does
   function openMagicCard(g, k) {
     const cap = t => t[0].toUpperCase() + t.slice(1);
-    openDialog({ title: k.name, html: `<div class="mc-big"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${k.art || MC_PIC}</div>
+    openDialog({ title: k.name, html: `<div class="mc-big"${mcAsset(g, k)}>${k.art || MC_PIC}</div>
       ${k.when ? `<p class="mc-when">${esc(cap(k.when))}</p>` : ""}<div class="mc-does">${textHTML(cap(k.does), g.id)}</div>${k.note ? `<p class="small muted">${esc(k.note)}</p>` : ""}`,
       buttons: [{ label: "Понятно", primary: true, run: closeDialog }] });
   }
@@ -1038,23 +1040,28 @@
       buttons: [{ label: "Понятно", primary: true, run: closeDialog }] });
   }
 
+  // the game's cards at hand (Coconuts' magic cards, Flip's actions and modifiers): tiles in groups when the game
+  // names them (k.group), each tile opening its window; «» when the game has none
+  function cardsPanel(s, g) {
+    const cards = BH.raceCards(g, s);
+    if (!cards.length) return "";
+    const tile = (k, i) => `<button type="button" class="mc-tile" data-act="mc-open" data-i="${i}" aria-label="${esc(k.name)}: что делать"><span class="mc-pic"${mcAsset(g, k)}>${k.art || MC_PIC}</span><b>${esc(k.name)}</b>${k.tag ? `<small>${esc(k.tag)}</small>` : ""}</button>`;
+    const groups = []; cards.forEach((k, i) => { const nm = k.group || ""; let gr = groups.find(x => x.nm === nm); if (!gr) groups.push(gr = { nm, html: [] }); gr.html.push(tile(k, i)); });
+    return `<section class="panel"><div class="sec-h"><h2>${esc(g.cardsTitle || "Карты")}</h2></div>
+      ${groups.map(gr => `${gr.nm ? `<h3 class="mc-group">${esc(gr.nm)}</h3>` : ""}<div class="mc-grid">${gr.html.join("")}</div>`).join("")}
+      ${g.cardsFoot ? `<p class="small muted mc-foot">${esc(g.cardsFoot)}</p>` : ""}</section>`;
+  }
   // a race without rounds (Coconuts): the turn in short lines, the magic cards at hand, the end in one tap
   function viewPlayRace(s, g) {
-    const sc = g.scoring, ctx = BH.ctxOf(s), goal = BH.raceGoal(g, s), cards = BH.raceCards(g, s);
+    const sc = g.scoring, ctx = BH.ctxOf(s), goal = BH.raceGoal(g, s), cardsHtml = cardsPanel(s, g);
     const reminder = typeof g.rounds.reminder === "function" ? g.rounds.reminder(ctx) : g.rounds.reminder;
     const turn = `${BH.player(s.first) ? `<div class="status-row" style="grid-template-columns:minmax(0,1fr)"><div class="stat-tile leader">${BH.avatar(BH.player(s.first))}<div class="leader-t"><span class="label">Начинает</span><b>${esc(BH.player(s.first).name)}</b></div></div></div>` : ""}
       ${chanceRow(s, g)}
       <section class="panel"><div class="sec-h"><h2>${esc(g.rounds.title || "Как идёт ход")}</h2></div><div class="reminder">${stepsHTML(reminder, g.id)}</div></section>
       <section class="panel"><div class="sec-h"><h2>Конец игры</h2></div>${stepsHTML(sc.end(goal), g.id)}</section>`;
-    // the tiles, in groups when the game names them (k.group), each tile opening its window
-    const tile = (k, i) => `<button type="button" class="mc-tile" data-act="mc-open" data-i="${i}" aria-label="${esc(k.name)}: что делать"><span class="mc-pic"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${k.art || MC_PIC}</span><b>${esc(k.name)}</b>${k.tag ? `<small>${esc(k.tag)}</small>` : ""}</button>`;
-    const groups = []; cards.forEach((k, i) => { const nm = k.group || ""; let gr = groups.find(x => x.nm === nm); if (!gr) groups.push(gr = { nm, html: [] }); gr.html.push(tile(k, i)); });
-    const cardsHtml = `<section class="panel"><div class="sec-h"><h2>${esc(g.cardsTitle || "Карты")}</h2></div>
-      ${groups.map(gr => `${gr.nm ? `<h3 class="mc-group">${esc(gr.nm)}</h3>` : ""}<div class="mc-grid">${gr.html.join("")}</div>`).join("")}
-      ${g.cardsFoot ? `<p class="small muted mc-foot">${esc(g.cardsFoot)}</p>` : ""}</section>`;
     return playShell(s, g, [
       { id: "turn", label: g.rounds.tab || "Ход", html: turn },
-      cards.length && { id: "cards", label: g.cardsTab || "Карты", html: cardsHtml },
+      cardsHtml && { id: "cards", label: g.cardsTab || "Карты", html: cardsHtml },
       rulesTab(s, g),
     ], `<div class="game-bar">
         ${askBtn()}
@@ -1127,9 +1134,11 @@
       <div class="board">${board}</div>
       ${chanceRow(s, g)}
       ${g.rounds.reminder ? `<details class="panel hint" ${r === 0 ? "open" : ""}><summary>Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0), g.id)}</div></details>` : ""}`;
+    const cardsHtml = cardsPanel(s, g);
     return playShell(s, g, [
       { id: "score", label: "Счёт", html: score },
       { id: "rounds", label: "Раунды", n: s.rounds.length, html: hist },
+      cardsHtml && { id: "cards", label: g.cardsTab || "Карты", html: cardsHtml },
       rulesTab(s, g),
     ], `<div class="game-bar">
         ${askBtn()}
@@ -2797,7 +2806,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.27.0";
+  BH.version = "0.28.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

@@ -90,8 +90,9 @@
     age: "10+",
     players: { min: 3, max: 6 },
     cover,
-    // composed from the English rulebook with our Russian labels (scripts/assets/thegang-compose.mjs); no cover picture — the drawn one
+    // composed from the English rulebook with our Russian labels; the cover — from the official German rulebook (scripts/assets/thegang-compose.mjs)
     images: {
+      cover: "cover-square",
       steps: { vaults: ["setup"], cards: ["materials"], chips: ["chips"] },
       rules: { goal: ["flip"], components: ["materials"], setup: ["setup"], chips: ["chips"], showdown: ["showdown", "flip"], ranking: ["ranking"], values: ["values"] },
     },

@@ -17,6 +17,19 @@ async function cut(n, [x0, y0, x1, y1]) {
 const W = 720, PAPER = "#FBF8F2";
 
 const jobs = {
+  // the cover from the first page of the official German rulebook (sources/thegang-x4/de-page-01.png, scale 4):
+  // the title and the vault; the German subtitle and the ribbon's words are painted over in their own colours
+  async "cover-square"() {
+    const img = await loadImage(fs.readFileSync(path.join(root, "sources", "thegang-x4", "de-page-01.png")));
+    const box = [140, 92, 1222, 1174], s2 = 512;
+    const c = createCanvas(s2, s2), x = c.getContext("2d"), k = s2 / (box[2] - box[0]);
+    x.drawImage(img, box[0], box[1], box[2] - box[0], box[3] - box[1], 0, 0, s2, s2);
+    const at = (X, Y) => { const d = x.getImageData(Math.round((X - box[0]) * k), Math.round((Y - box[1]) * k), 1, 1).data; return `rgb(${d[0]},${d[1]},${d[2]})`; };
+    const paint = (X0, Y0, X1, Y1, col) => { x.fillStyle = col; x.fillRect((X0 - box[0]) * k, (Y0 - box[1]) * k, (X1 - X0) * k, (Y1 - Y0) * k); };
+    paint(404, 410, 958, 460, at(398, 440));          // «Das kooperative Pokerspiel», on the black background
+    paint(392, 590, 968, 647, at(700, 600));          // «Für 3–6 Personen ab 10 Jahren», on the black ribbon (between its yellow edges)
+    save("cover-square", c);
+  },
   // the table of the book: vaults and alarms, the overview cards, the chips — numbered, the words under it
   async setup() {
     const img = await cut(3, [150, 635, 1172, 1508]);

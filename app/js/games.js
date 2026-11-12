@@ -76,6 +76,15 @@
   // a race without rounds or points (Coconuts): the first to build something wins at once; otherwise a count decides —
   // the most wins, equal — the one of them who played last
   BH.isRace = g => !!(g && g.scoring && g.scoring.type === "race");
+  // a race written down with each player's cups and coconuts: a full pyramid wins; otherwise the most coconuts
+  // (equal — all of them, unless it is known who played last)
+  BH.raceWinner = (g, players, cups, counts) => {
+    const goal = (g && g.scoring && g.scoring.goal) || 6, has = (o, id) => !!o && o[id] !== undefined && o[id] !== null && o[id] !== "";
+    const built = players.filter(id => has(cups, id) && Number(cups[id]) >= goal);
+    if (built.length) return { how: "pyramid", winners: built };
+    if (players.some(id => has(counts, id))) return { how: "coconuts", winners: BH.raceResult(players, counts).top };
+    return { how: null, winners: [] };
+  };
   BH.raceResult = (players, counts) => {
     const v = id => Math.max(0, Math.round(Number((counts || {})[id])) || 0), best = players.length ? Math.max(...players.map(v)) : 0;
     return { best, top: players.filter(id => v(id) === best) };

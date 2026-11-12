@@ -19,14 +19,15 @@
   const STATUS = new Set(["setup", "first", "playing", "finished"]);
 
   // a race (Coconuts): «pyramid» — someone built it; «coconuts» — they ran out, the coconuts in each player's cups
+  // a race (Coconuts): how it ended — «pyramid» or «coconuts» (they ran out), and what each player had: cups, coconuts in them
   function cleanRace(r, allowed) {
-    if (!r || typeof r !== "object" || Array.isArray(r) || (r.how !== "pyramid" && r.how !== "coconuts")) return null;
-    const out = { how: r.how };
-    if (r.how === "coconuts" && r.counts && typeof r.counts === "object") {
-      const c = {}; for (const [k, v] of Object.entries(r.counts)) if (allowed.has(k)) c[k] = Math.max(0, Math.min(99, Math.round(Number(v)) || 0));
-      if (Object.keys(c).length) out.counts = c;
-    }
-    return out;
+    if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+    const out = {}, nums = (o, max) => { const c = {}; if (o && typeof o === "object" && !Array.isArray(o)) for (const [k, v] of Object.entries(o)) if (allowed.has(k)) c[k] = Math.max(0, Math.min(max, Math.round(Number(v)) || 0)); return c; };
+    if (r.how === "pyramid" || r.how === "coconuts") out.how = r.how;
+    const counts = nums(r.counts, 99), cups = nums(r.cups, 14);
+    if (Object.keys(counts).length) out.counts = counts;
+    if (Object.keys(cups).length) out.cups = cups;
+    return Object.keys(out).length ? out : null;
   }
   function cleanCoop(c) {
     if (!c || typeof c !== "object" || Array.isArray(c)) return null;

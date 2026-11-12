@@ -594,7 +594,9 @@
     } else if (past && g && cnt && BH.isRace(g)) {
       const wn = draft.winners.filter(id => draft.players.includes(id));
       resultSec = step2("result", "Итог", wn.length ? "Победа: " + esc(wn.map(id => (BH.player(id) || { name: "?" }).name).join(", ")) : "Победитель — по желанию",
-        `<p class="small muted">Отметьте победителя и, если помните, чем кончилась партия.</p>
+        `<p class="small muted">Впишите, что помните: корзинки и кокосы каждого. Победитель выберется сам — или отметьте его.</p>
+        ${raceRowsHTML({ players: draft.players }, g, { counts: draft.raceCounts || {}, cups: draft.raceCups || {} }, "draft-race-count", "draft-race-cups")}
+        <p class="small race-auto" id="race-auto" aria-live="polite">${esc(raceAutoText(g, draft.players, draft.raceCups, draft.raceCounts))}</p>
         <div class="label" style="margin:12px 0 6px">Победитель</div>
         <div class="chips">${draft.players.map(id => `<button class="chip" data-act="draft-race-winner" data-id="${id}" aria-pressed="${wn.includes(id)}">${esc((BH.player(id) || { name: "?" }).name)}</button>`).join("")}</div>
         <div class="label" style="margin:12px 0 6px">Чем кончилась</div>
@@ -655,7 +657,14 @@
       for (const id of s.players) if (draft.final[id] !== undefined && draft.final[id] !== "") final[id] = Math.round(Number(draft.final[id])) || 0;
       let winners = BH.isCoop(g) ? (draft.coop === "win" ? s.players.slice() : []) : draft.winners.filter(id => s.players.includes(id));
       if (BH.isCoop(g) && draft.tally && (draft.tally.ok !== undefined || draft.tally.fail !== undefined)) s.tally = { ok: draft.tally.ok || 0, fail: draft.tally.fail || 0 };
-      if (BH.isRace(g) && draft.raceHow) s.race = { how: draft.raceHow };
+      if (BH.isRace(g)) {
+        const nums = (o, max) => { const c = {}; for (const id of s.players) if (o && o[id] !== undefined && o[id] !== "") c[id] = Math.max(0, Math.min(max, Math.round(Number(o[id])) || 0)); return c; };
+        const cups = nums(draft.raceCups, 14), counts = nums(draft.raceCounts, 99), auto = BH.raceWinner(g, s.players, cups, counts);
+        if (!winners.length) winners = auto.winners;
+        const race = {}; if (draft.raceHow || auto.how) race.how = draft.raceHow || auto.how;
+        if (Object.keys(counts).length) race.counts = counts; if (Object.keys(cups).length) race.cups = cups;
+        if (Object.keys(race).length) s.race = race;
+      }
       if (!BH.isCoop(g) && !winners.length && Object.keys(final).length) {
         const low = !!(g.scoring && g.scoring.lowerWins);
         const best = low ? Math.min(...Object.values(final)) : Math.max(...Object.values(final));
@@ -993,6 +1002,7 @@
       <div class="shead">
         ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
         ${sessionHero(s, g, true)}
+        ${BH.player(s.first) ? `<div class="status-row" style="grid-template-columns:minmax(0,1fr)"><div class="stat-tile leader">${BH.avatar(BH.player(s.first))}<div class="leader-t"><span class="label">Начинает</span><b>${esc(BH.player(s.first).name)}</b></div></div></div>` : ""}
       </div>
       <div class="play">
         <div class="stack">
@@ -1013,13 +1023,13 @@
     </div>`;
   }
   function viewDoneRace(s, g) {
-    const r = s.race || {}, w = s.winners.map(BH.player).filter(Boolean), counts = r.counts || null;
+    const r = s.race || {}, w = s.winners.map(BH.player).filter(Boolean), counts = r.counts || null, cups = r.cups || null;
     const dur = s.finishedAt && s.startedAt && s.finishedAt > s.startedAt ? BH.fmtDuration(s.finishedAt - s.startedAt) : null;
     const crown = `<svg class="crown" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 46 L12 18 L24 32 L32 12 L40 32 L52 18 L56 46 Z" style="fill:#E3A72F;stroke:#B57E14;stroke-width:2.5;stroke-linejoin:round"/><rect x="8" y="46" width="48" height="8" rx="2" style="fill:#B57E14"/></svg>`;
     const how = r.how === "pyramid" ? `Первая пирамида из ${g.scoring.goal} корзинок` : r.how === "coconuts" ? "Кокосы кончились — больше всех кокосов в корзинках" : "Записана после игры";
+    const num = (o, id) => (o && o[id] !== undefined ? o[id] : "—");
     const seat = id => s.players.indexOf(id);
-    const order = counts ? [...s.players].sort((a, b) => (counts[b] || 0) - (counts[a] || 0) || (s.winners.includes(b) - s.winners.includes(a)) || seat(a) - seat(b))
-      : [...s.players].sort((a, b) => (s.winners.includes(b) - s.winners.includes(a)) || seat(a) - seat(b));
+    const order = [...s.players].sort((a, b) => (s.winners.includes(b) - s.winners.includes(a)) || ((cups || {})[b] || 0) - ((cups || {})[a] || 0) || ((counts || {})[b] || 0) - ((counts || {})[a] || 0) || seat(a) - seat(b));
     return `<div class="stack">
       <div class="shead">${topline(backToOrigin(), deleteBtn)}${sessionHero(s, g)}</div>
       <section class="panel podium">
@@ -1027,8 +1037,9 @@
         <h1>${w.length ? "Победа: " + esc(w.map(p => p.name).join(" и ")) : "Партия окончена"}</h1>
         <p class="muted small">${esc(how)}</p>
       </section>
-      <section class="panel"><h2 style="margin-bottom:6px">${counts ? "Кокосы в корзинках" : "Итог"}</h2>
-        <div class="list">${order.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<a class="item" href="#/players/${esc(id)}">${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div>${s.winners.includes(id) ? `<span class="won">${IC.trophy}</span>` : ""}${counts ? `<span class="num" style="font-size:20px;font-weight:700">${counts[id] || 0}</span>` : ""}</a>`; }).join("")}</div>
+      <section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
+        ${counts || cups ? `<div class="scroll-x"><table class="tbl race-tbl"><thead><tr><th>Игрок</th><th>Корзинки</th><th>Кокосы</th></tr></thead><tbody>${order.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<tr><td><span class="race-who">${BH.avatar(p, "sm")}<b>${esc(p.name)}</b>${s.winners.includes(id) ? `<span class="won">${IC.trophy}</span>` : ""}</span></td><td class="num">${num(cups, id)}</td><td class="num">${num(counts, id)}</td></tr>`; }).join("")}</tbody></table></div>`
+          : `<div class="list">${order.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<a class="item" href="#/players/${esc(id)}">${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div>${s.winners.includes(id) ? `<span class="won">${IC.trophy}</span>` : ""}</a>`; }).join("")}</div>`}
       </section>
       ${dur ? `<div class="kpis"><div class="kpi"><b>${dur}</b><span>длилась партия</span></div></div>` : ""}
       <div class="actions">
@@ -2007,7 +2018,7 @@
         { label: "Удалить партию", danger: true, run: () => confirmDelete(s) }] });
   }
   function openRaceSheet(s) {
-    sheet = { kind: "race", sid: s.id, counts: Object.fromEntries(s.players.map(id => [id, ""])), last: null };
+    sheet = { kind: "race", sid: s.id, counts: Object.fromEntries(s.players.map(id => [id, ""])), cups: {}, last: null };
     BH.clearToast(); ovOpen(); renderOverlay();
   }
   // who wins by the counts so far: «ready» once every count is in and a tie is settled by who played last
@@ -2023,9 +2034,8 @@
     return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
       <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">Кокосы кончились</h2></div><button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div>
       <div class="sheet-body">
-        <p class="small muted">Посчитайте кокосы в корзинках на планшете каждого игрока.</p>
-        ${s.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="seat" style="grid-template-columns:auto minmax(0,1fr) auto">${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
-          <input class="input score-in ph-word" type="number" inputmode="numeric" min="0" max="${max}" data-act="race-count" data-p="${id}" value="${esc(sheet.counts[id])}" placeholder="кокосы" aria-label="Кокосов в корзинках: ${esc(p.name)}"></div>`; }).join("")}
+        <p class="small muted">Посчитайте кокосы в корзинках на планшете каждого. Корзинки — по желанию.</p>
+        ${raceRowsHTML(s, g, { counts: sheet.counts, cups: sheet.cups }, "race-count", "race-cups")}
         <div id="race-tie">${raceTieHTML(st)}</div>
       </div>
       <div class="sheet-foot side-foot">
@@ -2033,6 +2043,19 @@
         <button class="btn primary big" data-act="race-save" ${st.winner ? "" : "disabled"}>${I.check}Записать</button>
       </div>
     </div></div>`;
+  }
+  function raceRowsHTML(s, g, vals, actCount, actCups) {
+    const goal = g.scoring.goal, max = g.scoring.count.max, players = s.players;
+    return `<div class="race-row race-head"><span></span><span></span><span class="label">Корзинки</span><span class="label">Кокосы</span></div>` + players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="race-row">${BH.avatar(p, "sm")}<span class="race-nm">${esc(p.name)}</span>
+      <input class="input score-in" type="number" inputmode="numeric" min="0" max="${goal}" data-act="${actCups}" data-p="${id}" value="${esc(vals.cups[id] ?? "")}" placeholder="—" aria-label="Корзинок: ${esc(p.name)}">
+      <input class="input score-in" type="number" inputmode="numeric" min="0" max="${max}" data-act="${actCount}" data-p="${id}" value="${esc(vals.counts[id] ?? "")}" placeholder="—" aria-label="Кокосов в корзинках: ${esc(p.name)}"></div>`; }).join("");
+  }
+  // what the numbers typed for a game played before say: who wins by them (a marked winner overrides it)
+  function raceAutoText(g, players, cups, counts) {
+    const r = BH.raceWinner(g, players, cups || {}, counts || {}), nm = ids => (ids.length > 1 ? ids.slice(0, -1).map(pname).join(", ") + " и " + pname(ids[ids.length - 1]) : ids.map(pname).join(""));
+    if (!r.winners.length) return "";
+    if (r.how === "pyramid") return `По числам — победа: ${nm(r.winners)}, пирамида.`;
+    return r.winners.length > 1 ? `Поровну кокосов: ${nm(r.winners)}. Отметьте победителя — кто ходил последним.` : `По числам — победа: ${nm(r.winners)}, больше кокосов.`;
   }
   // equal counts: who of them played last wins (the rules)
   const raceTieHTML = st => (st.filled && st.top.length > 1 ? `<div class="label" style="margin:12px 0 6px">Чей ход был последним?</div><div class="chips">${st.top.map(id => `<button class="chip" data-act="race-last" data-id="${id}" aria-pressed="${sheet.last === id}">${esc(pname(id))}</button>`).join("")}</div>` : "");
@@ -2204,7 +2227,8 @@
       case "race-last": sheet.last = el.dataset.id; renderOverlay(); break;
       case "race-save": { if (!sheet || sheet.kind !== "race") break; const rs = BH.session(sheet.sid), st = raceSheetState(rs); if (!st.winner) break;
         const counts = Object.fromEntries(rs.players.map(id => [id, Math.max(0, Math.round(Number(sheet.counts[id])) || 0)]));
-        sheet = null; rs.race = { how: "coconuts", counts }; finish(rs, [st.winner]); break; }
+        const cups = {}; for (const id of rs.players) if (sheet.cups[id] !== undefined && sheet.cups[id] !== "") cups[id] = Math.max(0, Math.min(14, Math.round(Number(sheet.cups[id])) || 0));
+        sheet = null; rs.race = Object.keys(cups).length ? { how: "coconuts", counts, cups } : { how: "coconuts", counts }; finish(rs, [st.winner]); break; }
       // a pair wins together: one chip for both partners
       case "draft-winner-pair": { const ids = el.dataset.p.split(","), on = ids.every(id => draft.winners.includes(id)); draft.winners = draft.winners.filter(id => !ids.includes(id)); if (!on) draft.winners.push(...ids); render(); break; }
       // the score of a recorded cooperative game: three of one kind decide the result
@@ -2567,6 +2591,12 @@
     }
     // a side's points typed instead of counted: the result line follows, nothing is redrawn (the cursor stays)
     if (el.dataset.act === "draft-final-pair" && draft) { for (const id of el.dataset.p.split(",")) { if (el.value === "") delete draft.final[id]; else draft.final[id] = el.value; } }
+    if (el.dataset.act === "race-cups" && sheet && sheet.kind === "race") { sheet.cups[el.dataset.p] = el.value; return; }
+    if ((el.dataset.act === "draft-race-count" || el.dataset.act === "draft-race-cups") && draft) {
+      const k = el.dataset.act === "draft-race-count" ? "raceCounts" : "raceCups"; draft[k] = draft[k] || {}; draft[k][el.dataset.p] = el.value;
+      const hint = document.getElementById("race-auto"); if (hint) hint.textContent = raceAutoText(BH.game(draft.gameId), draft.players, draft.raceCups, draft.raceCounts);
+      return;
+    }
     if (el.dataset.act === "race-count" && sheet && sheet.kind === "race") {
       sheet.counts[el.dataset.p] = el.value;
       const rs = BH.session(sheet.sid), st = raceSheetState(rs);
@@ -2702,7 +2732,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.18.0";
+  BH.version = "0.18.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

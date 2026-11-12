@@ -646,6 +646,8 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   t("coconuts: 2–4 players; a race without rounds — the order of seats does not matter", () => {
     assert.strictEqual(C.players.min, 2); assert.strictEqual(C.players.max, 4);
     assert.ok(BH.isRace(C) && !BH.isCoop(C) && !BH.isEndScored(C)); assert.strictEqual(C.rounds.leader, false);
+    // the rules: the youngest starts — picked by hand on the wheel screen, or the wheel for those who want it
+    assert.ok(C.first && /младший/.test(C.first.hint));
   });
   t("coconuts: each takes a launcher, a board, 2 magic cards and 8 coconuts", () => {
     const k = steps(2).find(st => st.id === "kit").text; assert.ok(k.includes("*2* волшебные карты") && k.includes("*8* кокосов"));
@@ -662,6 +664,11 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     let r = BH.raceResult(["a", "b", "c"], { a: 5, b: 9, c: 3 }); assert.deepStrictEqual([...r.top], ["b"]); assert.strictEqual(r.best, 9);
     r = BH.raceResult(["a", "b", "c"], { a: 7, b: 7, c: 2 }); assert.deepStrictEqual([...r.top], ["a", "b"], "a tie — the app asks who shot last");
     assert.ok(/последним/.test(C.scoring.tieNote));
+    // a game written down afterwards: 6 cups — the pyramid; otherwise the most coconuts; nothing typed — no winner found
+    let w = BH.raceWinner(C, ["a", "b", "c"], { a: 6, b: 4, c: 2 }, { a: 8, b: 9, c: 3 }); assert.ok(w.how === "pyramid" && w.winners.join() === "a", "6 cups win over more coconuts");
+    w = BH.raceWinner(C, ["a", "b", "c"], { a: 5, b: 4 }, { a: 8, b: 11, c: 3 }); assert.ok(w.how === "coconuts" && w.winners.join() === "b");
+    w = BH.raceWinner(C, ["a", "b"], {}, { a: 7, b: 7 }); assert.strictEqual(w.winners.join(), "a,b", "equal and unknown who shot last — both");
+    w = BH.raceWinner(C, ["a", "b"], {}, {}); assert.ok(w.how === null && !w.winners.length);
   });
   t("coconuts: the six magic cards, each with when to play it", () => {
     assert.deepStrictEqual([...C.cards.map(k => k.name)], ["Ещё 1 попытка", "Замри!", "Выстрел вслепую", "Призыв ветра", "В яблочко!", "Дальний выстрел"]);
@@ -671,12 +678,14 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   t("coconuts: how a race ended is kept; nonsense dropped", () => {
     BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true,
       sessions: [{ id: "c1", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["b"], race: { how: "coconuts", counts: { a: 4, b: 6.4, z: 3 } } },
-        { id: "c2", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: { how: "pyramid", counts: { a: 1 } } },
-        { id: "c3", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: { how: "banana" } }] });
+        { id: "c2", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: { how: "pyramid", counts: { a: 9, b: 7 }, cups: { a: 6, b: 3.2, z: 1 } } },
+        { id: "c3", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: { how: "banana" } },
+        { id: "c4", gameId: "coconuts", players: ["a", "b"], status: "finished", rounds: [], winners: ["b"], race: { cups: { a: 2, b: 5 } } }] });
     const by = id => BH.state.sessions.find(x => x.id === id);
     assert.strictEqual(JSON.stringify(by("c1").race), JSON.stringify({ how: "coconuts", counts: { a: 4, b: 6 } }));
-    assert.strictEqual(JSON.stringify(by("c2").race), JSON.stringify({ how: "pyramid" }), "a pyramid has no counts");
+    assert.strictEqual(JSON.stringify(by("c2").race), JSON.stringify({ how: "pyramid", counts: { a: 9, b: 7 }, cups: { a: 6, b: 3 } }), "old data: cups and coconuts of each");
     assert.strictEqual(by("c3").race, undefined);
+    assert.strictEqual(JSON.stringify(by("c4").race), JSON.stringify({ cups: { a: 2, b: 5 } }), "how it ended may be unknown");
     assert.ok(!BH.hasScore(by("c1"), "a"), "a race has no score: the statistics count only wins");
   });
   t("coconuts: rules, groups, questions refer to real sections; pages of the Russian rules 2–4", () => {

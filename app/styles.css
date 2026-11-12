@@ -7,15 +7,15 @@
   --shadow:0 1px 2px rgba(30,27,22,.06),0 8px 24px rgba(30,27,22,.07);
   --f-display:"Unbounded","Segoe UI",system-ui,sans-serif;
   --f-ui:"Onest","Segoe UI",system-ui,-apple-system,sans-serif;
-  --r:14px; --tabbar-h:64px; --chip:color-mix(in srgb,var(--ink) 7%,transparent); --win:#8F6A00;
+  --r:14px; --tabbar-h:64px; --chip:color-mix(in srgb,var(--ink) 7%,transparent); --win:#8F6A00; --win-soft:#F6E9C4;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#15130F; --surface:#201C17; --sunk:#1A1713; --ink:#F1EBE0; --muted:#A69C8C; --line:#342E26;
   --accent:#EE8A5C; --accent-ink:#1E0F08; --accent-soft:#3A2419; --good:#79C795; --good-soft:#1C3024;
-  --warn:#E9A866; --warn-soft:#3A2A19; --bad:#F2918A; --bad-soft:#3D1F1C; --win:#E3B341;
+  --warn:#E9A866; --warn-soft:#3A2A19; --bad:#F2918A; --bad-soft:#3D1F1C; --win:#E3B341; --win-soft:#33290F;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3); color-scheme:dark}}
-:root[data-theme="dark"]{ --win:#E3B341;
+:root[data-theme="dark"]{ --win:#E3B341; --win-soft:#33290F;
   --bg:#15130F; --surface:#201C17; --sunk:#1A1713; --ink:#F1EBE0; --muted:#A69C8C; --line:#342E26;
   --accent:#EE8A5C; --accent-ink:#1E0F08; --accent-soft:#3A2419; --good:#79C795; --good-soft:#1C3024;
   --warn:#E9A866; --warn-soft:#3A2A19; --bad:#F2918A; --bad-soft:#3D1F1C;
@@ -548,9 +548,9 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .sess-hero-n{font-family:var(--f-display);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere;letter-spacing:0}
 /* a running game: the round, and who deals (with the wheel before the first round) */
 .status-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px}
-/* the play screen: a compact header pinned on top with the tabs under it; each tab a screen of its own */
-.play-screen{display:flex;flex-direction:column;gap:12px;min-width:0}
-@media (min-width:900px){.play-screen{width:100%;max-width:760px;margin:0 auto}}
+/* a screen of tabs (the play screen, a game, a result, a player): a compact header pinned on top with the tabs under it */
+.tab-screen{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media (min-width:900px){.tab-screen{width:100%;max-width:760px;margin:0 auto}}
 .pstick{position:sticky;top:0;z-index:12;display:flex;flex-direction:column;gap:8px;margin:-12px 0 0;padding:calc(10px + env(safe-area-inset-top,0px)) 0 8px;background:var(--bg)}
 .phead{display:flex;align-items:center;gap:10px;min-width:0}
 .phead .cover.mini{width:40px;height:40px;border-radius:10px;flex:none}
@@ -571,10 +571,41 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 /* a hint (how a round goes, the favourite): tinted, apart from the state of the game */
 details.hint{background:var(--accent-soft);border-color:transparent}
 details.hint>summary{cursor:pointer;font-weight:600}
-@media (max-width:899px){body.in-play .topbar{display:none}
-  /* the main action at the bottom of the screen, where the thumb is, even when the tab is short */
-  .play-screen{min-height:calc(100dvh - 44px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
-  .play-screen>.game-bar{margin-top:auto}}
+.phead-s{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.phead-me{color:var(--accent);font-weight:600}
+.phead-av{position:relative;flex:none;display:inline-flex}
+.phead-av .me-star{transform:scale(.8);right:-6px;top:-6px}
+.phead-act{color:var(--ink)}
+.more-btn{margin-top:6px}
+.about-row{gap:12px}
+.sel-sm{width:auto;max-width:180px;min-height:36px;padding:4px 30px 4px 10px;font-size:14px}
+/* the victory of a result: gold (an alarm — red) */
+.win-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;background:var(--win-soft)}
+.win-card.lost{background:var(--bad-soft)}
+.win-card .crown{width:44px;height:44px;flex:none}
+.win-t{min-width:0;display:flex;flex-direction:column;gap:4px}
+.win-t h2{font-size:21px;overflow-wrap:anywhere}
+.win-s{font-size:14px;color:var(--muted)}
+.win-t .podium-note{margin:2px 0 0}
+/* the numbers three in a row */
+.kpis.k3{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.kpis.k3 .kpi{padding:10px 10px}
+.kpis.k3 .kpi b{font-size:21px}
+.kpis.k3 .kpi span{font-size:12.5px;line-height:1.3}
+/* the player's win rate in one line, with the period */
+.pc-strip{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--accent-soft)}
+.pc-strip-t{display:flex;align-items:baseline;gap:8px;min-width:0;flex-wrap:wrap}
+.pc-strip-t b{font-size:24px;line-height:1;color:var(--accent)}
+.pc-strip-t span{font-size:14px;color:var(--ink)}
+.pc-strip select{width:auto;max-width:170px;min-height:36px;padding:4px 30px 4px 10px;font-size:14px}
+.pc-strip .pc-bar{grid-column:1/-1;height:8px;background:var(--surface)}
+.pc-filter{align-self:flex-start}
+@media (max-width:899px){body.has-phead .topbar{display:none}
+  /* the main action at the bottom of the screen, where the thumb is, even when the tab is short (above the tab bar of the app) */
+  .tab-screen{min-height:calc(100dvh - 44px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - var(--tabbar-h))}
+  body.in-game .tab-screen{min-height:calc(100dvh - 44px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+  .tab-screen>.game-bar{margin-top:auto}
+  body:not(.in-game) .tab-screen>.game-bar{bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px))}}
 /* the chances to win: one slim row under the board, a window with everyone */
 .chance-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:12px;align-items:center;width:100%;padding:10px 12px;border-radius:12px;background:var(--accent-soft);border:1px solid transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .chance-row:hover{border-color:var(--accent)}

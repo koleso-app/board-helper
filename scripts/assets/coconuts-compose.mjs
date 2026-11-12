@@ -67,6 +67,13 @@ const jobs = {
   async pyramid() { const img = await page(3); save("pyramid", crop(img, [1000, 1600, 1400, 1990], 480)); },
   // the six magic cards with their pictures
   async cards() { const img = await page(4); save("cards", crop(img, [60, 1180, 1640, 2240], 720)); },
+  // each magic card's picture on its own: the tiles on the play screen and the window that opens from them
+  async mc() {
+    const img = await page(4);
+    const boxes = { blind: [100, 1215, 350, 1385], wind: [900, 1215, 1150, 1390], freeze: [100, 1475, 350, 1650],
+      again: [900, 1475, 1150, 1650], far: [100, 1705, 350, 1895], aim: [900, 1705, 1150, 1895] };
+    for (const [id, box] of Object.entries(boxes)) save("mc-" + id, crop(img, box, 240), 78);
+  },
 };
 const only = process.argv.slice(2);
 for (const [name, job] of Object.entries(jobs)) if (!only.length || only.includes(name)) await job();

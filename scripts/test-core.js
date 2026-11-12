@@ -330,6 +330,14 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const both = BH.setupSteps(Object.assign({}, s, { opts: { brutal: true, challenge: true } }));
     assert.ok(both.some(x => x.id === "brutal")); assert.ok(both.some(x => x.id === "challenge")); assert.ok(!both.some(x => x.id === "goal"));
   });
+  t("vengeance: the brutal mode keeps the action cards off busted players (book p. 7 changes three things; p. 9 — actions only on who hasn't busted)", () => {
+    assert.ok(v.setup.find(x => x.id === "brutal").text.includes("Действия на перебравших — *нельзя*"));
+    assert.ok(v.rules.find(r => r.id === "brutal").body.includes("только на тех, кто не перебрал"));
+    assert.ok(v.faq.some(f => f.ref === "brutal" && /красть/.test(f.q) && /^Нет\./.test(f.a)), "the faq answers no");
+    // the −15 of a Flip 7 may go to any other player, a busted one too
+    const r = BH.calcScore(v, sel({ num: [5], minus: [4] }, { bust: true, minus15: true }), ctxOf(3, true));
+    assert.strictEqual(r.bustScore, -19);
+  });
   t("vengeance: the Zero in the brutal mode scores like a bust (minus the cards given)", () => {
     assert.strictEqual(score({ num: [12, 11], special: ["zero"], minus: [4] }, {}, true).score, -4);
     assert.strictEqual(score({ num: [12, 11], special: ["zero"], minus: [4] }, {}, false).score, 0);

@@ -90,6 +90,7 @@
     },
     cards: stones,
     cardsTitle: "Что вытянули?",
+    cardsTab: "Камни",   // the tab of the play screen
     cardsFoot: "Нажмите на камень — что делать.",
 
     // the end: the first to the nuggets wins at once

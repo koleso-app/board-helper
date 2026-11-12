@@ -61,7 +61,7 @@
   const ctx = document.createElement("canvas").getContext("2d");
   async function visit(hash) { location.hash = hash; await wait(450); window.scrollTo(0, 0); }
   async function withTabs(where) {
-    const keys = [...document.querySelectorAll('[data-act="pc-tab"],[data-act="gc-tab"],[data-act="pl-tab"]')].map(b => [b.dataset.act, b.dataset.tab]);
+    const keys = [...document.querySelectorAll('[data-act="pc-tab"],[data-act="gc-tab"],[data-act="pl-tab"],[data-act="play-tab"]')].map(b => [b.dataset.act, b.dataset.tab]);
     if (!keys.length) return scan(where);
     const out = [];
     for (const [act, tab] of keys) { const b = document.querySelector(`[data-act="${act}"][data-tab="${tab}"]`); if (b) { b.click(); await wait(300); } out.push(...scan(`${where} [${tab}]`)); }
@@ -131,6 +131,7 @@
         }
         // a race (Coconuts): the end dialog, then the count of coconuts with a tie — looked at only, nothing is saved
         if (BH.isRace && BH.isRace(BH.game(s.gameId))) {
+          const ct = document.querySelector('[data-act="play-tab"][data-tab="cards"]'); if (ct) { ct.click(); await wait(300); }
           const mc = document.querySelector('[data-act="mc-open"]'); if (mc) { mc.click(); await wait(300); out.push(...scan(`${s.id} [волшебная карта]`)); await closeOverlay(); }
           document.querySelector('[data-act="finish-menu"]').click(); await wait(300); out.push(...scan(`${s.id} [кто собрал пирамиду]`));
           const cnt = document.querySelector('[data-act="dlg"][data-i="0"]'); if (cnt) { cnt.click(); await wait(350); }
@@ -156,6 +157,7 @@
         const bf = document.querySelector('.overlay .entry.open [data-act="flag"][data-f="bust"]');
         if (bf) { bf.click(); await wait(250); out.push(...scan(`${s.id} [лист раунда, перебор]`)); }
         await closeOverlay();
+        const rt = document.querySelector('[data-act="play-tab"][data-tab="rounds"]'); if (rt) { rt.click(); await wait(300); }
         if (s.rounds.length) { const row = document.querySelector('[data-act="edit-round"]'); if (row) { row.click(); await wait(350); out.push(...scan(`${s.id} [исправить раунд]`)); await closeOverlay(); } }
         document.querySelector('[data-act="finish-menu"]').click(); await wait(300); out.push(...scan(`${s.id} [завершить]`)); await closeOverlay();
         document.querySelector('[data-act="ask-open"]').click(); await wait(350);

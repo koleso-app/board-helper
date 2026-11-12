@@ -69,7 +69,8 @@
     // no scoring rounds: round after round until someone has fed four animals
     rounds: {
       leader: false,
-      title: "Как идёт раунд",   // the play screen's heading: here everyone plays at once, a round at a time
+      title: "Как идёт раунд",
+      tab: "Раунд",   // the tab of the play screen   // the play screen's heading: here everyone plays at once, a round at a time
       reminder: c => [
         "Победитель прошлого раунда (в первом — кто начинает) открывает карту: на ней *2* вида еды.",
         "Все *разом*! Открой обеими руками *2* своих жетона.",

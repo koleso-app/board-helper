@@ -179,6 +179,7 @@
     renderedHash = location.hash;
     if (kept) restoreState(kept);
     document.body.classList.toggle("in-game", inGame);
+    document.body.classList.toggle("in-play", !!main.querySelector(".play-screen"));
     BH.$$("[data-nav]").forEach(a => { if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     if (after) { try { after(); } catch (e) { console.error(e); } }
     renderOverlay();
@@ -912,36 +913,51 @@
   // what to do once the round is over: a list from the game (a function of the round, or the same every round)
   const afterOf = (g, ctx, r, last) => (typeof g.rounds.after === "function" ? g.rounds.after(ctx, r, last) : g.rounds.after) || [];
   const afterHTML = (list, gid) => list.length ? `<div class="ph-after"><span class="ph-after-h">После раунда</span>${stepsHTML(list, gid)}</div>` : "";
+  /* the play screen (variant A): a compact header pinned on top — back, the cover, the game and its mode, «Завершить» —
+     and tabs under it, each a screen of its own: the state of the game first, then its history, the rules last.
+     The main action stays pinned at the bottom (docs/ui.md «Экран партии») */
+  const playTab = {};   // session id -> the tab on screen
+  function playShell(s, g, tabs, bar) {
+    tabs = tabs.filter(Boolean);
+    const cur = tabs.find(t => t.id === playTab[s.id]) || tabs[0], o = originOf();
+    const exp = s.exp.map(id => (g.expansions.find(e => e.id === id) || {}).name).filter(Boolean);
+    const facts = exp.concat((g.options || []).filter(op => s.opts && s.opts[op.id]).map(op => op.short || op.label));
+    return `<div class="play-screen">
+      <div class="pstick">
+        <div class="phead">
+          <a class="icon-btn phead-back" href="${o.href}" data-act="nav-back" data-href="${o.href}" aria-label="${esc("Назад: " + o.label)}" title="${esc(o.label)}">${I.back}</a>
+          ${coverOf(g, "mini")}
+          <div class="phead-t"><h1>${esc(g.name)}</h1>${facts.length ? `<span class="phead-f">${IC.bolt}<span>${esc(facts.join(" · "))}</span></span>` : ""}</div>
+          <button class="btn finish sm" data-act="finish-menu" aria-label="Завершить партию" title="Завершить партию">${I.flag}<span class="phead-fin">Завершить</span></button>
+        </div>
+        ${tabs.length > 1 ? `<div class="ptabs" role="tablist" aria-label="Разделы партии">${tabs.map(t => `<button type="button" role="tab" data-act="play-tab" data-tab="${t.id}" aria-selected="${t === cur}">${esc(t.label)}${t.n ? `<span class="ptab-n">${t.n}</span>` : ""}</button>`).join("")}</div>` : ""}
+      </div>
+      <div class="ptab-body stack" role="tabpanel">${cur.html}</div>
+      ${bar}
+    </div>`;
+  }
+  const rulesTab = (s, g) => ({ id: "rules", label: "Правила",
+    html: `<section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>` });
+  // a function: MIC is defined further down
+  const askBtn = () => `<button class="btn big" data-act="ask-open" aria-label="Спросить по правилам голосом" title="Спросить по правилам">${MIC}</button>`;
+
   /* a game scored at the end (Faraway): the rounds are only counted, with what to do in each phase;
      the fame is written in after the last round, as on the score pad */
   function viewPlayEnd(s, g) {
     const last = g.rounds.count || 8, r = s.rounds.length, over = r >= last, cur = Math.min(r + 1, last), ctx = BH.ctxOf(s);
     const phases = g.rounds.phases ? g.rounds.phases(ctx, cur, last) : [];
-    return `<div class="stack">
-      <div class="shead">
-        ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
-        ${sessionHero(s, g, true)}
-        <div class="status-row">
-          <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${over ? last : cur}<small> из ${last}</small></span></div>
-          <div class="stat-tile at-table"><div class="leader-t"><span class="label">За столом</span><span class="faces">${s.players.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span></div></div>
-        </div>
+    const round = `<div class="status-row">
+        <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${over ? last : cur}<small> из ${last}</small></span></div>
+        <div class="stat-tile at-table"><div class="leader-t"><span class="label">За столом</span><span class="faces">${s.players.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span></div></div>
       </div>
-      <div class="play">
-        <div class="stack">
-          ${over ? `<section class="note good end-ready">${I.check}<span>Все ${last} раундов сыграны. Переверните свои Регионы и считайте славу — с последней карты к первой.</span></section>`
-            : `<section class="panel"><div class="sec-h"><h2>Раунд ${cur}: что делать</h2></div><ol class="phase-list">${phases.map(p => `<li><b>${esc(p.title)}</b>${stepsHTML(p.steps || [p.text], g.id)}</li>`).join("")}</ol>${afterHTML(afterOf(g, ctx, cur, last), g.id)}</section>`}
-        </div>
-        <div class="stack">
-          <section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
-        </div>
-      </div>
-      <div class="game-bar">
-        <button class="btn big" data-act="ask-open" aria-label="Спросить по правилам голосом" title="Спросить по правилам">${MIC}</button>
+      ${over ? `<section class="note good end-ready">${I.check}<span>Все ${last} раундов сыграны. Переверните свои Регионы и считайте славу — с последней карты к первой.</span></section>`
+        : `<section class="panel"><div class="sec-h"><h2>Раунд ${cur}: что делать</h2></div><ol class="phase-list">${phases.map(p => `<li><b>${esc(p.title)}</b>${stepsHTML(p.steps || [p.text], g.id)}</li>`).join("")}</ol>${afterHTML(afterOf(g, ctx, cur, last), g.id)}</section>`}`;
+    return playShell(s, g, [{ id: "round", label: "Раунд", html: round }, rulesTab(s, g)], `<div class="game-bar">
+        ${askBtn()}
         ${over ? `<button class="btn primary big" data-act="end-open">${I.check}<span class="ell">Подсчёт славы</span></button>`
           : `<button class="btn primary big" data-act="round-done">${I.check}<span class="ell">Раунд ${cur} сыгран</span></button>`}
         ${r ? `<button class="btn big" data-act="undo-round" aria-label="Вернуться к раунду ${r}" title="Вернуться к раунду ${r}">${I.undo}</button>` : ""}
-      </div>
-    </div>`;
+      </div>`);
   }
 
   /* a cooperative game (The Gang): heists one after another, each ends in a cracked vault or an alarm;
@@ -961,37 +977,27 @@
     const hist = s.rounds.length ? `<section class="panel"><div class="sec-h"><h2>Ограбления</h2></div><ol class="heist-hist">${s.rounds.map((rd, i) => {
       const used = rd.coop ? H.active(rd.coop).map(a => (H.cards[a.kind][a.n] || {}).ru).filter(Boolean) : [];
       return `<li class="${rd.heist === "ok" ? "ok" : "fail"}"><span class="hh-n">${i + 1}</span><b>${rd.heist === "ok" ? esc(g.scoring.okLabel) : esc(g.scoring.failLabel)}</b>${used.length ? `<small>${esc(used.join(", "))}</small>` : ""}</li>`; }).join("")}</ol></section>` : "";
-    return `<div class="stack">
-      <div class="shead">
-        ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
-        ${sessionHero(s, g, true)}
-        <div class="status-row">
-          <div class="stat-tile"><span class="label">${esc(H.label)}</span><span class="round-no">${n}</span></div>
-          <div class="stat-tile coop-tally">
-            <span class="ct-row"><span class="label">Хранилища</span><span class="pips">${pips(t.ok, t.wins, "gold")}</span></span>
-            <span class="ct-row"><span class="label">Тревоги</span><span class="pips">${pips(t.fail, t.losses, "red")}</span></span>
-          </div>
+    const heist = `<div class="status-row">
+        <div class="stat-tile"><span class="label">${esc(H.label)}</span><span class="round-no">${n}</span></div>
+        <div class="stat-tile coop-tally">
+          <span class="ct-row"><span class="label">Хранилища</span><span class="pips">${pips(t.ok, t.wins, "gold")}</span></span>
+          <span class="ct-row"><span class="label">Тревоги</span><span class="pips">${pips(t.fail, t.losses, "red")}</span></span>
         </div>
       </div>
-      <div class="play">
-        <div class="stack">
-          ${cards}
-          <section class="panel"><div class="sec-h"><h2>${esc(H.label)} ${n}: что делать</h2></div><ol class="phase-list">${H.steps(ctx, act).map(p => `<li><b>${esc(p.title)}</b>${stepsHTML(p.steps, g.id)}</li>`).join("")}</ol>${afterHTML(afterOf(g, ctx, n, 0), g.id)}</section>
-          <details class="panel" ${n === 1 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как брать фишки</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}</div></details>
-          ${g.ranking ? `<details class="panel"><summary style="cursor:pointer;font-weight:600">Комбинации: от сильной к слабой</summary><ol class="rank-list">${g.ranking.map(([nm, d]) => `<li><b>${esc(nm)}</b><span>${esc(d)}</span></li>`).join("")}</ol></details>` : ""}
-          ${hist}
-        </div>
-        <div class="stack">
-          <section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
-        </div>
-      </div>
-      <div class="game-bar coop-bar">
-        <button class="btn big" data-act="ask-open" aria-label="Спросить по правилам голосом" title="Спросить по правилам">${MIC}</button>
+      ${cards}
+      <section class="panel"><div class="sec-h"><h2>${esc(H.label)} ${n}: что делать</h2></div><ol class="phase-list">${H.steps(ctx, act).map(p => `<li><b>${esc(p.title)}</b>${stepsHTML(p.steps, g.id)}</li>`).join("")}</ol>${afterHTML(afterOf(g, ctx, n, 0), g.id)}</section>
+      <details class="panel hint" ${n === 1 ? "open" : ""}><summary>Как брать фишки</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}</div></details>
+      ${hist}`;
+    return playShell(s, g, [
+      { id: "heist", label: H.label, html: heist },
+      g.ranking && { id: "ranking", label: "Комбинации", html: `<section class="panel"><div class="sec-h"><h2>Комбинации: от сильной к слабой</h2></div><ol class="rank-list">${g.ranking.map(([nm, d]) => `<li><b>${esc(nm)}</b><span>${esc(d)}</span></li>`).join("")}</ol></section>` },
+      rulesTab(s, g),
+    ], `<div class="game-bar coop-bar">
+        ${askBtn()}
         <button class="btn primary big" data-act="heist" data-ok="1">${I.check}<span class="ell">${esc(g.scoring.okLabel)}</span></button>
         <button class="btn danger big" data-act="heist" data-ok="0"><span class="ell">${esc(g.scoring.failLabel)}</span></button>
         ${s.rounds.length ? `<button class="btn big" data-act="undo-round" aria-label="Отменить ограбление ${s.rounds.length}" title="Отменить ограбление ${s.rounds.length}">${I.undo}</button>` : ""}
-      </div>
-    </div>`;
+      </div>`);
   }
 
   // a magic card while its picture is not loaded: a card with a star
@@ -1039,30 +1045,21 @@
   function viewPlayRace(s, g) {
     const sc = g.scoring, ctx = BH.ctxOf(s), goal = BH.raceGoal(g, s), cards = BH.raceCards(g, s);
     const reminder = typeof g.rounds.reminder === "function" ? g.rounds.reminder(ctx) : g.rounds.reminder;
-    return `<div class="stack">
-      <div class="shead">
-        ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
-        ${sessionHero(s, g, true)}
-        ${BH.player(s.first) ? `<div class="status-row" style="grid-template-columns:minmax(0,1fr)"><div class="stat-tile leader">${BH.avatar(BH.player(s.first))}<div class="leader-t"><span class="label">Начинает</span><b>${esc(BH.player(s.first).name)}</b></div></div></div>` : ""}
-        ${chanceRow(s, g)}
-      </div>
-      <div class="play">
-        <div class="stack">
-          <section class="panel"><div class="sec-h"><h2>${esc(g.rounds.title || "Как идёт ход")}</h2></div><div class="reminder">${stepsHTML(reminder, g.id)}</div></section>
-          ${cards.length ? `<section class="panel"><div class="sec-h"><h2>${esc(g.cardsTitle || "Карты")}</h2></div>
-            <div class="mc-grid">${cards.map((k, i) => `<button type="button" class="mc-tile" data-act="mc-open" data-i="${i}" aria-label="${esc(k.name)}: что делать"><span class="mc-pic"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${k.art || MC_PIC}</span><b>${esc(k.name)}</b>${k.tag ? `<small>${esc(k.tag)}</small>` : ""}</button>`).join("")}</div>
-            ${g.cardsFoot ? `<p class="small muted mc-foot">${esc(g.cardsFoot)}</p>` : ""}</section>` : ""}
-          <section class="panel"><div class="sec-h"><h2>Конец игры</h2></div>${stepsHTML(sc.end(goal), g.id)}</section>
-        </div>
-        <div class="stack">
-          <section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
-        </div>
-      </div>
-      <div class="game-bar">
-        <button class="btn big" data-act="ask-open" aria-label="Спросить по правилам голосом" title="Спросить по правилам">${MIC}</button>
+    const turn = `${BH.player(s.first) ? `<div class="status-row" style="grid-template-columns:minmax(0,1fr)"><div class="stat-tile leader">${BH.avatar(BH.player(s.first))}<div class="leader-t"><span class="label">Начинает</span><b>${esc(BH.player(s.first).name)}</b></div></div></div>` : ""}
+      ${chanceRow(s, g)}
+      <section class="panel"><div class="sec-h"><h2>${esc(g.rounds.title || "Как идёт ход")}</h2></div><div class="reminder">${stepsHTML(reminder, g.id)}</div></section>
+      <section class="panel"><div class="sec-h"><h2>Конец игры</h2></div>${stepsHTML(sc.end(goal), g.id)}</section>`;
+    const cardsHtml = `<section class="panel"><div class="sec-h"><h2>${esc(g.cardsTitle || "Карты")}</h2></div>
+      <div class="mc-grid">${cards.map((k, i) => `<button type="button" class="mc-tile" data-act="mc-open" data-i="${i}" aria-label="${esc(k.name)}: что делать"><span class="mc-pic"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${k.art || MC_PIC}</span><b>${esc(k.name)}</b>${k.tag ? `<small>${esc(k.tag)}</small>` : ""}</button>`).join("")}</div>
+      ${g.cardsFoot ? `<p class="small muted mc-foot">${esc(g.cardsFoot)}</p>` : ""}</section>`;
+    return playShell(s, g, [
+      { id: "turn", label: g.rounds.tab || "Ход", html: turn },
+      cards.length && { id: "cards", label: g.cardsTab || "Карты", html: cardsHtml },
+      rulesTab(s, g),
+    ], `<div class="game-bar">
+        ${askBtn()}
         <button class="btn primary big" data-act="finish-menu">${I.flag}<span class="ell">Партия окончена</span></button>
-      </div>
-    </div>`;
+      </div>`);
   }
   function viewDoneRace(s, g) {
     const r = s.race || {}, w = s.winners.map(BH.player).filter(Boolean), counts = r.counts || null, cups = r.cups || null;
@@ -1116,34 +1113,23 @@
     }).join("");
 
     const hist = s.rounds.length ? `<section class="panel"><div class="spread" style="margin-bottom:6px"><h2>Раунды</h2><span class="small muted">нажмите на раунд, чтобы исправить</span></div>
-      ${roundsTable(s, g, true)}</section>` : "";
-
-    return `<div class="stack">
-      <div class="shead">
-        ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
-        ${sessionHero(s, g, true)}
-        <div class="status-row">
-          <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${r + 1}${count ? `<small> из ${Math.max(count, r + 1)}</small>` : ""}</span></div>
-          ${leader ? `<div class="stat-tile leader">${BH.avatar(leader)}<div class="leader-t"><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><b>${esc(leader.name)}</b>${s.rounds.length ? "" : `<a class="btn sm leader-wheel" href="#/s/${esc(s.id)}/first" aria-label="${esc("Колесо: " + ((g.first && g.first.label) || "первый игрок").toLowerCase())}">${I.wheel}Колесо</a>`}</div></div>` : ""}
-        </div>
+      ${roundsTable(s, g, true)}</section>` : `<p class="note">Раундов пока нет — первый записывается кнопкой внизу.</p>`;
+    const score = `<div class="status-row">
+        <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${r + 1}${count ? `<small> из ${Math.max(count, r + 1)}</small>` : ""}</span></div>
+        ${leader ? `<div class="stat-tile leader">${BH.avatar(leader)}<div class="leader-t"><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><b>${esc(leader.name)}</b>${s.rounds.length ? "" : `<a class="btn sm leader-wheel" href="#/s/${esc(s.id)}/first" aria-label="${esc("Колесо: " + ((g.first && g.first.label) || "первый игрок").toLowerCase())}">${I.wheel}Колесо</a>`}</div></div>` : ""}
       </div>
-      <div class="play">
-        <div class="stack">
-          <div class="board">${board}</div>
-          ${chanceRow(s, g)}
-          ${g.rounds.reminder ? `<details class="panel" ${r === 0 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0), g.id)}</div></details>` : ""}
-          ${hist}
-        </div>
-        <div class="stack">
-          <section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
-        </div>
-      </div>
-      <div class="game-bar">
-        <button class="btn big" data-act="ask-open" aria-label="Спросить по правилам голосом" title="Спросить по правилам">${MIC}</button>
+      <div class="board">${board}</div>
+      ${chanceRow(s, g)}
+      ${g.rounds.reminder ? `<details class="panel hint" ${r === 0 ? "open" : ""}><summary>Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0), g.id)}</div></details>` : ""}`;
+    return playShell(s, g, [
+      { id: "score", label: "Счёт", html: score },
+      { id: "rounds", label: "Раунды", n: s.rounds.length, html: hist },
+      rulesTab(s, g),
+    ], `<div class="game-bar">
+        ${askBtn()}
         <button class="btn primary big" data-act="new-round" aria-label="Записать раунд ${r + 1}">${I.plus}<span class="ell"><span class="lbl-l">Записать раунд</span><span class="lbl-s">Раунд</span> ${r + 1}</span></button>
         ${s.rounds.length ? `<button class="btn big" data-act="undo-round" aria-label="Отменить последний раунд" title="Отменить последний раунд">${I.undo}</button>` : ""}
-      </div>
-    </div>`;
+      </div>`);
   }
 
   function viewSessionRules(s, g) {
@@ -2277,6 +2263,7 @@
       case "draft-race-winner": draft.winners = draft.winners.includes(el.dataset.id) ? [] : [el.dataset.id]; render(); break;
       case "draft-race-how": draft.raceHow = draft.raceHow === el.dataset.v ? null : el.dataset.v; draft.winners = []; render(); break;
       case "race-last": sheet.last = el.dataset.id; renderOverlay(); break;
+      case "play-tab": { if (s) { playTab[s.id] = el.dataset.tab; render(); window.scrollTo(0, 0); } break; }
       case "chances-open": { const g = s && BH.game(s.gameId); if (g) openChances(s, g); break; }
       case "mc-open": { const g = s && BH.game(s.gameId), k = g && BH.raceCards(g, s)[+el.dataset.i]; if (k) openMagicCard(g, k); break; }
       case "race-save": { if (!sheet || sheet.kind !== "race") break; const rs = BH.session(sheet.sid), st = raceSheetState(rs); if (!st.winner) break;
@@ -2787,7 +2774,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.22.0";
+  BH.version = "0.23.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

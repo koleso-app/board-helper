@@ -548,11 +548,38 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .sess-hero-n{font-family:var(--f-display);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere;letter-spacing:0}
 /* a running game: the round, and who deals (with the wheel before the first round) */
 .status-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px}
+/* the play screen: a compact header pinned on top with the tabs under it; each tab a screen of its own */
+.play-screen{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media (min-width:900px){.play-screen{width:100%;max-width:760px;margin:0 auto}}
+.pstick{position:sticky;top:0;z-index:12;display:flex;flex-direction:column;gap:8px;margin:-12px 0 0;padding:calc(10px + env(safe-area-inset-top,0px)) 0 8px;background:var(--bg)}
+.phead{display:flex;align-items:center;gap:10px;min-width:0}
+.phead .cover.mini{width:40px;height:40px;border-radius:10px;flex:none}
+.phead-back{background:var(--chip);color:var(--ink)}
+.phead-back svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.phead-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.phead-t h1{font-size:17px;line-height:1.2;letter-spacing:0;overflow-wrap:anywhere}
+.phead-f{display:flex;align-items:center;gap:4px;min-width:0;font-size:13px;font-weight:600;color:var(--accent)}
+.phead-f span{overflow-wrap:anywhere}
+.phead-f svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.phead .btn.finish{flex:none}
+@media (max-width:419px){.phead-fin{display:none}.phead .btn.finish{padding-left:11px;padding-right:11px}}
+.ptabs{display:flex;gap:4px;padding:3px;border-radius:12px;background:var(--sunk)}
+.ptabs button{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:6px 8px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
+.ptabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent)}
+.ptabs button[aria-selected="true"] .ptab-n{background:var(--surface);color:var(--accent)}
+.ptab-n{font-size:12px;line-height:1.5;min-width:20px;padding:0 6px;border-radius:99px;background:var(--chip);color:var(--muted);font-variant-numeric:tabular-nums}
+/* a hint (how a round goes, the favourite): tinted, apart from the state of the game */
+details.hint{background:var(--accent-soft);border-color:transparent}
+details.hint>summary{cursor:pointer;font-weight:600}
+@media (max-width:899px){body.in-play .topbar{display:none}
+  /* the main action at the bottom of the screen, where the thumb is, even when the tab is short */
+  .play-screen{min-height:calc(100dvh - 44px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+  .play-screen>.game-bar{margin-top:auto}}
 /* the chances to win: one slim row under the board, a window with everyone */
-.chance-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:12px;align-items:center;width:100%;padding:10px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.chance-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:12px;align-items:center;width:100%;padding:10px 12px;border-radius:12px;background:var(--accent-soft);border:1px solid transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .chance-row:hover{border-color:var(--accent)}
 .chance-row>svg{width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.chance-ic{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.chance-ic{width:36px;height:36px;border-radius:50%;background:var(--surface);color:var(--accent);display:grid;place-items:center}
 .chance-ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round}
 .chance-t{display:flex;flex-direction:column;gap:2px;min-width:0}
 .chance-t .label{color:var(--accent)}

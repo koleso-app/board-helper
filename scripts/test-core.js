@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -101,7 +101,8 @@ t("in-game texts of every game are short", () => {
   const c = { players: 4, opt: () => true, has: () => true, exp: new Set() };
   for (const game of BH.games) {
     for (const st of game.setup || []) { const t = typeof st.text === "function" ? st.text(c) : st.text; assert.ok(words(t) <= 30, `${game.id} setup ${st.id}: ${words(t)} слов`); }
-    const R = game.rounds || {}, last = R.count || 8, lines = [...(R.reminder || []), ...(game.cards || []).map(k => k.does)];
+    const R = game.rounds || {}, last = R.count || 8, rem = typeof R.reminder === "function" ? R.reminder(c) : R.reminder;
+    const lines = [...(rem || []), ...(game.cards || []).flatMap(k => k.does.split("\n"))];
     for (let r = 1; r <= last; r++) {
       if (R.phases) for (const p of R.phases(c, r, last)) lines.push(...(p.steps || [p.text]));
       lines.push(...((typeof R.after === "function" ? R.after(c, r, last) : R.after) || []));
@@ -698,4 +699,51 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const grouped = new Set(C.ruleGroups.flatMap(gr => gr.ids)); for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
   });
   console.log(`coconuts: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // Gold Fever («Жадюги»): the Russian rules of Стиль Жизни, the English rules for checking (docs/rules-check.md)
+  const G = BH.game("goldfever"), before = passed;
+  const cx = (n, ...opts) => ({ players: n, exp: new Set(), has: () => false, opt: id => opts.includes(id) });
+  const sess = (n, opts) => ({ gameId: "goldfever", players: ["a", "b", "c", "d", "e"].slice(0, n), exp: [], opts: opts || {}, rounds: [] });
+  t("goldfever: 2–5 players; a race to 5 nuggets (4 in the quick game); the youngest starts", () => {
+    assert.strictEqual(G.players.min, 2); assert.strictEqual(G.players.max, 5);
+    assert.ok(BH.isRace(G) && !G.scoring.count, "no count: the first to the nuggets wins at once");
+    assert.strictEqual(BH.raceGoal(G, sess(3)), 5); assert.strictEqual(BH.raceGoal(G, sess(3, { fast: true })), 4);
+    assert.ok(G.first && /младший/.test(G.first.hint) && G.rounds.leader === false);
+  });
+  t("goldfever: each bag — 5 nuggets, 4 grey, 4 black, 4 white, 1 ruby, 1 emerald; the box holds exactly five bags", () => {
+    const bag = BH.setupSteps(sess(3)).find(st => st.id === "bag").text;
+    assert.ok(bag.includes("*5* самородков") && bag.includes("*4* серых, чёрных и белых") && bag.includes("*1* рубин") && bag.includes("*1* изумруд"));
+    // 25 nuggets, 60 gravel (20 of each colour), 5 rubies, 5 emeralds — five bags at most
+    assert.strictEqual(5 * 5, 25); assert.strictEqual(5 * 3 * 4, 60); assert.strictEqual(5 * 4, 20);
+    const only = BH.setupSteps(sess(3, { goldOnly: true })).find(st => st.id === "bag").text;
+    assert.ok(!only.includes("*1* рубин") && /не нужны/.test(only), "«Только золото»: no rubies or emeralds");
+  });
+  t("goldfever: what each stone means; «Только золото» leaves out the ruby and the emerald", () => {
+    assert.deepStrictEqual([...G.cards.map(k => k.id)], ["gold", "white", "gray", "black", "ruby", "emerald"]);
+    assert.deepStrictEqual([...BH.raceCards(G, sess(2, { goldOnly: true })).map(k => k.id)], ["gold", "white", "gray", "black"]);
+    const by = id => G.cards.find(k => k.id === id).does;
+    assert.ok(/Второй белый/.test(by("white")) && /Второй серый/.test(by("gray")) && /Второй чёрный/.test(by("black")), "a bust is the second gravel of one colour");
+    assert.ok(/тебе/.test(by("black")), "the second black: the others give you their gravel");
+    assert.ok(/\*2\* камня/.test(by("emerald")) && /Золото!/.test(by("ruby")));
+    const rem = G.rounds.reminder(cx(3, "goldOnly")).join(" "); assert.ok(!/[Рр]убин|[Ии]зумруд/.test(rem), "no ruby or emerald without them");
+    // the turn says nothing about the stones: each is explained once, on its tile
+    assert.ok(!/булыжник одного цвета|Второй|чёрный|лихорадк/i.test(G.rounds.reminder(cx(3)).join(" ")), "the stones are on the tiles only");
+    assert.ok(/до рубина/.test(by("ruby")) && /за раз/.test(by("ruby")));
+  });
+  t("goldfever: the end is kept as «the goal reached»", () => {
+    BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true,
+      sessions: [{ id: "g1", gameId: "goldfever", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: { how: "goal" } }] });
+    assert.strictEqual(JSON.stringify(BH.state.sessions[0].race), JSON.stringify({ how: "goal" }));
+    assert.ok(/5 самородков/.test(G.scoring.goalDone(5)) && /4 самородка/.test(G.scoring.goalText(4)));
+  });
+  t("goldfever: rules, groups, questions refer to real sections; pages of the rules 1–4", () => {
+    const ids = new Set(G.rules.map(r => r.id));
+    for (const gr of G.ruleGroups) for (const id of gr.ids) assert.ok(ids.has(id), "group " + id);
+    for (const gr of G.faqGroups) for (const id of gr.refs) assert.ok(ids.has(id), "faq group " + id);
+    for (const f of G.faq) assert.ok(ids.has(f.ref), "faq ref " + f.ref);
+    assert.ok(G.rules.every(r => r.page >= 1 && r.page <= 4));
+    const grouped = new Set(G.ruleGroups.flatMap(gr => gr.ids)); for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
+  });
+  console.log(`goldfever: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

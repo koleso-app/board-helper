@@ -594,11 +594,12 @@
     } else if (past && g && cnt && BH.isRace(g)) {
       const wn = draft.winners.filter(id => draft.players.includes(id));
       const how = draft.raceHow, chips = ids => ids.map(id => `<button class="chip" data-act="draft-race-winner" data-id="${id}" aria-pressed="${wn.includes(id)}">${esc((BH.player(id) || { name: "?" }).name)}</button>`).join("");
-      resultSec = step2("result", "Итог", wn.length ? "Победа: " + esc(wn.map(id => (BH.player(id) || { name: "?" }).name).join(", ")) : how === "coconuts" ? "Кокосы кончились" : "Победитель — по желанию",
-        `<p class="small muted">Чем кончилась партия?</p>
-        <div class="chips" style="margin-top:8px"><button class="chip" data-act="draft-race-how" data-v="pyramid" aria-pressed="${how === "pyramid"}">Пирамида</button><button class="chip" data-act="draft-race-how" data-v="coconuts" aria-pressed="${how === "coconuts"}">Кокосы кончились</button></div>
-        ${how === "coconuts" ? raceRowsHTML(draft.players, g, "counts", draft.raceCounts || {}, "draft-race-count") + `<div id="race-draft-res">${raceDraftResHTML(g)}</div>`
-          : `<div class="label" style="margin:12px 0 6px">${how === "pyramid" ? "Кто собрал пирамиду?" : "Победитель"}</div><div class="chips">${chips(draft.players)}</div>`}`, wn.length > 0 || !!how);
+      const sc = g.scoring, goalHow = sc.goalHow || "goal", countHow = sc.count && sc.count.how;
+      resultSec = step2("result", "Итог", wn.length ? "Победа: " + esc(wn.map(id => (BH.player(id) || { name: "?" }).name).join(", ")) : countHow && how === countHow ? esc(sc.count.chip) : "Победитель — по желанию",
+        (sc.count ? `<p class="small muted">Чем кончилась партия?</p>
+        <div class="chips" style="margin-top:8px"><button class="chip" data-act="draft-race-how" data-v="${goalHow}" aria-pressed="${how === goalHow}">${esc(sc.goalChip)}</button><button class="chip" data-act="draft-race-how" data-v="${countHow}" aria-pressed="${how === countHow}">${esc(sc.count.chip)}</button></div>` : "")
+        + (countHow && how === countHow ? raceRowsHTML(draft.players, g, "counts", draft.raceCounts || {}, "draft-race-count") + `<div id="race-draft-res">${raceDraftResHTML(g)}</div>`
+          : `<div class="label" style="margin:12px 0 6px">${sc.count && how === goalHow ? esc(sc.goalAsk) : "Победитель"}</div><div class="chips">${chips(draft.players)}</div>`), wn.length > 0 || !!how);
     } else if (past && g && cnt && g.teams && g.teams({ players: cnt, opt: () => false, has: () => false, exp: new Set() }) && cnt === 4) {
       const pairs = [[draft.players[0], draft.players[2]], [draft.players[1], draft.players[3]]];
       const nm = sd => sd.map(id => (BH.player(id) || { name: "?" }).name).join(" и ");
@@ -657,7 +658,7 @@
       if (BH.isCoop(g) && draft.tally && (draft.tally.ok !== undefined || draft.tally.fail !== undefined)) s.tally = { ok: draft.tally.ok || 0, fail: draft.tally.fail || 0 };
       if (BH.isRace(g)) {
         const nums = (o, max) => { const c = {}; for (const id of s.players) if (o && o[id] !== undefined && o[id] !== "") c[id] = Math.max(0, Math.min(max, Math.round(Number(o[id])) || 0)); return c; };
-        const how = draft.raceHow || null, counts = how === "coconuts" ? nums(draft.raceCounts, 99) : {};
+        const sc = g.scoring, how = sc.count ? draft.raceHow || null : winners.length ? sc.goalHow || "goal" : null, counts = sc.count && how === sc.count.how ? nums(draft.raceCounts, 99) : {};
         if (Object.keys(counts).length) { const top = BH.raceResult(s.players, counts).top; winners = top.length === 1 ? top : winners.filter(id => top.includes(id)).slice(0, 1); if (!winners.length) winners = top; }
         if (how) s.race = Object.keys(counts).length ? { how, counts } : { how };
       }
@@ -995,13 +996,15 @@
   const MC_PIC = `<svg viewBox="0 0 120 84" aria-hidden="true"><rect x="4" y="4" width="112" height="76" rx="10" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:3"/><path d="M60 22l6 13 14 2-10 10 2 14-12-7-12 7 2-14-10-10 14-2z" style="fill:var(--accent)"/></svg>`;
   // the window of one magic card: its picture, when to play it, what it does
   function openMagicCard(g, k) {
-    openDialog({ title: k.name, html: `<div class="mc-big"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${MC_PIC}</div>
-      <p class="mc-when">${esc(k.when[0].toUpperCase() + k.when.slice(1))}</p><p class="mc-does">${fmtStep(k.does[0].toUpperCase() + k.does.slice(1), g.id)}</p>${k.note ? `<p class="small muted">${esc(k.note)}</p>` : ""}`,
+    const cap = t => t[0].toUpperCase() + t.slice(1);
+    openDialog({ title: k.name, html: `<div class="mc-big"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${k.art || MC_PIC}</div>
+      ${k.when ? `<p class="mc-when">${esc(cap(k.when))}</p>` : ""}<div class="mc-does">${textHTML(cap(k.does), g.id)}</div>${k.note ? `<p class="small muted">${esc(k.note)}</p>` : ""}`,
       buttons: [{ label: "Понятно", primary: true, run: closeDialog }] });
   }
   // a race without rounds (Coconuts): the turn in short lines, the magic cards at hand, the end in one tap
   function viewPlayRace(s, g) {
-    const sc = g.scoring;
+    const sc = g.scoring, ctx = BH.ctxOf(s), goal = BH.raceGoal(g, s), cards = BH.raceCards(g, s);
+    const reminder = typeof g.rounds.reminder === "function" ? g.rounds.reminder(ctx) : g.rounds.reminder;
     return `<div class="stack">
       <div class="shead">
         ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
@@ -1010,11 +1013,11 @@
       </div>
       <div class="play">
         <div class="stack">
-          <section class="panel"><div class="sec-h"><h2>Как идёт ход</h2></div><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}</div></section>
-          ${g.cards ? `<section class="panel"><div class="sec-h"><h2>Волшебные карты</h2></div>
-            <div class="mc-grid">${g.cards.map((k, i) => `<button type="button" class="mc-tile" data-act="mc-open" data-i="${i}" aria-label="${esc(k.name)}: что делает"><span class="mc-pic"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${MC_PIC}</span><b>${esc(k.name)}</b><small>${/своим/.test(k.when) ? "свой ход" : "чужой ход"}</small></button>`).join("")}</div>
-            <p class="small muted mc-foot">Нажмите на карту — что она делает. Сыгранную — в коробку.</p></section>` : ""}
-          <section class="panel"><div class="sec-h"><h2>Конец игры</h2></div>${stepsHTML([`Пирамида из *${sc.goal}* корзинок — победа сразу.`, "Кокосы кончились — побеждает тот, у кого больше кокосов в корзинках.", "Поровну — тот из них, кто ходил *последним*."], g.id)}</section>
+          <section class="panel"><div class="sec-h"><h2>Как идёт ход</h2></div><div class="reminder">${stepsHTML(reminder, g.id)}</div></section>
+          ${cards.length ? `<section class="panel"><div class="sec-h"><h2>${esc(g.cardsTitle || "Карты")}</h2></div>
+            <div class="mc-grid">${cards.map((k, i) => `<button type="button" class="mc-tile" data-act="mc-open" data-i="${i}" aria-label="${esc(k.name)}: что делать"><span class="mc-pic"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${k.art || MC_PIC}</span><b>${esc(k.name)}</b>${k.tag ? `<small>${esc(k.tag)}</small>` : ""}</button>`).join("")}</div>
+            ${g.cardsFoot ? `<p class="small muted mc-foot">${esc(g.cardsFoot)}</p>` : ""}</section>` : ""}
+          <section class="panel"><div class="sec-h"><h2>Конец игры</h2></div>${stepsHTML(sc.end(goal), g.id)}</section>
         </div>
         <div class="stack">
           <section class="panel"><div class="sec-h"><h2>Правила</h2><a class="sec-link" href="#/s/${s.id}/rules">Все правила${IC.chev}</a></div>${BH.rulesUI.panel(g, "", { compact: true })}</section>
@@ -1030,7 +1033,7 @@
     const r = s.race || {}, w = s.winners.map(BH.player).filter(Boolean), counts = r.counts || null, cups = r.cups || null;
     const dur = s.finishedAt && s.startedAt && s.finishedAt > s.startedAt ? BH.fmtDuration(s.finishedAt - s.startedAt) : null;
     const crown = `<svg class="crown" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 46 L12 18 L24 32 L32 12 L40 32 L52 18 L56 46 Z" style="fill:#E3A72F;stroke:#B57E14;stroke-width:2.5;stroke-linejoin:round"/><rect x="8" y="46" width="48" height="8" rx="2" style="fill:#B57E14"/></svg>`;
-    const how = r.how === "pyramid" ? `Первая пирамида из ${g.scoring.goal} корзинок` : r.how === "coconuts" ? "Кокосы кончились — больше всех кокосов в корзинках" : "Записана после игры";
+    const sc = g.scoring, how = r.how && r.how === (sc.goalHow || "goal") ? sc.goalDone(BH.raceGoal(g, s)) : sc.count && r.how === sc.count.how ? sc.count.done : "Записана после игры";
     const num = (o, id) => (o && o[id] !== undefined ? o[id] : "—");
     const seat = id => s.players.indexOf(id);
     const order = [...s.players].sort((a, b) => (s.winners.includes(b) - s.winners.includes(a)) || ((cups || {})[b] || 0) - ((cups || {})[a] || 0) || ((counts || {})[b] || 0) - ((counts || {})[a] || 0) || seat(a) - seat(b));
@@ -2015,10 +2018,11 @@
   /* the end of a race (Coconuts): the pyramid in one tap, or the coconuts in each player's cups counted */
   function openRaceEnd(s) {
     const g = BH.game(s.gameId);
-    openDialog({ title: "Кто собрал пирамиду?", text: `Нажмите на того, кто собрал пирамиду из ${g.scoring.goal} корзинок. Пирамиды нет, а кокосы кончились — посчитайте кокосы.`,
-      choices: s.players.map(id => ({ label: pname(id), run: () => { const c = fresh(s); closeDialog(); c.race = { how: "pyramid" }; finish(c, [id]); } })),
+    const sc = g.scoring, n = BH.raceGoal(g, s);
+    openDialog({ title: sc.goalAsk, text: sc.goalText(n) + (sc.count ? " " + sc.count.hint : ""),
+      choices: s.players.map(id => ({ label: pname(id), run: () => { const c = fresh(s); closeDialog(); c.race = { how: sc.goalHow || "goal" }; finish(c, [id]); } })),
       buttons: [
-        { label: "Кокосы кончились — посчитать", run: () => { dialog = null; openRaceSheet(s); } },
+        ...(sc.count ? [{ label: sc.count.button, run: () => { dialog = null; openRaceSheet(s); } }] : []),
         { label: "Продолжить игру", primary: true, run: closeDialog },
         { label: "Удалить партию", danger: true, run: () => confirmDelete(s) }] });
   }
@@ -2232,10 +2236,10 @@
       case "draft-race-winner": draft.winners = draft.winners.includes(el.dataset.id) ? [] : [el.dataset.id]; render(); break;
       case "draft-race-how": draft.raceHow = draft.raceHow === el.dataset.v ? null : el.dataset.v; draft.winners = []; render(); break;
       case "race-last": sheet.last = el.dataset.id; renderOverlay(); break;
-      case "mc-open": { const g = s && BH.game(s.gameId), k = g && g.cards && g.cards[+el.dataset.i]; if (k) openMagicCard(g, k); break; }
+      case "mc-open": { const g = s && BH.game(s.gameId), k = g && BH.raceCards(g, s)[+el.dataset.i]; if (k) openMagicCard(g, k); break; }
       case "race-save": { if (!sheet || sheet.kind !== "race") break; const rs = BH.session(sheet.sid), st = raceSheetState(rs); if (!st.winner) break;
         const counts = Object.fromEntries(rs.players.map(id => [id, Math.max(0, Math.round(Number(sheet.counts[id])) || 0)]));
-        sheet = null; rs.race = { how: "coconuts", counts }; finish(rs, [st.winner]); break; }
+        sheet = null; rs.race = { how: BH.game(rs.gameId).scoring.count.how, counts }; finish(rs, [st.winner]); break; }
       // a pair wins together: one chip for both partners
       case "draft-winner-pair": { const ids = el.dataset.p.split(","), on = ids.every(id => draft.winners.includes(id)); draft.winners = draft.winners.filter(id => !ids.includes(id)); if (!on) draft.winners.push(...ids); render(); break; }
       // the score of a recorded cooperative game: three of one kind decide the result
@@ -2739,7 +2743,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.18.3";
+  BH.version = "0.19.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

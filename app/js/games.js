@@ -76,6 +76,10 @@
   // a race without rounds or points (Coconuts): the first to build something wins at once; otherwise a count decides —
   // the most wins, equal — the one of them who played last
   BH.isRace = g => !!(g && g.scoring && g.scoring.type === "race");
+  // a race's target may depend on its options (Gold Fever: 5 nuggets, the quick game 4)
+  BH.raceGoal = (g, s) => { const n = g && g.scoring && g.scoring.goal; return typeof n === "function" ? n(BH.ctxOf(s)) : n; };
+  // the stones or cards of a race shown for this game (some are left out by an option)
+  BH.raceCards = (g, s) => (g && g.cards ? g.cards.filter(k => !k.show || k.show(BH.ctxOf(s))) : []);
   // a race written down with each player's cups and coconuts: a full pyramid wins; otherwise the most coconuts
   // (equal — all of them, unless it is known who played last)
   BH.raceWinner = (g, players, cups, counts) => {

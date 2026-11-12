@@ -87,6 +87,8 @@
         if (typeof r.leader === "string" && allowed.has(r.leader)) out.leader = r.leader;
         // a heist of a cooperative game: how it ended, and the cards that were in play then
         if (r.heist === "ok" || r.heist === "fail") out.heist = r.heist;
+        // which mini-game a round was (Dobble), an id of the game's tiles
+        if (typeof r.mini === "string" && ID.test(r.mini)) out.mini = r.mini;
         const co = cleanCoop(r.coop); if (co) out.coop = co;
         for (const id of pl) {
           out.scores[id] = num(sc[id]);

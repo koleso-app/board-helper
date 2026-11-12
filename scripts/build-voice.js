@@ -39,6 +39,8 @@ const games = [
     bookNote: "русские правила «Стиль Жизни», переписанные с картинок PDF; номера страниц — как напечатаны (1–4)" },
   { js: "games/toybattle.js", book: path.join(root, "sources", "toy-book.txt"), title: "Битва игрушек (Toy Battle)", pages: "pdf",
     bookNote: "русские правила Choo Choo Games — два разворота по три страницы (номера страниц как в английской книге, она следом со страницами [стр. N]); в конце — памятка с эффектами воинов и особых баз по справке Board Game Arena, её нет в книгах — так и говори. Называй воинов как в шпаргалке (Кряква, Скалли, Кэп, Джамбо, Хук, XB-42, Стар, Рокси), поля — по-русски" },
+  { js: "games/dobble.js", book: path.join(root, "sources", "dobble-book.txt"), title: "Доббль (Spot it!)", pages: "pdf",
+    bookNote: "русские правила — пересказ магазина ig-store, переписанный с картинок PDF; номера страниц — как напечатаны (1–3); следом точные цитаты классических английских правил Spot it! (по RulesPal, без страниц)" },
   { js: "games/zoo.js", book: path.join(root, "sources", "zoo-book.txt"), title: "Зоопарк (Team Zoo)", pages: "pdf",
     bookNote: "русские правила Hobby World, версия 1.0; страницы PDF совпадают с напечатанными (стр. 1 без номера, стр. 2–4 — рассказ о киперах, правила — на стр. 5–7). В конце — тексты карт какаду с фото издателя, их нет в книге: так и говори" },
   { js: "games/thegang.js", book: path.join(root, "sources", "thegang-rules-en.txt"), title: "The Gang", pages: "plus1",

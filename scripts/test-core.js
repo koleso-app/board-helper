@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/chances.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js", "games/toybattle.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/chances.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js", "games/toybattle.js", "games/dobble.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -1060,4 +1060,50 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     for (const k of Object.keys(G.images.rules)) assert.ok(ids.has(k), "image for " + k);
   });
   console.log(`toybattle: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // «Доббль» (Spot it!): the Russian rules as the ig-store shop gives them (pp. 1–3), the classic English rules
+  const G = BH.game("dobble"), before = passed;
+  const sess = (opts, rounds) => ({ id: "d1", gameId: "dobble", players: ["a", "b", "c"], exp: [], opts: opts || {}, rounds: rounds || [], status: "playing" });
+  const win = (w, mini) => ({ at: 1, scores: { a: w === "a" ? 1 : 0, b: w === "b" ? 1 : 0, c: w === "c" ? 1 : 0 }, flags: {}, detail: {}, mini });
+  t("dobble: 2–8 players; a round is one mini-game with one winner; the most mini-games won wins (p. 1, the English rules)", () => {
+    assert.strictEqual(G.players.min, 2); assert.strictEqual(G.players.max, 8);
+    assert.ok(BH.isPick(G) && G.rounds.leader === false, "everyone plays at once: nobody leads a round");
+    const e = BH.checkEnd(sess({ five: true }, ["a", "b", "a", "c", "a"].map(w => win(w))));
+    assert.ok(e.over && !e.tie); assert.deepStrictEqual([...e.winners], ["a"]);
+    assert.ok(!BH.checkEnd(sess({ five: true }, ["a", "b", "a", "c"].map(w => win(w)))).over, "five mini-games, then the result");
+    assert.ok(BH.checkEnd(sess({ five: true }, ["a", "b", "a", "b", "c"].map(w => win(w)))).tie, "equal wins — the app asks: one more or a tie");
+    assert.ok(!BH.checkEnd(sess({}, ["a", "a", "a", "a", "a", "a"].map(w => win(w)))).over, "without the five — as long as you like");
+    assert.ok(G.options.find(o => o.id === "five").default, "the five by default");
+  });
+  t("dobble: the five mini-games as tiles with the book's goal — more cards, rid of the cards, fewer cards", () => {
+    assert.deepStrictEqual([...G.cards.map(k => k.id)], ["tower", "well", "potato", "catch", "gift"]);
+    const by = id => G.cards.find(k => k.id === id);
+    assert.ok(/больше всех/.test(by("tower").does) && /больше всех/.test(by("catch").does), "the Tower, Catch them all: the most cards (pp. 1–2)");
+    assert.ok(/меньше всех/.test(by("gift").does), "the Gift: the fewest cards (p. 3)");
+    assert.ok(/больше всех/.test(by("potato").does) && /меньше всех/.test(by("potato").does) && /не меньше пяти/.test(by("potato").note), "Hot Potato: the most cards lose, the fewest marked the winner (BGA); at least 5 rounds (English rules)");
+    assert.ok(/\*последним\*/.test(by("well").does) && /\*первым\*/.test(by("well").does) && /Board Game Arena/.test(by("well").note), "the Well: the last one rid of the cards loses (p. 1); the first one is marked the winner (BGA)");
+    assert.ok(/брать \*нельзя\*/.test(by("catch").does), "the centre card is never taken (p. 2)");
+    assert.ok(G.cards.every(k => /<svg/.test(k.art) && k.when), "a drawing and the setup of each");
+    for (const k of G.cards) assert.ok(G.rules.some(r => r.id === k.id), k.id + " has its rule");
+  });
+  t("dobble: ties — a duel, three or more a round of Hot Potato; two calling at once — the first to take or place a card", () => {
+    assert.ok(/дуэль/.test(G.scoring.pickHint) && /Горячей картошки/.test(G.scoring.pickHint));
+    assert.ok(G.rounds.reminder.some(l => /первым \*взял или положил\*/.test(l)));
+    assert.ok(/в правилах не сказано/.test(G.scoring.tieNote), "a tie of the game itself is not in the rules");
+  });
+  t("dobble: a round is called «мини-игра» on the screens; the store keeps which mini-game a round was", () => {
+    const W = BH.roundW(G); assert.strictEqual(W.acc, "мини-игру"); assert.strictEqual(W.tab, "История"); assert.strictEqual(BH.roundW(BH.game("flip7")).acc, "раунд");
+    BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true,
+      sessions: [{ id: "d9", gameId: "dobble", players: ["a", "b"], status: "playing", rounds: [{ at: 1, scores: { a: 1, b: 0 }, mini: "well" }, { at: 2, scores: { a: 0, b: 1 }, mini: "bad id!" }], winners: [] }] });
+    const rs = BH.session("d9").rounds; assert.strictEqual(rs[0].mini, "well"); assert.strictEqual(rs[1].mini, undefined);
+  });
+  t("dobble: rules, groups, questions refer to real sections; pages of the Russian rules 1–3", () => {
+    for (const f of G.faq) { assert.ok(G.rules.some(r => r.id === f.ref), f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], f.src); }
+    const ids = G.ruleGroups.flatMap(grp => grp.ids);
+    for (const r of G.rules) assert.strictEqual(ids.filter(x => x === r.id).length, 1, r.id);
+    for (const r of G.rules) if (r.page !== undefined) assert.ok(r.page >= 1 && r.page <= 3, r.id);
+    for (const grp of G.faqGroups) for (const r of grp.refs) assert.ok(G.rules.some(x => x.id === r), r);
+  });
+  console.log(`dobble: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

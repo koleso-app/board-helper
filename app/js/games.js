@@ -55,6 +55,14 @@
   };
   BH.isTeamGame = s => BH.sidesOf(s).some(sd => sd.length > 1);
   // a game's target and number of rounds may depend on its options (crokinole: to 50/100/200, or a tournament of 4 rounds)
+  // what a round is called on the screens: «раунд» by default, a game may name it otherwise (Dobble: «мини-игра»)
+  const ROUND_W = { one: "Раунд", lc: "раунд", acc: "раунд", last: "последний раунд", another: "ещё раунд", many: "Раунды", tab: "Раунды", gen: "раундов",
+    none: "Раундов пока нет — первый записывается кнопкой внизу.", fix: "нажмите на раунд, чтобы исправить", undo: "Очки этого раунда удалятся.", boldLegend: "жирным — лучший в раунде",
+    rec: "Записать раунд", saved: "записан", after: "После раунда", noneYet: "Ещё не записано ни одного раунда.", pts: "очков",
+    dat: ["раунду", "раундам", "раундам"], eight: "8 записанных раундов", byScore: "по очкам", fromFirst: "с первого раунда партии" };
+  BH.roundW = g => Object.assign({}, ROUND_W, (g && g.rounds && g.rounds.word) || {});
+  // a round with one winner and nothing to count (Dobble: who won the mini-game) — a point to the winner
+  BH.isPick = g => !!(g && g.scoring && g.scoring.pick);
   BH.targetOf = (g, ctx) => { const t = g && g.scoring && g.scoring.target; return typeof t === "function" ? t(ctx) : t || null; };
   BH.roundsOf = (g, ctx) => { const n = g && g.scoring && g.scoring.roundsCount; return typeof n === "function" ? n(ctx) : n || null; };
 

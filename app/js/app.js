@@ -310,7 +310,7 @@
     let right = "";
     if (s.status === "setup") right = '<span class="badge warn">подготовка</span>';
     else if (s.status === "first") right = '<span class="badge warn">кто начинает</span>';
-    else if (s.status === "playing") { const eg = BH.game(s.gameId), last = BH.isEndScored(eg) && eg.rounds.count; right = `<span class="badge accent">${BH.isRace(eg) ? "идёт игра" : last && s.rounds.length >= last ? "подсчёт славы" : (BH.isCoop(eg) ? "ограбление " : "раунд ") + (s.rounds.length + 1)}</span>`; }
+    else if (s.status === "playing") { const eg = BH.game(s.gameId), last = BH.isEndScored(eg) && eg.rounds.count; right = `<span class="badge accent">${BH.isRace(eg) ? "идёт игра" : last && s.rounds.length >= last ? "подсчёт славы" : (BH.isCoop(eg) ? "ограбление " : BH.roundW(eg).lc + " ") + (s.rounds.length + 1)}</span>`; }
     return `<a class="item sline" href="#/s/${s.id}">
       ${coverOf(g, "mini")}
       <div class="t"><b>${esc(g ? g.name : s.gameId)}</b>${meta([[IC.cal, rowDate(s.created), BH.fmtDate(s.created)], place && !(o && o.noPlace) && [IC.pin, esc(place.name), place.name]], "plain")}</div>
@@ -871,6 +871,13 @@
 
   // the rounds as a table: who dealt, each player's points (✕ bust, ★ seven numbers), the totals for a finished game
   const lowerWins = g => !!(g && g.scoring && g.scoring.lowerWins);
+  // the rounds of a game with one winner each (Dobble): a list — the number, who won and which mini-game it was
+  function pickHistory(s, g, editable) {
+    return `<div class="list">${s.rounds.map((rd, i) => {
+      const k = ((g && g.cards) || []).find(c => c.id === rd.mini), wid = s.players.find(id => Number(rd.scores[id]) > 0), p = BH.player(wid) || { name: "?", color: "#888" };
+      return `<div class="item${editable ? " click" : ""}"${editable ? ` data-act="edit-round" data-i="${i}" role="button" tabindex="0"` : ""}><span class="place-n">${i + 1}</span>${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b>${k ? `<span>${esc(k.name.replace(/­/g, ""))}</span>` : ""}</div></div>`;
+    }).join("")}</div>`;
+  }
   function roundsTable(s, g, editable) {
     const tot = BH.totals(s), low = lowerWins(g);
     // the best of each round, marked only when the round is not all the same
@@ -880,7 +887,7 @@
     const lead = g && g.rounds && g.rounds.leaderLabel;
     // the legend names only the marks that are in the table (no busts or sevens in crokinole)
     const marked = k => s.rounds.some(rd => cols.some(id => ((rd.flags || {})[id] || {})[k]));
-    const legend = [lead ? `Кружок у номера — ${esc(g.rounds.leaderLegend || lead.toLowerCase() + " раунда")}` : "", marked("bust") ? "✕ — перебор" : "", marked("flip7") ? "★ — 7 разных чисел" : "", best.some(b => b !== null) ? "жирным — лучший в раунде" : ""].filter(Boolean);
+    const legend = [lead ? `Кружок у номера — ${esc(g.rounds.leaderLegend || lead.toLowerCase() + " раунда")}` : "", marked("bust") ? "✕ — перебор" : "", marked("flip7") ? "★ — 7 разных чисел" : "", best.some(b => b !== null) ? BH.roundW(g).boldLegend : ""].filter(Boolean);
     return `<div class="scroll-x"><table class="hist">
       <thead><tr><th>№</th>${cols.map(id => { const ps = sideOf(id).map(x => BH.player(x) || { name: "?", color: "#888" }); const nm = ps.map(x => x.name).join(" и "); return `<th title="${esc(nm)}">${ps.length > 1 ? `<span class="pair-faces">${ps.map(x => BH.avatar(x, "sm")).join("")}</span>` : BH.avatar(ps[0], "sm")}<span class="hist-n">${esc(nm)}</span></th>`; }).join("")}</tr></thead>
       <tbody>${s.rounds.map((rd, i) => { const dealer = BH.player(rd.leader || BH.leaderAt(s, i));
@@ -906,7 +913,7 @@
   const textHTML = (t, gid) => String(t).includes("\n") ? stepsHTML(String(t).split("\n"), gid) : `<p>${fmtStep(t, gid)}</p>`;
   // what to do once the round is over: a list from the game (a function of the round, or the same every round)
   const afterOf = (g, ctx, r, last) => (typeof g.rounds.after === "function" ? g.rounds.after(ctx, r, last) : g.rounds.after) || [];
-  const afterHTML = (list, gid) => list.length ? `<div class="ph-after"><span class="ph-after-h">${BH.game(gid) && BH.game(gid).heist ? "После ограбления" : "После раунда"}</span>${stepsHTML(list, gid)}</div>` : "";
+  const afterHTML = (list, gid) => list.length ? `<div class="ph-after"><span class="ph-after-h">${BH.game(gid) && BH.game(gid).heist ? "После ограбления" : BH.roundW(BH.game(gid)).after}</span>${stepsHTML(list, gid)}</div>` : "";
   /* a screen of tabs (docs/ui.md «Экран с вкладками»): a compact header pinned on top — back as an icon, a picture, the
      title and one line under it, an action on the right — the tabs under it, each tab a screen of its own;
      the main action at the bottom, where the thumb is. The play screen, a game's page, a result and a player's card */
@@ -1031,8 +1038,8 @@
     const rows = ch.sides.map((sd, i) => row(sideFaces(sd.ids), sideNames(sd.ids), sd.p, (BH.player(sd.ids[0]) || { color: "#888" }).color, i, rec(sd))).join("") +
       (tie ? row(`<span class="odds-tie" aria-hidden="true">=</span>`, "Ничья", ch.tie, "var(--muted)", ch.sides.length) : "");
     const basis = wins ? `Посчитано по ${ch.games} ${BH.plural(ch.games, "прошлой партии", "прошлым партиям", "прошлым партиям")} — по тому, кто у кого выигрывал.`
-      : `Посчитано по ${ch.rounds} ${BH.plural(ch.rounds, "раунду", "раундам", "раундам")} из ${ch.games} ${BH.plural(ch.games, "партии", "партий", "партий")}.`;
-    const later = wins && g.scoring.type === "rounds" ? " Когда в приложении наберётся 8 записанных раундов этой игры, шансы будут считаться по очкам — с первого раунда партии." : "";
+      : `Посчитано по ${ch.rounds} ${BH.plural(ch.rounds, ...BH.roundW(g).dat)} из ${ch.games} ${BH.plural(ch.games, "партии", "партий", "партий")}.`;
+    const RW = BH.roundW(g), later = wins && g.scoring.type === "rounds" && (BH.targetOf(g, BH.ctxOf(s)) || BH.roundsOf(g, BH.ctxOf(s))) ? ` Когда в приложении наберётся ${RW.eight} этой игры, шансы будут считаться ${RW.byScore} — ${RW.fromFirst}.` : "";
     const how = wins ? "Чем чаще побеждали — особенно сильных соперников, — тем выше шанс; у новичка средний. Это прикидка: удачу приложение не учитывает." + later
       : (g.chances && g.chances.note) || `Приложение ${BH.chances.SIMS} раз доигрывает партию с очками, какие каждый обычно набирает за раунд. Это прикидка: карт на руках оно не видит.`;
     openDialog({ title: "Шансы на победу",
@@ -1105,7 +1112,8 @@
     if (BH.isEndScored(g)) return viewPlayEnd(s, g);
     if (BH.isCoop(g)) return viewPlayCoop(s, g);
     if (BH.isRace(g)) return viewPlayRace(s, g);
-    const r = s.rounds.length, leaderId = BH.leaderAt(s, r), leader = BH.player(leaderId);
+    // nobody leads a round in a game where everyone plays at once (Dobble): no «Начинает» tile
+    const r = s.rounds.length, leaderId = BH.leaderAt(s, r), leader = g.rounds.leader === false ? null : BH.player(leaderId);
     const ctx = BH.ctxOf(s), tot = BH.totals(s), st = BH.standings(s), target = BH.targetOf(g, ctx), count = BH.roundsOf(g, ctx);
     const top = st.length && st[0].total > 0 ? st[0].total : null;
     const last = s.rounds[r - 1];
@@ -1121,29 +1129,31 @@
         ${sd.length > 1 ? `<span class="faces pair-faces">${ps.map(x => BH.avatar(x, "sm")).join("")}</span>` : BH.avatar(p)}
         <div style="min-width:0"><div class="nm"><span>${esc(ps.map(x => x.name).join(" и "))}</span></div>
           ${target ? `<div class="bar"><i style="width:${pct}%;background:${p.color}"></i></div>` : ""}</div>
-        <div><div class="tot num">${t}</div><div class="last">${last ? (lf.bust ? "перебор" + (lr ? " " + BH.signed(lr) : "") : (lf.flip7 ? "Flip 7! " : "") + BH.signed(lr)) : target ? "из " + target : ""}</div></div>
+        <div><div class="tot num">${t}</div><div class="last">${last && BH.isPick(g) ? (lr ? "+1" : "") : last ? (lf.bust ? "перебор" + (lr ? " " + BH.signed(lr) : "") : (lf.flip7 ? "Flip 7! " : "") + BH.signed(lr)) : target ? "из " + target : ""}</div></div>
       </div>`;
     }).join("");
 
-    const hist = s.rounds.length ? `<section class="panel"><div class="spread" style="margin-bottom:6px"><h2>Раунды</h2><span class="small muted">нажмите на раунд, чтобы исправить</span></div>
-      ${roundsTable(s, g, true)}</section>` : `<p class="note">Раундов пока нет — первый записывается кнопкой внизу.</p>`;
-    const score = `<div class="status-row">
-        <div class="stat-tile"><span class="label">Раунд</span><span class="round-no">${r + 1}${count ? `<small> из ${Math.max(count, r + 1)}</small>` : ""}</span></div>
+    const W = BH.roundW(g), pick = BH.isPick(g);
+    const hist = s.rounds.length ? `<section class="panel"><div class="spread" style="margin-bottom:6px"><h2>${W.tab}</h2><span class="small muted">${W.fix}</span></div>
+      ${pick ? pickHistory(s, g, true) : roundsTable(s, g, true)}</section>` : `<p class="note">${W.none}</p>`;
+    const score = `<div class="status-row"${leader ? "" : ' style="grid-template-columns:minmax(0,1fr)"'}>
+        <div class="stat-tile"><span class="label">${W.one}</span><span class="round-no">${r + 1}${count ? `<small> из ${Math.max(count, r + 1)}</small>` : ""}</span></div>
         ${leader ? `<div class="stat-tile leader">${BH.avatar(leader)}<div class="leader-t"><span class="label">${esc(g.rounds.leaderLabel || "Начинает")}</span><b>${esc(leader.name)}</b>${s.rounds.length ? "" : `<a class="btn sm leader-wheel" href="#/s/${esc(s.id)}/first" aria-label="${esc("Колесо: " + ((g.first && g.first.label) || "первый игрок").toLowerCase())}">${I.wheel}Колесо</a>`}</div></div>` : ""}
       </div>
       <div class="board">${board}</div>
       ${chanceRow(s, g)}
-      ${g.rounds.reminder ? `<details class="panel hint" ${r === 0 ? "open" : ""}><summary>Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0), g.id)}</div></details>` : ""}`;
+      ${g.rounds.reminder ? `<details class="panel hint" ${r === 0 ? "open" : ""}><summary>${esc(g.rounds.title || "Как идёт раунд")}</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0), g.id)}</div></details>` : ""}`;
     const cardsHtml = cardsPanel(s, g);
     return playShell(s, g, [
       { id: "score", label: "Счёт", html: score },
-      { id: "rounds", label: "Раунды", n: s.rounds.length, html: hist },
+      // a game of mini-games counts them on the score tab already («Мини-игра 3 из 5»): no number on its tab, it would not fit
+      { id: "rounds", label: W.tab, n: pick ? 0 : s.rounds.length, html: hist },
       cardsHtml && { id: "cards", label: g.cardsTab || "Карты", html: cardsHtml },
       rulesTab(s, g),
     ], `<div class="game-bar">
         ${askBtn()}
-        <button class="btn primary big" data-act="new-round" aria-label="Записать раунд ${r + 1}">${I.plus}<span class="ell"><span class="lbl-l">Записать раунд</span><span class="lbl-s">Раунд</span> ${r + 1}</span></button>
-        ${s.rounds.length ? `<button class="btn big" data-act="undo-round" aria-label="Отменить последний раунд" title="Отменить последний раунд">${I.undo}</button>` : ""}
+        <button class="btn primary big" data-act="new-round" aria-label="Записать ${W.acc} ${r + 1}">${I.plus}<span class="ell"><span class="lbl-l">${W.rec}</span><span class="lbl-s">${W.one}</span> ${r + 1}</span></button>
+        ${s.rounds.length ? `<button class="btn big" data-act="undo-round" aria-label="Отменить ${W.last}" title="Отменить ${W.last}">${I.undo}</button>` : ""}
       </div>`);
   }
 
@@ -1198,7 +1208,7 @@
       : w.length > 1 ? "Ничья: " + esc(w.map(p => p.name).join(" и ")) : w.length ? "Победа: " + esc(w[0].name) : "Партия окончена";
     const hasBust = !!(g.calc && g.calc.flags && g.calc.flags.some(f => f.id === "bust"));
     const fn = g.finishNote && g.finishNote(s), note = fn ? (typeof fn === "string" ? { text: fn, ok: true } : fn) : null;
-    const more = (s.rounds.length || s.finalDetail ? "" : `<p class="win-s">Записана после игры, без раундов</p>`) +
+    const more = (s.rounds.length || s.finalDetail ? "" : `<p class="win-s">Записана после игры, без ${BH.roundW(g).gen}</p>`) +
       (note ? `<p class="note podium-note ${note.ok ? "good" : ""}">${note.ok ? I.check : IC.bolt}<span>${esc(note.text)}</span></p>` : "");
     const places = `<section class="panel"><h2 style="margin-bottom:6px">Итог</h2>
         <div class="list">${team ? (() => { const tt = BH.totals(s); return [...BH.sidesOf(s)].sort((a, b) => tt[b[0]] - tt[a[0]]).map((sd, i, arr) => `<div class="item"><span class="place-n">${i && tt[sd[0]] === tt[arr[i - 1][0]] ? 1 : i + 1}</span><span class="faces pair-faces">${sd.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span><div class="t"><b>${esc(sideName(sd))}</b></div>${sd.some(id => s.winners.includes(id)) ? `<span class="won">${IC.trophy}</span>` : ""}<span class="num" style="font-size:20px;font-weight:700">${tt[sd[0]]}</span></div>`).join(""); })()
@@ -1213,7 +1223,7 @@
       const busts = rs.reduce((a, x) => a + x.busts, 0), sevens = rs.reduce((a, x) => a + x.sevens, 0);
       const tw = g.sideScore ? s.rounds.reduce((a, rd) => a + BH.sidesOf(s).reduce((b, sd) => b + (Number(((((rd.detail || {})[sd[0]] || {}).sel || {}).counts || {})[20]) || 0), 0), 0) : 0;
       const cells = [
-        top && (top.v || low) && !(g.sideScore && top.v <= 2) ? `<div class="kpi"><b>${top.v}</b><span>лучший раунд${topP ? ": " + esc(team ? sideName(BH.sidesOf(s).find(sd => sd.includes(top.id)) || [top.id]) : topP.name) + ", " + (top.i + 1) + "-й" : ""}</span></div>` : "",
+        top && (top.v || low) && !(g.sideScore && top.v <= 2) && !BH.isPick(g) ? `<div class="kpi"><b>${top.v}</b><span>лучший раунд${topP ? ": " + esc(team ? sideName(BH.sidesOf(s).find(sd => sd.includes(top.id)) || [top.id]) : topP.name) + ", " + (top.i + 1) + "-й" : ""}</span></div>` : "",
         hasBust ? `<div class="kpi"><b>${busts}</b><span>${BH.plural(busts, "перебор", "перебора", "переборов")}</span></div>` : "",
         tw ? `<div class="kpi"><b>${tw}</b><span>${BH.plural(tw, "диск", "диска", "дисков")} в центре</span></div>` : "",
         sevens ? `<div class="kpi"><b>${sevens}</b><span>${BH.plural(sevens, "раз", "раза", "раз")} собрали 7 разных чисел</span></div>` : "",
@@ -1228,7 +1238,7 @@
     return doneScreen(s, g, [
       { id: "sum", label: "Итог", html: winCard(title, more) + places + kpis },
       pad && { id: "pad", label: "Подсчёт", html: pad },
-      !BH.isEndScored(g) && s.rounds.length && { id: "rounds", label: "Раунды", n: s.rounds.length, html: `<section class="panel"><h2 style="margin-bottom:6px">Раунды</h2>${roundsTable(s, g, false)}</section>` },
+      !BH.isEndScored(g) && s.rounds.length && { id: "rounds", label: BH.roundW(g).tab, n: BH.isPick(g) ? 0 : s.rounds.length, html: `<section class="panel"><h2 style="margin-bottom:6px">${BH.roundW(g).tab}</h2>${BH.isPick(g) ? pickHistory(s, g, false) : roundsTable(s, g, false)}</section>` },
       byPlayers && { id: "players", label: "По игрокам", html: byPlayers },
     ], !!(s.rounds.length || s.finalDetail));
   }
@@ -1322,8 +1332,8 @@
     const line = (label, v) => v ? `<div class="pc-line"><span>${label}</span><b>${v}</b></div>` : "";
     const hours = ms => ms >= 3600000 ? (ms / 3600000).toFixed(1).replace(".", ",") + " ч" : BH.fmtDuration(ms);
     const top = st.players[0], place = st.favPlace && BH.place(st.favPlace.id);
-    const best = st.bestScore, bestR = st.bestRound;
-    const avg = [st.avgTime && BH.fmtDuration(st.avgTime) + " на партию", st.avgRounds && String(st.avgRounds).replace(".", ",") + " " + avgWord(st.avgRounds, "раунд", "раунда", "раундов"),
+    const best = st.bestScore, bestR = BH.isPick(g) ? null : st.bestRound, W = BH.roundW(g);
+    const avg = [st.avgTime && BH.fmtDuration(st.avgTime) + " на партию", st.avgRounds && String(st.avgRounds).replace(".", ",") + " " + (W.avg ? avgWord(st.avgRounds, ...W.avg) : avgWord(st.avgRounds, "раунд", "раунда", "раундов")),
       String(st.avgTable).replace(".", ",") + " " + avgWord(st.avgTable, "игрок", "игрока", "игроков")].filter(Boolean).join(" · ");
     return `<div class="kpis k3">
         ${kpi(st.played, BH.plural(st.played, "партия", "партии", "партий"))}
@@ -1333,16 +1343,16 @@
       <section class="panel">
         <h2 style="margin-bottom:6px">Рекорды</h2>
         ${factsList([
-          line("Лучший счёт", best && (best.v || lowerWins(g)) ? two(best.v, `${name(best.id)}, ${BH.fmtDate(best.at)}`) : ""),
+          line(BH.isPick(g) ? "Больше всех побед за партию" : "Лучший счёт", best && (best.v || lowerWins(g)) ? two(best.v, `${name(best.id)}, ${BH.fmtDate(best.at)}`) : ""),
           line("Чаще всех побеждает", top && top.wins ? two(name(top.id), top.wins + " " + BH.plural(top.wins, "победа", "победы", "побед")) : ""),
           line("Лучший раунд", bestR ? two(bestR.v, name(bestR.id)) : ""),
-          line("Средний счёт победителя", st.avgWin || (st.avgWin === 0 && lowerWins(g)) ? String(st.avgWin) : ""),
+          line(BH.isPick(g) ? "Мини-игр у победителя в среднем" : "Средний счёт победителя", st.avgWin || (st.avgWin === 0 && lowerWins(g)) ? String(st.avgWin).replace(".", ",") : ""),
           line("Где играют", place ? two(`<a href="#/places/${esc(place.id)}">${esc(place.name)}</a>`, parties(st.favPlace.n)) : ""),
           line("В среднем", esc(avg)),
           datesLine(st.first, st.last),
         ], gcard.allRec, "gc-rec")}
       </section>
-      <section class="panel"><h2 style="margin-bottom:8px">Игроки</h2>${st.players.length > 1 ? prSortBar("game", gcard.psort || "wins", ["wins", "rate", "best"]) : ""}<div class="list">${playersRateList(sortPlayers(st.players, gcard.psort || "wins", lowerWins(g)).slice(0, gcard.allPl ? undefined : 3), true)}</div>${st.players.length > 3 ? `<button type="button" class="btn ghost sm block more-btn" data-act="gc-all">${gcard.allPl ? "Свернуть" : "Показать всех · " + st.players.length}</button>` : ""}<p class="tiny muted" style="margin-top:6px">Справа — лучший и средний счёт.</p></section>`;
+      <section class="panel"><h2 style="margin-bottom:8px">Игроки</h2>${st.players.length > 1 ? prSortBar("game", gcard.psort || "wins", ["wins", "rate", "best"]) : ""}<div class="list">${playersRateList(sortPlayers(st.players, gcard.psort || "wins", lowerWins(g)).slice(0, gcard.allPl ? undefined : 3), true)}</div>${st.players.length > 3 ? `<button type="button" class="btn ghost sm block more-btn" data-act="gc-all">${gcard.allPl ? "Свернуть" : "Показать всех · " + st.players.length}</button>` : ""}<p class="tiny muted" style="margin-top:6px">${BH.isPick(g) ? "Справа — больше всего побед в мини-играх за партию и в среднем." : "Справа — лучший и средний счёт."}</p></section>`;
   }
 
   /* ---------- players & places ---------- */
@@ -1644,7 +1654,7 @@
     if (BH.isRace(g)) return `идёт игра, игроков ${s.players.length}`;
     if (BH.isEndScored(g)) { const last = g.rounds.count || 8; return `раунд ${Math.min(s.rounds.length + 1, last)} из ${last}, игроков ${s.players.length}, слава считается в конце`; }
     const tot = Object.values(BH.totals(s)), best = tot.length ? Math.max(...tot) : 0;
-    return `раунд ${s.rounds.length + 1}, игроков ${s.players.length}, лучший счёт ${best}`;
+    return BH.isPick(g) ? `мини-игра ${s.rounds.length + 1}, игроков ${s.players.length}, больше всех побед ${best}` : `раунд ${s.rounds.length + 1}, игроков ${s.players.length}, лучший счёт ${best}`;
   }
   function openAsk(gameId, sid) {
     BH.speech.stop();
@@ -1922,6 +1932,7 @@
   function openSheet(s, index) {
     const g = BH.game(s.gameId);
     if (g.sideScore) return openSidesSheet(s, index);
+    if (BH.isPick(g)) return openPickSheet(s, index);
     const editing = index !== null && index !== undefined && s.rounds[index];
     const entries = {};
     for (const id of s.players) {
@@ -2114,7 +2125,44 @@
   }
   // equal counts: who of them played last wins (the rules)
   const raceTieHTML = (st, g) => (st.filled && st.top.length > 1 ? `<div class="label" style="margin:12px 0 6px">${esc((g && g.scoring.count.tieAsk) || "Чей ход был последним?")}</div><div class="chips">${st.top.map(id => `<button class="chip" data-act="race-last" data-id="${id}" aria-pressed="${sheet.last === id}">${esc(pname(id))}</button>`).join("")}</div>` : "");
+  /* a round with one winner and nothing to count (Dobble: one mini-game) — which one it was, when the game lists them
+     as its tiles, and who won; the winner gets a point */
+  function openPickSheet(s, index) {
+    const rd = index !== null && index !== undefined ? s.rounds[index] : null;
+    sheet = { kind: "pick", sid: s.id, index: rd ? index : null, mini: rd ? rd.mini || null : null, win: rd ? s.players.find(id => Number(rd.scores[id]) > 0) || null : null };
+    BH.clearToast(); ovOpen(); renderOverlay();
+  }
+  function pickSheetHTML() {
+    const s = BH.session(sheet.sid), g = BH.game(s.gameId), sc = g.scoring, W = BH.roundW(g), idx = sheet.index !== null ? sheet.index : s.rounds.length;
+    const minis = BH.raceCards(g, s);
+    return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+      <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">${sheet.index !== null ? "Исправить: " + W.lc + " " + (idx + 1) : W.one + " " + (idx + 1)}</h2></div>
+        <div class="row" style="gap:4px">${sheet.index !== null ? `<button class="icon-btn danger-ic" data-act="delete-round" aria-label="Удалить" title="Удалить">${I.trash}</button>` : ""}<button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div></div>
+      <div class="sheet-body">
+        ${minis.length ? `<div class="label" style="margin:0 0 6px">${esc(sc.pickWhat || "Что сыграли?")}</div><div class="chips">${minis.map(k => `<button type="button" class="chip" data-act="pick-mini" data-v="${esc(k.id)}" aria-pressed="${sheet.mini === k.id}">${esc(k.name.replace(/­/g, ""))}</button>`).join("")}</div>` : ""}
+        <div class="label" style="margin:14px 0 6px">${esc(sc.pickWho || "Кто выиграл?")}</div>
+        <div class="chips">${s.players.map(id => `<button type="button" class="chip" data-act="pick-win" data-v="${esc(id)}" aria-pressed="${sheet.win === id}">${esc(pname(id))}</button>`).join("")}</div>
+        ${sc.pickHint ? `<p class="small muted" style="margin-top:12px">${esc(sc.pickHint)}</p>` : ""}
+      </div>
+      <div class="sheet-foot"><button class="btn primary big" data-act="save-round" ${sheet.win ? "" : "disabled"}>${I.check}Сохранить</button></div>
+    </div></div>`;
+  }
+  function savePickRound() {
+    const s = BH.session(sheet.sid);
+    if (!sheet.win) return;
+    const idx = sheet.index !== null ? sheet.index : s.rounds.length;
+    const round = { at: Date.now(), leader: BH.leaderAt(s, idx), scores: {}, detail: {}, flags: {} };
+    for (const id of s.players) { round.scores[id] = id === sheet.win ? 1 : 0; round.flags[id] = { bust: false, flip7: false }; }
+    if (sheet.mini) round.mini = sheet.mini;
+    const isNew = sheet.index === null;
+    if (isNew) s.rounds.push(round); else { round.at = s.rounds[idx].at; s.rounds[idx] = round; }
+    sheet = null;
+    BH.saveNow();
+    afterRoundChange(s, isNew);
+  }
+
   function sheetHTML() {
+    if (sheet.kind === "pick") return pickSheetHTML();
     if (sheet.kind === "race") return raceSheetHTML();
     if (sheet.kind === "end") return endSheetHTML();
     if (sheet.kind === "sides") return sidesSheetHTML();
@@ -2175,6 +2223,7 @@
 
   function saveRound() {
     if (sheet.kind === "sides") return saveSidesRound();
+    if (sheet.kind === "pick") return savePickRound();
     const s = BH.session(sheet.sid), g = BH.game(s.gameId);
     const idx = sheet.index !== null ? sheet.index : s.rounds.length;
     const round = { at: Date.now(), leader: BH.leaderAt(s, idx), scores: {}, detail: {}, flags: {} };
@@ -2205,7 +2254,7 @@
       openDialog({
         title: "Ничья", text: ((g.scoring && (typeof g.scoring.tieNote === "function" ? g.scoring.tieNote(BH.ctxOf(s)) : g.scoring.tieNote)) || "Лучший счёт сразу у нескольких игроков.") + " Сейчас поровну: " + BH.sidesOf(s).filter(sd => sd.some(id => end.winners.includes(id))).map(sd => sd.map(id => (BH.player(id) || {}).name).join(" и ")).join(", ") + ".",
         buttons: [
-          { label: "Сыграть ещё раунд", primary: true, run: () => { const c = fresh(s); c.continueTie = c.rounds.length; BH.saveNow(); closeDialog(); render(); } },
+          { label: "Сыграть " + BH.roundW(g).another, primary: true, run: () => { const c = fresh(s); c.continueTie = c.rounds.length; BH.saveNow(); closeDialog(); render(); } },
           { label: "Записать ничью", run: () => { closeDialog(); finish(fresh(s), end.winners); } },
         ],
       });
@@ -2213,9 +2262,9 @@
     }
     render();
     if (isNew) {
-      const next = BH.player(BH.leaderAt(s, s.rounds.length));
+      const next = g.rounds.leader === false ? null : BH.player(BH.leaderAt(s, s.rounds.length)), W = BH.roundW(g);
       const count = s.rounds.length;
-      BH.toast(`Раунд ${count} записан${next ? ". " + (g.rounds.leaderLabel || "Начинает") + ": " + next.name : ""}`, { label: "Отменить", run: () => {
+      BH.toast(`${W.one} ${count} ${W.saved}${next ? ". " + (g.rounds.leaderLabel || "Начинает") + ": " + next.name : ""}`, { label: "Отменить", run: () => {
         // only while that round is still the last one and nothing else is open
         const cur = BH.session(s.id);   // the data may have been refreshed by the sync meanwhile
         if (!cur || cur.status !== "playing" || sheet || dialog || cur.rounds.length !== count) return;
@@ -2426,8 +2475,8 @@
       case "end-open": openEndSheet(s); break;
       case "end-entry": sheet.open = sheet.open === el.dataset.p ? null : el.dataset.p; renderOverlay(); { const n = overlayRoot.querySelector(`[data-entry="${el.dataset.p}"]`); if (n) n.scrollIntoView({ block: "nearest" }); } break;
       case "end-save": saveEnd(); break;
-      case "undo-round": { const coop = BH.isCoop(BH.game(s.gameId)), word = coop ? "ограбление" : "раунд";
-        openDialog({ title: `Отменить ${word} ${s.rounds.length}?`, text: coop ? "Счётчик вернётся к ограблению " + s.rounds.length + ", карты — как были." : BH.isEndScored(BH.game(s.gameId)) ? "Счётчик вернётся к раунду " + s.rounds.length + "." : "Очки этого раунда удалятся.", buttons: [
+      case "undo-round": { const coop = BH.isCoop(BH.game(s.gameId)), word = coop ? "ограбление" : BH.roundW(BH.game(s.gameId)).acc;
+        openDialog({ title: `Отменить ${word} ${s.rounds.length}?`, text: coop ? "Счётчик вернётся к ограблению " + s.rounds.length + ", карты — как были." : BH.isEndScored(BH.game(s.gameId)) ? "Счётчик вернётся к раунду " + s.rounds.length + "." : BH.roundW(BH.game(s.gameId)).undo, buttons: [
         { label: `Отменить ${word}`, danger: true, run: () => { const c = fresh(s), last = c.rounds.pop(); if (last && last.coop) c.coop = last.coop; BH.saveNow(); dialog = null; afterRoundChange(c, false); } }, { label: "Оставить", run: closeDialog }] }); break; }
       case "finish-menu": {
         if (BH.isRace(BH.game(s.gameId))) { openRaceEnd(s); break; }
@@ -2449,7 +2498,7 @@
           break;
         }
         const st = BH.standings(s), best = st.length ? st[0].total : 0, w = st.filter(x => x.total === best).map(x => x.id);
-        openDialog({ title: "Завершить партию?", text: s.rounds.length ? "Победителем запишется тот, у кого сейчас больше всех очков: " + w.map(id => (BH.player(id) || {}).name).join(", ") + "." : "Ещё не записано ни одного раунда.",
+        openDialog({ title: "Завершить партию?", text: s.rounds.length ? (w.length > 1 ? `Больше всех ${BH.roundW(BH.game(s.gameId)).pts} сейчас у нескольких игроков: ${w.map(id => (BH.player(id) || {}).name).join(", ")}. Запишется ничья` : `Победителем запишется тот, у кого сейчас больше всех ${BH.roundW(BH.game(s.gameId)).pts}: ${w.map(id => (BH.player(id) || {}).name).join(", ")}`) + "." : BH.roundW(BH.game(s.gameId)).noneYet,
           buttons: [
             ...(s.rounds.length ? [{ label: "Завершить и записать", primary: true, run: () => { closeDialog(); finish(s, w); } }] : []),
             { label: "Удалить партию", danger: true, run: () => confirmDelete(s) },
@@ -2478,6 +2527,8 @@
       }
       case "flag": { const en = sheet.entries[el.dataset.p]; en.sel.flags[el.dataset.f] = !en.sel.flags[el.dataset.f]; if (en.sel.flags.bust) en.manual = null; renderOverlay(); break; }
       case "save-round": saveRound(); break;
+      case "pick-mini": sheet.mini = sheet.mini === el.dataset.v ? null : el.dataset.v; renderOverlay(); break;
+      case "pick-win": sheet.win = sheet.win === el.dataset.v ? null : el.dataset.v; renderOverlay(); break;
       case "side-count": {
         const s = BH.session(sheet.sid), g = BH.game(s.gameId), Z = g.sideScore, e = sheet.entries[el.dataset.p], z = el.dataset.z, d = +el.dataset.d;
         const used = Z.zones.reduce((a, x) => a + (e.counts[x.z] || 0), 0);
@@ -2485,7 +2536,7 @@
         e.counts[z] = Math.max(0, (e.counts[z] || 0) + d); e.manual = null;
         renderOverlay(); break;
       }
-      case "delete-round": { const i = sheet.index; openDialog({ title: "Удалить раунд " + (i + 1) + "?", text: "Остальные раунды сохранятся. Кто сдаёт или начинает следующие раунды, приложение пересчитает.", buttons: [
+      case "delete-round": { const i = sheet.index, dg = BH.game(s.gameId), dw = BH.roundW(dg); openDialog({ title: "Удалить " + dw.acc + " " + (i + 1) + "?", text: "Остальные " + dw.many.toLowerCase() + " сохранятся." + (dg.rounds.leader === false ? "" : " Кто сдаёт или начинает следующие раунды, приложение пересчитает."), buttons: [
         { label: "Удалить", danger: true, run: () => { const c = fresh(s); c.rounds.splice(i, 1); c.rounds.forEach((rd, j) => { rd.leader = BH.leaderAt(c, j); }); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(c, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
       case "dlg-choice": { const c = dialog && dialog.choices && dialog.choices[+el.dataset.i]; if (c) c.run(); break; }
       case "dlg": { const b = dialog && dialog.buttons[+el.dataset.i]; if (b) b.run(); break; }
@@ -2806,7 +2857,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.28.0";
+  BH.version = "0.29.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

@@ -133,6 +133,7 @@ body.in-game{padding-bottom:env(safe-area-inset-bottom,0px)}
 .list{display:flex;flex-direction:column}
 .list .item{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);text-decoration:none;color:inherit;min-width:0}
 .list .item:first-child{border-top:none}
+.list .item.click{cursor:pointer}
 .list .item .t{flex:1;min-width:0}
 .list .item .t b{display:block;font-weight:600;overflow-wrap:anywhere}
 .list .item .t>span{font-size:14px;color:var(--muted)}

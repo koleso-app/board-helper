@@ -560,3 +560,17 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   });
   console.log(`the gang: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }
+{
+  const before = passed;
+  t("the gang: a game recorded afterwards keeps its score (vaults, alarms); the heists, when there are any, decide", () => {
+    BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }, { id: "c", name: "В" }], places: [], placesTouched: true,
+      sessions: [{ id: "r1", gameId: "thegang", players: ["a", "b", "c"], status: "finished", rounds: [], winners: ["a", "b", "c"], tally: { ok: 3, fail: 9 } }] });
+    const s = BH.state.sessions[0];
+    assert.strictEqual(JSON.stringify(s.tally), JSON.stringify({ ok: 3, fail: 3 }), "kept, within 0…3");
+    const t = BH.coopTally(Object.assign({}, s, { tally: { ok: 3, fail: 1 } }));
+    assert.ok(t.ok === 3 && t.fail === 1 && t.won, "the score of a recorded game");
+    const played = Object.assign({}, s, { tally: { ok: 0, fail: 0 }, rounds: [{ scores: {}, heist: "ok" }] });
+    assert.strictEqual(BH.coopTally(played).ok, 1, "heists played win over a written score");
+  });
+  console.log(`the gang score: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}

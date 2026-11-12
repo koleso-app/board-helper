@@ -472,6 +472,12 @@
   }
   // what still keeps the game from being created, or "" when it is ready
   function draftProblem() {
+    { const g0 = BH.game(draft.gameId), t = draft.tally || {}, w = ((g0 && g0.scoring) || {}).wins || 3;
+      if (g0 && BH.isCoop(g0) && draftPast()) {
+        if (t.ok === w && t.fail === w) return `Не бывает ${w} хранилищ и ${w} тревог сразу — игра кончается раньше`;
+        if (t.ok === w && draft.coop === "lose") return `${w} хранилища — это победа банды`;
+        if (t.fail === w && draft.coop === "win") return `${w} тревоги — это поражение`;
+      } }
     const g = BH.game(draft.gameId);
     if (!g) return "Выберите игру";
     const n = draft.players.length;
@@ -578,8 +584,12 @@
 
     let resultSec = "";
     if (past && g && cnt && BH.isCoop(g)) {
-      resultSec = step2("result", "Итог", draft.coop === "win" ? "Банда победила" : draft.coop === "lose" ? "Банда попалась" : "Итог — по желанию",
-        `<div class="chips"><button class="chip" data-act="draft-coop" data-v="win" aria-pressed="${draft.coop === "win"}">${IC.trophy}Победа банды</button><button class="chip" data-act="draft-coop" data-v="lose" aria-pressed="${draft.coop === "lose"}">Поражение</button></div>`, !!draft.coop);
+      const t = draft.tally || {}, wins = (g.scoring && g.scoring.wins) || 3, sc = t.ok !== undefined || t.fail !== undefined ? ` · ${t.ok ?? "?"}:${t.fail ?? "?"}` : "";
+      const row = (k, label) => `<div class="tally-row"><span class="label">${label}</span><div class="chips">${Array.from({ length: wins + 1 }, (_, n) => `<button class="chip" data-act="draft-tally" data-k="${k}" data-v="${n}" aria-pressed="${t[k] === n}">${n}</button>`).join("")}</div></div>`;
+      resultSec = step2("result", "Итог", (draft.coop === "win" ? "Банда победила" : draft.coop === "lose" ? "Банда попалась" : "Итог — по желанию") + sc,
+        `<p class="small muted">Счёт можно не вписывать. 3 хранилища — победа, 3 тревоги — поражение.</p>
+        ${row("ok", "Хранилища вскрыли")}${row("fail", "Тревоги")}
+        <div class="chips" style="margin-top:12px"><button class="chip" data-act="draft-coop" data-v="win" aria-pressed="${draft.coop === "win"}"><span class="won">${IC.trophy}</span>Победа банды</button><button class="chip" data-act="draft-coop" data-v="lose" aria-pressed="${draft.coop === "lose"}">Поражение</button></div>`, !!draft.coop || !!sc);
     } else if (past && g && cnt) {
       const scored = draft.players.filter(id => draft.final[id] !== undefined && draft.final[id] !== "").length;
       resultSec = step2("result", "Итог", draft.winners.length ? "Победа: " + esc(draft.winners.map(id => (BH.player(id) || { name: "?" }).name).join(", ")) : scored ? "Очки вписаны" : "Очки и победитель — по желанию",
@@ -625,6 +635,7 @@
       const final = {};
       for (const id of s.players) if (draft.final[id] !== undefined && draft.final[id] !== "") final[id] = Math.round(Number(draft.final[id])) || 0;
       let winners = BH.isCoop(g) ? (draft.coop === "win" ? s.players.slice() : []) : draft.winners.filter(id => s.players.includes(id));
+      if (BH.isCoop(g) && draft.tally && (draft.tally.ok !== undefined || draft.tally.fail !== undefined)) s.tally = { ok: draft.tally.ok || 0, fail: draft.tally.fail || 0 };
       if (!BH.isCoop(g) && !winners.length && Object.keys(final).length) {
         const low = !!(g.scoring && g.scoring.lowerWins);
         const best = low ? Math.min(...Object.values(final)) : Math.max(...Object.values(final));
@@ -1029,7 +1040,8 @@
 
   function viewDoneCoop(s, g) {
     const t = BH.coopTally(s), won = s.winners.length > 0, H = g.heist;
-    const dur = s.finishedAt && s.startedAt ? BH.fmtDuration(s.finishedAt - s.startedAt) : null;
+    // a game recorded afterwards has no duration (its start and end are the same moment)
+    const dur = s.finishedAt && s.startedAt && s.finishedAt > s.startedAt ? BH.fmtDuration(s.finishedAt - s.startedAt) : null;
     const crown = `<svg class="crown" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 46 L12 18 L24 32 L32 12 L40 32 L52 18 L56 46 Z" style="fill:#E3A72F;stroke:#B57E14;stroke-width:2.5;stroke-linejoin:round"/><rect x="8" y="46" width="48" height="8" rx="2" style="fill:#B57E14"/></svg>`;
     const siren = `<svg class="crown" viewBox="0 0 64 64" aria-hidden="true"><path d="M18 50 a14 14 0 0 1 28 0 v4 H18z" style="fill:#D9483B;stroke:#9E2B22;stroke-width:2.5"/><rect x="12" y="54" width="40" height="6" rx="2" style="fill:#9E2B22"/><path d="M32 12v10M14 20l6 6M50 20l-6 6" style="stroke:#D9483B;stroke-width:4;stroke-linecap:round"/></svg>`;
     return `<div class="stack">
@@ -1042,15 +1054,15 @@
       <section class="panel"><h2 style="margin-bottom:6px">Банда</h2>
         <div class="list">${s.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<a class="item" href="#/players/${esc(id)}">${BH.avatar(p, "sm")}<div class="t"><b>${esc(p.name)}</b></div>${won ? `<span class="won">${IC.trophy}</span>` : ""}</a>`; }).join("")}</div>
       </section>
-      ${s.rounds.length ? `<div class="kpis">
-          <div class="kpi"><b>${s.rounds.length}</b><span>${BH.plural(s.rounds.length, "ограбление", "ограбления", "ограблений")}</span></div>
+      ${s.rounds.length || s.tally ? `<div class="kpis">
+          ${s.rounds.length ? `<div class="kpi"><b>${s.rounds.length}</b><span>${BH.plural(s.rounds.length, "ограбление", "ограбления", "ограблений")}</span></div>` : ""}
           <div class="kpi"><b>${t.ok} из ${t.wins}</b><span>хранилищ вскрыто</span></div>
           <div class="kpi"><b>${t.fail} из ${t.losses}</b><span>тревог</span></div>
           ${dur ? `<div class="kpi"><b>${dur}</b><span>длилась партия</span></div>` : ""}
         </div>
-        <section class="panel"><h2 style="margin-bottom:6px">Ограбления</h2><ol class="heist-hist">${s.rounds.map((rd, i) => {
+        ${s.rounds.length ? `<section class="panel"><h2 style="margin-bottom:6px">Ограбления</h2><ol class="heist-hist">${s.rounds.map((rd, i) => {
           const used = rd.coop ? H.active(rd.coop).map(a => (H.cards[a.kind][a.n] || {}).ru).filter(Boolean) : [];
-          return `<li class="${rd.heist === "ok" ? "ok" : "fail"}"><span class="hh-n">${i + 1}</span><b>${rd.heist === "ok" ? esc(g.scoring.okLabel) : esc(g.scoring.failLabel)}</b>${used.length ? `<small>${esc(used.join(", "))}</small>` : ""}</li>`; }).join("")}</ol></section>` : ""}
+          return `<li class="${rd.heist === "ok" ? "ok" : "fail"}"><span class="hh-n">${i + 1}</span><b>${rd.heist === "ok" ? esc(g.scoring.okLabel) : esc(g.scoring.failLabel)}</b>${used.length ? `<small>${esc(used.join(", "))}</small>` : ""}</li>`; }).join("")}</ol></section>` : ""}` : ""}
       <div class="actions">
         <button class="btn primary big" data-act="rematch">${I.plus}Ещё партию теми же</button>
         ${s.rounds.length ? `<button class="btn big" data-act="reopen">${I.undo}Вернуться к партии</button>` : ""}
@@ -1986,6 +1998,14 @@
         render(); break;
       }
       case "draft-coop": draft.coop = draft.coop === el.dataset.v ? null : el.dataset.v; render(); break;
+      // the score of a recorded cooperative game: three of one kind decide the result
+      case "draft-tally": {
+        const t = draft.tally = draft.tally || {}, k = el.dataset.k, v = +el.dataset.v;
+        if (t[k] === v) delete t[k]; else t[k] = v;
+        const wins = ((BH.game(draft.gameId) || {}).scoring || {}).wins || 3;
+        if (t.ok === wins) draft.coop = "win"; else if (t.fail === wins) draft.coop = "lose";
+        render(); break;
+      }
       case "draft-winner": { const i = draft.winners.indexOf(el.dataset.id); i >= 0 ? draft.winners.splice(i, 1) : draft.winners.push(el.dataset.id); render(); break; }
       case "draft-save": if (el.disabled || !draft) break; el.disabled = true; saveDraft(); break;   // a double tap creates one game
       case "draft-opt": break; // handled on change
@@ -2450,7 +2470,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.17.2";
+  BH.version = "0.17.3";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

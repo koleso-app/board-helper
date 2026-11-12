@@ -41,6 +41,13 @@
           if (r.right > b.right + 1.5 || r.left < b.left - 1.5) why = "вылезает из " + (typeof box.className === "string" ? "." + box.className.trim().split(/\s+/)[0] : box.tagName);
         }
       }
+      // a line icon (24×24) must be drawn by its own style: not black-filled, and icon-sized
+      if (!why && el.tagName === "svg" && el.getAttribute("viewBox") === "0 0 24 24" && !el.closest(".art,.cover,.rule-img,.wheel")) {
+        const sh = el.querySelector("path,circle,rect"), ss = sh && getComputedStyle(sh);
+        if (r.width > 34 || r.height > 34) why = "значок слишком большой";
+        else if (ss && ss.fill === "rgb(0, 0, 0)" && ss.stroke === "none") why = "значок без цвета — залит чёрным";
+        if (why) { out.push(`${where} — ${why}: в «${(el.parentElement.textContent || "").trim().slice(0, 40)}»`); continue; }
+      }
       if (!why && el.matches("input:not([type=checkbox]):not([type=radio]),textarea") && el.placeholder && !el.value) {
         const ps = getComputedStyle(el, "::placeholder"), room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (el.type === "search" ? 20 : 0);
         ctx.font = `${ps.fontStyle} ${ps.fontWeight} ${ps.fontSize} ${ps.fontFamily}`;
@@ -79,6 +86,18 @@
       const b = document.querySelector(`[data-act="draft-step"][data-step="${st}"]`);
       if (b && b.getAttribute("aria-expanded") !== "true") { b.click(); await wait(250); }
       out.push(...scan(`#/new [${st}]`));
+    }
+    // a cooperative game recorded afterwards: its result step with the score (the form is left without saving)
+    if (BH.games.some(g => g.scoring && g.scoring.type === "coop") && S.players.length >= 3) {
+      await visit("#/new");
+      const gb = document.querySelector('[data-act="pick-game"][data-id="thegang"]'); if (gb) { gb.click(); await wait(250); }
+      const ds = document.querySelector('[data-act="draft-step"][data-step="date"]'); if (ds && ds.getAttribute("aria-expanded") !== "true") { ds.click(); await wait(250); }
+      const din = document.querySelector('main input[type="datetime-local"]'); if (din) { din.value = "2026-01-10T19:00"; din.dispatchEvent(new Event("input", { bubbles: true })); din.dispatchEvent(new Event("change", { bubbles: true })); await wait(300); }
+      const ps = document.querySelector('[data-act="draft-step"][data-step="players"]'); if (ps && ps.getAttribute("aria-expanded") !== "true") { ps.click(); await wait(250); }
+      for (const b of [...document.querySelectorAll('[data-act="toggle-player"]')].slice(0, 3)) if (b.getAttribute("aria-pressed") !== "true") { b.click(); await wait(150); }
+      const rs = document.querySelector('[data-act="draft-step"][data-step="result"]'); if (rs && rs.getAttribute("aria-expanded") !== "true") { rs.click(); await wait(250); }
+      const t3 = document.querySelector('[data-act="draft-tally"][data-k="ok"][data-v="3"]'); if (t3) { t3.click(); await wait(250); }
+      out.push(...scan("#/new [сыгранная кооперативная партия]"));
     }
     // setup: every step
     for (const s of S.sessions.filter(x => x.status === "setup")) {

@@ -708,3 +708,10 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .coop-bar .btn{padding-left:12px;padding-right:12px}
 .coop-bar .btn.primary,.coop-bar .btn.danger{flex:1 1 0}
 @media (max-width:400px){.coop-bar .btn{padding-left:10px;padding-right:10px}.coop-bar .btn.primary svg{display:none}}
+/* a line icon inside a chip: its own size and the colour of the text (a cup — gold) */
+.chip svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chip .won svg{width:18px;height:18px}
+.tally-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:10px}
+.tally-row .label{margin:0}
+.tally-row .chips{gap:6px}
+.tally-row .chip{min-width:44px;justify-content:center;padding-left:10px;padding-right:10px}

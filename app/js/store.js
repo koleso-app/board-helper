@@ -87,6 +87,7 @@
         created: time(x.created) || Date.now(), startedAt: time(x.startedAt), finishedAt: time(x.finishedAt),
         status, setupDone, rounds,
         ...(cleanCoop(x.coop) ? { coop: cleanCoop(x.coop) } : {}),
+        ...(x.tally && typeof x.tally === "object" ? { tally: { ok: Math.max(0, Math.min(3, Math.round(Number(x.tally.ok)) || 0)), fail: Math.max(0, Math.min(3, Math.round(Number(x.tally.fail)) || 0)) } } : {}),
         first: typeof x.first === "string" && allowed.has(x.first) ? x.first : null,
         winners: ids(x.winners, allowed),
         opts: (() => { const o = {}; for (const [k, v] of Object.entries(isObj(x.opts) ? x.opts : {})) if (ID.test(k)) o[k] = !!v; return o; })(),

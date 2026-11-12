@@ -67,7 +67,8 @@
   // heists so far, and how many make the end: wins (vaults) and losses (alarms) from the game and its mode
   BH.coopTally = s => {
     const g = BH.game(s.gameId), sc = (g && g.scoring) || {}, ctx = BH.ctxOf(s);
-    const ok = s.rounds.filter(r => r.heist === "ok").length, fail = s.rounds.filter(r => r.heist === "fail").length;
+    const kept = !s.rounds.length && s.tally;   // a game recorded afterwards with its score
+    const ok = kept ? s.tally.ok : s.rounds.filter(r => r.heist === "ok").length, fail = kept ? s.tally.fail : s.rounds.filter(r => r.heist === "fail").length;
     const wins = sc.wins || 3, losses = typeof sc.losses === "function" ? sc.losses(ctx) : sc.losses || 3;
     return { ok, fail, wins, losses, won: ok >= wins, lost: fail >= losses, over: ok >= wins || fail >= losses };
   };

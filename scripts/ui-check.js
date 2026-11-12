@@ -74,7 +74,7 @@
     const origErr = console.error; console.error = (...a) => { errors.push(a.map(x => (x && x.message) || String(x)).join(" ")); origErr.apply(console, a); };
     window.addEventListener("error", onErr); window.addEventListener("unhandledrejection", onErr);
     const S = BH.state, out = [], vw = document.documentElement.clientWidth;
-    const routes = ["#/", "#/games", "#/sessions", "#/menu", "#/players", "#/places", "#/stats", "#/settings/sync", "#/settings/voice", "#/settings/theme", "#/settings/backup"];
+    const routes = ["#/", "#/games", "#/sessions", "#/menu", "#/players", "#/places", "#/stats", "#/settings/sync", "#/settings/voice", "#/settings/theme", "#/settings/chances", "#/settings/backup"];
     for (const g of BH.games) routes.push("#/games/" + g.id);
     for (const p of S.players) routes.push("#/players/" + p.id);
     for (const p of S.places) routes.push("#/places/" + p.id);

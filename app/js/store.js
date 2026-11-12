@@ -68,6 +68,8 @@
         theme: ["auto", "light", "dark"].includes(st.theme) ? st.theme : "auto",
         voiceRate: [0.85, 1, 1.2].includes(Number(st.voiceRate)) ? Number(st.voiceRate) : 1,
         speakAnswers: st.speakAnswers !== false,   // read the assistant's answers aloud (this device only)
+        chances: st.chances !== false,             // the favourite and the chances on the play screen
+        kidsChances: st.kidsChances === true,      // …in the games for small children too (off unless chosen)
       },
       placesTouched: true,
     };

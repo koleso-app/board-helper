@@ -237,6 +237,7 @@
     chev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
     pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>',
     chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>',
+    odds: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 5.5l-13 13"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/></svg>',
     cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-8A5.5 5.5 0 0 1 17 8.5a4.5 4.5 0 0 1 0 9.5H7z"/></svg>',
     mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
     sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>',
@@ -425,6 +426,7 @@
         ${row("#/settings/sync", IC.cloud, "Синхронизация", BH.cloud.cfg ? "с GitHub, включена" : "не подключена")}
         ${row("#/settings/voice", IC.mic, "Голосовой помощник", voice)}
         ${row("#/settings/theme", IC.sun, "Оформление", "тема: " + theme)}
+        ${row("#/settings/chances", IC.odds, "Шансы в партии", st.chances === false ? "не показывать" : st.kidsChances ? "во всех играх" : "кроме детских игр")}
         ${row("#/settings/backup", IC.save, "Копия данных", "сохранить в файл или загрузить")}
       </div></section>
       <p class="tiny muted">Помощник настолок ${esc(BH.version || "")} · правила в приложении пересказаны своими словами, полные правила — в книге правил игры.</p>
@@ -1006,23 +1008,28 @@
   const sideFaces = ids => (ids.length > 1 ? `<span class="faces pair-faces">${ids.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span>` : BH.avatar(BH.player(ids[0]) || { name: "?", color: "#888" }));
   // one favourite — the name and the chance; several close to the best — their names; everyone close — «about even»
   function chanceRow(s, g) {
-    const ch = BH.chances.of(s, g); if (!ch) return "";
+    const ch = BH.chances.forPlay(s, g); if (!ch) return "";
     const fav = BH.chances.favourites(ch), all = fav.length === ch.sides.length, one = fav.length === 1;
     const label = all ? "Шансы" : one ? "Фаворит" : "Фавориты", what = all ? "примерно равны" : fav.map(sd => sideNames(sd.ids)).join(", ");
-    const pct = one ? BH.chances.pcts(ch.sides.map(sd => sd.p).concat(ch.tie))[0] : "";
+    const pct = one && ch.kind !== "wins" ? BH.chances.pcts(ch.sides.map(sd => sd.p).concat(ch.tie))[0] : "";
     return `<button type="button" class="chance-row" data-act="chances-open" aria-label="Шансы на победу: подробнее">
-      <span class="chance-ic">${IC.chart}</span>
+      <span class="chance-ic">${IC.odds}</span>
       <span class="chance-t"><span class="label">${label}</span><b>${esc(what)}</b></span>
       ${pct ? `<span class="chance-p num">${pct}</span>` : ""}${IC.chev}</button>`;
   }
   function openChances(s, g) {
-    const ch = BH.chances.of(s, g); if (!ch) return;
-    const tie = ch.tie >= 0.005, pc = BH.chances.pcts(ch.sides.map(sd => sd.p).concat(ch.tie));
-    const row = (faces, name, p, col, i) => `<div class="odds-row">${faces}<div class="odds-t"><b>${esc(name)}</b><div class="bar"><i style="width:${Math.round(p * 100)}%;background:${col}"></i></div></div><span class="odds-p num">${pc[i]}</span></div>`;
-    const rows = ch.sides.map((sd, i) => row(sideFaces(sd.ids), sideNames(sd.ids), sd.p, (BH.player(sd.ids[0]) || { color: "#888" }).color, i)).join("") +
+    const ch = BH.chances.forPlay(s, g); if (!ch) return;
+    const wins = ch.kind === "wins", tie = ch.tie >= 0.005, pc = BH.chances.pcts(ch.sides.map(sd => sd.p).concat(ch.tie));
+    // by the past results each player also shows their record in this game
+    const rec = sd => (!wins ? "" : `<small class="odds-rec">${sd.played ? `${sd.won} ${BH.plural(sd.won, "победа", "победы", "побед")} из ${sd.played}` : "новичок в этой игре"}</small>`);
+    const row = (faces, name, p, col, i, sub) => `<div class="odds-row">${faces}<div class="odds-t"><b>${esc(name)}</b>${sub || ""}<div class="bar"><i style="width:${Math.round(p * 100)}%;background:${col}"></i></div></div><span class="odds-p num">${pc[i]}</span></div>`;
+    const rows = ch.sides.map((sd, i) => row(sideFaces(sd.ids), sideNames(sd.ids), sd.p, (BH.player(sd.ids[0]) || { color: "#888" }).color, i, rec(sd))).join("") +
       (tie ? row(`<span class="odds-tie" aria-hidden="true">=</span>`, "Ничья", ch.tie, "var(--muted)", ch.sides.length) : "");
-    const basis = `По ${ch.rounds} ${BH.plural(ch.rounds, "раунду", "раундам", "раундам")} из ${ch.games} ${BH.plural(ch.games, "партии", "партий", "партий")}.`;
-    const how = (g.chances && g.chances.note) || `Приложение ${BH.chances.SIMS} раз доигрывает партию с очками, какие каждый обычно набирает за раунд. Это прикидка: карт на руках оно не видит.`;
+    const basis = wins ? `По ${ch.games} ${BH.plural(ch.games, "прошлой партии", "прошлым партиям", "прошлым партиям")}: кто у кого выигрывал.`
+      : `По ${ch.rounds} ${BH.plural(ch.rounds, "раунду", "раундам", "раундам")} из ${ch.games} ${BH.plural(ch.games, "партии", "партий", "партий")}.`;
+    const later = wins && g.scoring.type === "rounds" ? " После первого раунда здесь будут шансы по очкам — когда в приложении наберётся 8 раундов." : "";
+    const how = wins ? "Чем чаще побеждали — особенно сильных соперников, — тем выше шанс; у новичка средний. Это прикидка: удачу приложение не учитывает." + later
+      : (g.chances && g.chances.note) || `Приложение ${BH.chances.SIMS} раз доигрывает партию с очками, какие каждый обычно набирает за раунд. Это прикидка: карт на руках оно не видит.`;
     openDialog({ title: "Шансы на победу",
       html: `<div class="odds">${rows}</div><p class="small muted">${basis} ${esc(how)}</p>`,
       buttons: [{ label: "Понятно", primary: true, run: closeDialog }] });
@@ -1037,6 +1044,7 @@
         ${topline(backToOrigin(), `<button class="btn finish sm" data-act="finish-menu">${I.flag}Завершить</button>`)}
         ${sessionHero(s, g, true)}
         ${BH.player(s.first) ? `<div class="status-row" style="grid-template-columns:minmax(0,1fr)"><div class="stat-tile leader">${BH.avatar(BH.player(s.first))}<div class="leader-t"><span class="label">Начинает</span><b>${esc(BH.player(s.first).name)}</b></div></div></div>` : ""}
+        ${chanceRow(s, g)}
       </div>
       <div class="play">
         <div class="stack">
@@ -1599,6 +1607,11 @@
     else if (sub === "voice") body = viewVoiceSettings();
     else if (sub === "theme") body = `<section class="panel stack"><h2>Оформление</h2>
         <div class="spread"><span>Тема</span><div class="seg">${seg("theme", "auto", "Как в системе")}${seg("theme", "light", "Светлая")}${seg("theme", "dark", "Тёмная")}</div></div>
+      </section>`;
+    else if (sub === "chances") body = `<section class="panel stack"><h2>Шансы в партии</h2>
+        <p class="small muted">Во время партии на её экране — фаворит и шансы каждого: по очкам прошлых раундов или по тому, кто у кого выигрывал.</p>
+        <div class="spread"><span>Показывать</span><div class="seg">${seg("chances", true, "Вкл")}${seg("chances", false, "Выкл")}</div></div>
+        ${st.chances === false ? "" : `<div class="spread"><span class="small"><b>В детских играх</b><br><span class="muted">Для игр с 4–5 лет, как «Зоопарк»: малышу может быть обидно видеть свой маленький шанс.</span></span><div class="seg">${seg("kidsChances", true, "Вкл")}${seg("kidsChances", false, "Выкл")}</div></div>`}
       </section>`;
     else if (sub === "backup") body = `<section class="panel stack">
         <h2>Копия данных</h2>
@@ -2525,6 +2538,7 @@
         const k = el.dataset.k; let v = el.dataset.v;
         if (k === "voiceRate") v = Number(v);
         if (k === "speakAnswers") { v = v === "true"; if (!v) { BH.voice.stopAudio(); BH.speech.stop(); } }
+        if (k === "chances" || k === "kidsChances") v = v === "true";
         S().settings[k] = v; BH.saveNow(); applyTheme(); render(); break;
       }
       case "say-test": {
@@ -2773,7 +2787,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.21.0";
+  BH.version = "0.22.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

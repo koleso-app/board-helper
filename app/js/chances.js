@@ -119,6 +119,60 @@
     return val;
   };
 
+  /* the favourite by the past results (a race — Coconuts, Gold Fever, Zoo — and a scored game before its first round,
+     old games written down with their final scores only included): who beat whom.
+     Each finished game of this game is a choice of its winner among its players (the Luce model, a winner of a set of n
+     with the chance s_w / Σ s); the strengths s are fitted to all those games at once (Hunter's MM steps), so beating
+     strong players counts more. Each player also has PRIOR games won and PRIOR lost against an average player (s = 1):
+     with few games the chances stay close to even, and a newcomer is average. A draw among some shares the win;
+     a game everybody "won" says nothing. Not shown before MIN_GAMES games with someone of this table and two of the table
+     with games of their own, or for pairs. */
+  C.MIN_GAMES = 3;
+  C.PRIOR = 2;   // virtual wins and as many losses against an average player: 3:0 between two gives about 75%, not 86%
+  // a scored game counts when it was played to its end (a game given up after a round says little), or written down
+  // with its final scores; a race has no score to tell
+  const counted = (x, g) => x.status === "finished" && x.players.length >= 2 && x.winners && x.winners.length && x.winners.length < x.players.length &&
+    !BH.isTeamGame(x) && (g.scoring.type !== "rounds" || BH.hasFinal(x) || BH.checkEnd(x).over);
+  C.byWins = (s, g) => {
+    g = g || BH.game(s.gameId);
+    const sc = g && g.scoring;
+    if (!sc || (sc.type !== "race" && sc.type !== "rounds") || s.status !== "playing" || s.players.length < 2 || BH.isTeamGame(s)) return null;
+    const mine = BH.state.sessions.filter(x => x.id !== s.id && x.gameId === s.gameId);
+    const games = mine.filter(x => counted(x, g) && x.players.some(id => s.players.includes(id)));
+    // enough games, and two of this table with some — else a newcomer (average) would be «the favourite» against one who lost
+    if (games.length < C.MIN_GAMES || s.players.filter(id => games.some(x => x.players.includes(id))).length < 2) return null;
+    const ids = [...new Set(games.flatMap(x => x.players).concat(s.players))];
+    const won = Object.fromEntries(ids.map(id => [id, C.PRIOR])), str = Object.fromEntries(ids.map(id => [id, 1]));   // the virtual wins
+    for (const x of games) for (const id of x.winners) if (won[id] !== undefined) won[id] += 1 / x.winners.length;
+    for (let it = 0; it < 1000; it++) {
+      const den = Object.fromEntries(ids.map(id => [id, 2 * C.PRIOR / (str[id] + 1)]));   // the virtual games against s = 1
+      for (const x of games) { const sum = x.players.reduce((a, id) => a + str[id], 0); for (const id of x.players) den[id] += 1 / sum; }
+      let move = 0;
+      for (const id of ids) { const v = won[id] / den[id]; move = Math.max(move, Math.abs(v - str[id]) / str[id]); str[id] = v; }
+      if (move < 1e-9) break;
+    }
+    const total = s.players.reduce((a, id) => a + str[id], 0);
+    // the record shown is of all finished games of this game, as on the player's card
+    const done = mine.filter(x => x.status === "finished");
+    const out = s.players.map(id => ({ ids: [id], p: str[id] / total,
+      played: done.filter(x => x.players.includes(id)).length, won: done.filter(x => (x.winners || []).includes(id)).length }));
+    out.sort((a, b) => b.p - a.p || s.players.indexOf(a.ids[0]) - s.players.indexOf(b.ids[0]));
+    return { kind: "wins", sides: out, tie: 0, games: games.length };
+  };
+
+  /* what the play screen shows: the chances by the points when there are rounds enough, else — before the first round of a
+     scored game, or in a race — the favourite by the past results; nothing when switched off in the settings
+     (S.chances), and in a game for small children (younger than 6) unless switched on (S.kidsChances) */
+  C.kids = g => parseInt(g && g.age, 10) < 6;
+  C.forPlay = (s, g) => {
+    g = g || BH.game(s.gameId);
+    const st = BH.state.settings || {};
+    if (!g || st.chances === false || (C.kids(g) && !st.kidsChances)) return null;
+    const byScore = g.scoring && g.scoring.type === "rounds" ? C.of(s, g) : null;
+    if (byScore) return Object.assign({ kind: "score" }, byScore);
+    return g.scoring && (g.scoring.type === "race" || s.rounds.length === 0) ? C.byWins(s, g) : null;
+  };
+
   /* chances as people say them: whole percents that add up to 100 (the largest remainders get the leftover points),
      «<1%» for a chance that rounds to nothing, «>99%» for one that rounds to all */
   C.pcts = ps => {

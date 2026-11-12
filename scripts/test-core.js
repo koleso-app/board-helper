@@ -903,5 +903,82 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.strictEqual(BH.chances.pcts([1, 0]).join(), "100%,0%");
     assert.strictEqual(BH.chances.pcts([0.414, 0.4, 0.186]).join(), "41%,40%,19%");
   });
+  // the favourite by the past results: who beat whom (the Luce model with a pull to the average)
+  const fin = (id, gameId, players, winners, extra) => Object.assign({ id, gameId, players, status: "finished", rounds: [], winners, opts: {} }, extra || {});
+  t("chances by wins: the one who wins most is the favourite; few games stay close to even; a newcomer is average", () => {
+    const g = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"].map((id, i) => fin(id, "goldfever", ["a", "b", "c"], [i < 6 ? "a" : "b"]));
+    load(g.concat([cur("goldfever", ["a", "b", "c"])]));
+    const r = BH.chances.byWins(BH.session("now"));
+    assert.strictEqual(r.kind, "wins"); assert.strictEqual(r.sides[0].ids[0], "a"); assert.ok(r.sides[0].p > 0.5, "a: " + r.sides[0].p);
+    assert.strictEqual(r.sides[0].won, 6); assert.strictEqual(r.sides[0].played, 8); assert.strictEqual(r.games, 8);
+    assert.ok(r.sides.find(sd => sd.ids[0] === "b").p > r.sides.find(sd => sd.ids[0] === "c").p, "b won twice, c never");
+    assert.ok(Math.abs(r.sides.reduce((x, y) => x + y.p, 0) - 1) < 1e-9);
+    // three games, one each: about even
+    load([fin("p1", "goldfever", ["a", "b", "c"], ["a"]), fin("p2", "goldfever", ["a", "b", "c"], ["b"]), fin("p3", "goldfever", ["a", "b", "c"], ["c"]), cur("goldfever", ["a", "b", "c"])]);
+    const e = BH.chances.byWins(BH.session("now"));
+    assert.ok(e.sides.every(sd => Math.abs(sd.p - 1 / 3) < 0.01));
+    // d has never played: about an average player's share
+    load(g.concat([cur("goldfever", ["a", "b", "c", "d"])]));
+    const n = BH.chances.byWins(BH.session("now")), d = n.sides.find(sd => sd.ids[0] === "d");
+    assert.strictEqual(d.played, 0); assert.ok(d.p > n.sides.find(sd => sd.ids[0] === "c").p && d.p < n.sides.find(sd => sd.ids[0] === "a").p);
+  });
+  t("chances by wins: beating a strong player counts more than beating a weak one", () => {
+    // a always beats c; b beats c once and loses to a; d beats a once
+    const g = [fin("p1", "zoo", ["a", "c"], ["a"]), fin("p2", "zoo", ["a", "c"], ["a"]), fin("p3", "zoo", ["a", "c"], ["a"]), fin("p4", "zoo", ["a", "c"], ["a"]),
+      fin("p5", "zoo", ["b", "c"], ["b"]), fin("p7", "zoo", ["a", "b"], ["a"]), fin("p6", "zoo", ["d", "a"], ["d"])];
+    load(g.concat([cur("zoo", ["b", "d"])]));
+    const r = BH.chances.byWins(BH.session("now"));
+    assert.strictEqual(r.sides[0].ids[0], "d", "d's one win was over the strong a, b's over the weak c");
+  });
+  t("chances by wins: not before 3 games with someone of this table; not for pairs; a draw of all says nothing", () => {
+    load([fin("p1", "goldfever", ["a", "b"], ["a"]), fin("p2", "goldfever", ["a", "b"], ["a"]), cur("goldfever", ["a", "b"])]);
+    assert.strictEqual(BH.chances.byWins(BH.session("now")), null, "two games");
+    load([fin("p1", "goldfever", ["a", "b"], ["a"]), fin("p2", "goldfever", ["a", "b"], ["a"]), fin("p3", "goldfever", ["a", "b"], ["a", "b"]), cur("goldfever", ["a", "b"])]);
+    assert.strictEqual(BH.chances.byWins(BH.session("now")), null, "the shared win of everyone does not count");
+    load([fin("p1", "goldfever", ["c", "d"], ["c"]), fin("p2", "goldfever", ["c", "d"], ["c"]), fin("p3", "goldfever", ["c", "d"], ["c"]), cur("goldfever", ["a", "b"])]);
+    assert.strictEqual(BH.chances.byWins(BH.session("now")), null, "nobody of this table played");
+    load([1, 2, 3, 4].map(i => fin("p" + i, "crokinole", ["a", "b", "c", "d"], ["a", "c"])).concat([cur("crokinole", ["a", "b", "c", "d"])]));
+    assert.strictEqual(BH.chances.byWins(BH.session("now")), null, "pairs");
+  });
+  t("chances on the play screen: by the points when there are rounds enough; by the wins in a race and before a scored game's first round (old games with final scores only count); settings", () => {
+    // old Flip 7 games written down with their final scores only: no rounds, but a winner
+    const old = [1, 2, 3, 4].map(i => fin("o" + i, "flip7", ["a", "b"], ["a"], { final: { a: 210, b: 150 } }));
+    load(old.concat([cur("flip7", ["a", "b"])]));
+    const r = BH.chances.forPlay(BH.session("now"));
+    assert.strictEqual(r.kind, "wins"); assert.strictEqual(r.sides[0].ids[0], "a");
+    load(old.concat([cur("flip7", ["a", "b"], rounds(1, { a: 10, b: 30 }))]));
+    assert.strictEqual(BH.chances.forPlay(BH.session("now")), null, "after the first round the wins say nothing of this game's score");
+    load(old.concat([past("p1", "flip7", ["a", "b"], rounds(12, even3)), cur("flip7", ["a", "b"], rounds(1, { a: 10, b: 30 }))]));
+    assert.strictEqual(BH.chances.forPlay(BH.session("now")).kind, "score");
+    // the settings: off — nothing; a game for small children — only when switched on
+    const z = [1, 2, 3].map(i => fin("z" + i, "zoo", ["a", "b"], ["a"]));
+    load(z.concat([cur("zoo", ["a", "b"])]));
+    assert.strictEqual(BH.chances.forPlay(BH.session("now")), null, "«Зоопарк» is 4+: off by default");
+    BH.state.settings.kidsChances = true;
+    assert.strictEqual(BH.chances.forPlay(BH.session("now")).kind, "wins");
+    BH.state.settings.chances = false;
+    assert.strictEqual(BH.chances.forPlay(BH.session("now")), null, "switched off");
+    assert.strictEqual(JSON.stringify(BH._normalize({ settings: {} }).settings), JSON.stringify({ theme: "auto", voiceRate: 1, speakAnswers: true, chances: true, kidsChances: false }));
+  });
+  t("chances by wins: a newcomer is not «the favourite» against one who lost; 3:0 is about 75%, not a sure thing", () => {
+    load([1, 2, 3].map(i => fin("p" + i, "goldfever", ["b", "c"], ["c"])).concat([cur("goldfever", ["b", "d"])]));
+    assert.strictEqual(BH.chances.byWins(BH.session("now")), null, "only b of this table has games");
+    load([1, 2, 3].map(i => fin("p" + i, "goldfever", ["a", "b"], ["a"])).concat([cur("goldfever", ["a", "b"])]));
+    const r = BH.chances.byWins(BH.session("now"));
+    assert.ok(r.sides[0].p > 0.7 && r.sides[0].p < 0.8, "3:0 — " + r.sides[0].p);
+  });
+  t("chances by wins: a scored game given up before its end does not count; the record shown is of all finished games", () => {
+    // three Flip 7 games stopped after a round with a «winner» — not played to 200, no final scores: not counted
+    const quit = [1, 2, 3].map(i => fin("q" + i, "flip7", ["a", "b"], ["a"], { rounds: rounds(1, { a: 30, b: 10 }) }));
+    load(quit.concat([cur("flip7", ["a", "b"])]));
+    assert.strictEqual(BH.chances.byWins(BH.session("now")), null);
+    const full = [1, 2, 3].map(i => fin("w" + i, "flip7", ["a", "b"], ["b"], { rounds: rounds(5, { a: 30, b: 45 }) }));
+    load(quit.concat(full, [cur("flip7", ["a", "b"])]));
+    const r = BH.chances.byWins(BH.session("now"));
+    assert.strictEqual(r.sides[0].ids[0], "b", "only the games played to 200 count");
+    assert.strictEqual(r.games, 3);
+    const a = r.sides.find(sd => sd.ids[0] === "a");
+    assert.strictEqual(a.played, 6); assert.strictEqual(a.won, 3, "the record: all 6 finished games, as on the player's card");
+  });
   console.log(`chances: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

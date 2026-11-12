@@ -562,6 +562,7 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .odds-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
 .odds-t{min-width:0}
 .odds-t b{display:block;font-weight:600;overflow-wrap:anywhere}
+.odds-rec{display:block;font-size:13px;color:var(--muted);margin-top:1px}
 .odds .bar{height:6px;border-radius:99px;background:var(--sunk);overflow:hidden;margin-top:6px}
 .odds .bar i{display:block;height:100%;border-radius:99px;min-width:2px}
 .odds-p{font-weight:700;font-size:17px;min-width:3.2em;text-align:right}

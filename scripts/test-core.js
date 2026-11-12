@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/chances.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -807,4 +807,101 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     for (const k of Object.keys(G.images.rules)) assert.ok(ids.has(k), "image for " + k);
   });
   console.log(`zoo: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // the chances to win a game of scored rounds (app/js/chances.js): replayed from the rounds really played
+  const before = passed;
+  const P = [{ id: "a", name: "А" }, { id: "b", name: "Б" }, { id: "c", name: "В" }, { id: "d", name: "Г" }];
+  const rounds = (n, sc) => Array.from({ length: n }, (_, i) => ({ at: i + 1, scores: typeof sc === "function" ? sc(i) : sc, flags: {} }));
+  const load = sessions => BH.replaceFromSync({ players: P, places: [], placesTouched: true, sessions });
+  const cur = (gameId, players, rs, opts, extra) => Object.assign({ id: "now", gameId, players, status: "playing", rounds: rs || [], opts: opts || {} }, extra || {});
+  const past = (id, gameId, players, rs, opts) => ({ id, gameId, players, status: "finished", rounds: rs, winners: [players[0]], opts: opts || {} });
+  const even3 = i => ({ a: [5, 25, 40][i % 3], b: [40, 5, 25][i % 3] });
+  t("chances: nothing to say without enough rounds, with one player, or when the game is over", () => {
+    load([cur("flip7", ["a", "b"])]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null, "no rounds at all");
+    load([past("p1", "flip7", ["a", "b"], rounds(7, { a: 20, b: 20 })), cur("flip7", ["a", "b"])]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null, "7 rounds are not enough, whatever the number of players");
+    load([past("p1", "flip7", ["a", "b"], rounds(12, { a: 20, b: 20 })), cur("flip7", ["a"])]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null, "one player");
+    load([past("p1", "flip7", ["a", "b"], rounds(12, { a: 20, b: 20 })), cur("flip7", ["a", "b"], rounds(1, { a: 210, b: 10 }))]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null, "someone has reached 200: the game is over");
+    // a solo challenge is another game: its rounds do not count
+    load([past("p1", "flip7", ["a"], rounds(12, { a: 50 })), cur("flip7", ["a", "b"])]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null);
+  });
+  t("chances: the one who always scores more is the favourite; equal players are close to even; the same state gives the same numbers", () => {
+    load([past("p1", "flip7", ["a", "b", "c"], rounds(10, { a: 40, b: 5, c: 5 })), cur("flip7", ["a", "b", "c"])]);
+    const r = BH.chances.of(BH.session("now"));
+    assert.strictEqual(r.sides[0].ids[0], "a"); assert.ok(r.sides[0].p > 0.9, "a: " + r.sides[0].p);
+    assert.ok(Math.abs(r.sides.reduce((x, y) => x + y.p, 0) + r.tie - 1) < 1e-9, "the chances and the draw add up to 1");
+    assert.strictEqual(r.rounds, 10); assert.strictEqual(r.games, 1);
+    assert.strictEqual(BH.chances.favourites(r).length, 1);
+    load([past("p1", "flip7", ["a", "b"], rounds(12, even3)), cur("flip7", ["a", "b"])]);
+    const e = BH.chances.of(BH.session("now"));
+    assert.ok(Math.abs(e.sides[0].p - 0.5) < 0.06, "even: " + e.sides[0].p);
+    assert.strictEqual(BH.chances.favourites(e).length, 2, "close chances are «about even», not a favourite");
+    assert.strictEqual(JSON.stringify(BH.chances.of(BH.session("now"))), JSON.stringify(e), "seeded: no flicker on a redraw");
+  });
+  t("chances: the points already scored count — far ahead near the end, a sure thing", () => {
+    load([past("p1", "flip7", ["a", "b"], rounds(12, even3)), cur("flip7", ["a", "b"], rounds(1, { a: 190, b: 20 }))]);
+    const r = BH.chances.of(BH.session("now"));
+    assert.strictEqual(r.sides[0].ids[0], "a"); assert.ok(r.sides[0].p > 0.95, "a: " + r.sides[0].p);
+  });
+  t("chances: a tie at the target plays on until one leads — and while the table plays that extra round, the chances show", () => {
+    // both always score the same: every replay that reaches 200 is a tie, played on until the cap — a draw, never half a win
+    load([past("p1", "flip7", ["a", "b"], rounds(10, { a: 20, b: 20 })), cur("flip7", ["a", "b"], rounds(9, { a: 20, b: 20 }))]);
+    const d = BH.chances.of(BH.session("now"));
+    assert.strictEqual(d.tie, 1); assert.strictEqual(d.sides[0].p, 0);
+    load([past("p1", "flip7", ["a", "b"], rounds(10, even3)), cur("flip7", ["a", "b"], rounds(1, { a: 205, b: 205 }))]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null, "a tie at 200 not played on yet: the app asks first");
+    load([past("p1", "flip7", ["a", "b"], rounds(10, even3)), cur("flip7", ["a", "b"], rounds(1, { a: 205, b: 205 }), {}, { continueTie: 1 })]);
+    const r = BH.chances.of(BH.session("now"));
+    assert.ok(r && r.tie < 0.2 && r.sides[0].p > 0.4, "«Сыграть ещё раунд»: the extra round decides");
+  });
+  t("chances: Vengeance's brutal rounds apart from the ordinary ones", () => {
+    load([past("p1", "flip7v", ["a", "b"], rounds(12, { a: 30, b: 10 })), cur("flip7v", ["a", "b"], [], { brutal: true })]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null, "no brutal rounds yet");
+    load([past("p1", "flip7v", ["a", "b"], rounds(12, { a: 30, b: 10 })), cur("flip7v", ["a", "b"])]);
+    assert.strictEqual(BH.chances.of(BH.session("now")).sides[0].ids[0], "a");
+  });
+  t("chances: Crokinole — the board counts are drawn and the game's rule settles the round; nothing on the board is 0; a number written in counts", () => {
+    const det = (ids, cnt, man) => Object.fromEntries(ids.map((id, i) => [id, { sel: cnt[i] ? { picks: {}, flags: {}, counts: cnt[i] } : { picks: {}, flags: {} }, manual: man ? man[i] : null }]));
+    const croki = (n, ids, cnt, man) => Array.from({ length: n }, (_, i) => ({ at: i + 1, scores: { [ids[0]]: 2, [ids[1]]: 0 }, flags: {}, detail: det(ids, cnt, man) }));
+    // a tournament: after 3 rounds won 2:0 the other side can get 2 at most in the last one — 6 against 2
+    load([past("p1", "crokinole", ["a", "b"], croki(5, ["a", "b"], [{ 20: 1, 15: 2 }, { 10: 1 }]), { tour: true }), cur("crokinole", ["a", "b"], croki(3, ["a", "b"], [{ 20: 1, 15: 2 }, { 10: 1 }]), { tour: true })]);
+    const r = BH.chances.of(BH.session("now"));
+    assert.strictEqual(r.sides[0].ids[0], "a"); assert.strictEqual(r.sides[0].p, 1);
+    // the home game (12 discs) has no rounds of its own kind: the tournament's 8-disc rounds do not count
+    load([past("p1", "crokinole", ["a", "b"], croki(5, ["a", "b"], [{ 20: 1, 15: 2 }, { 10: 1 }]), { tour: true }), cur("crokinole", ["a", "b"])]);
+    assert.strictEqual(BH.chances.of(BH.session("now")), null);
+    // b never has a disc on the board (no counts stored): those are rounds of 0 — b has no chance against a's 20s
+    load([past("p1", "crokinole", ["a", "b"], croki(10, ["a", "b"], [{ 20: 1 }, null])), cur("crokinole", ["a", "b"])]);
+    const z = BH.chances.of(BH.session("now"));
+    // (before: b had no rounds of its own and was drawn from a's — about even)
+    assert.strictEqual(z.sides[0].ids[0], "a"); assert.ok(z.sides[0].p > 0.99, "a side with nothing on the board scored 0, not «unknown»: " + z.sides[0].p);
+    // the numbers written in by hand are the counts
+    load([past("p1", "crokinole", ["a", "b"], croki(10, ["a", "b"], [null, null], [5, 60])), cur("crokinole", ["a", "b"])]);
+    assert.strictEqual(BH.chances.of(BH.session("now")).sides[0].ids[0], "b");
+    // pairs: seats 1 and 3 against 2 and 4
+    const pr = n => Array.from({ length: n }, (_, i) => ({ at: i + 1, scores: { a: 10, c: 10, b: 0, d: 0 }, flags: {}, detail: det(["a", "b"], [{ 20: 1 }, { 10: 1 }]) }));
+    load([past("p1", "crokinole", ["a", "b", "c", "d"], pr(8)), cur("crokinole", ["a", "b", "c", "d"])]);
+    const q = BH.chances.of(BH.session("now"));
+    assert.strictEqual(q.sides.length, 2); assert.strictEqual(q.sides[0].ids.join(), "a,c"); assert.ok(q.sides[0].p > 0.9);
+  });
+  t("chances: a tournament's draw is shown apart, not shared as half a win", () => {
+    const det = { a: { sel: { picks: {}, flags: {}, counts: { 15: 1 } }, manual: null }, b: { sel: { picks: {}, flags: {}, counts: { 15: 1 } }, manual: null } };
+    load([past("p1", "crokinole", ["a", "b"], Array.from({ length: 8 }, (_, i) => ({ at: i, scores: { a: 1, b: 1 }, flags: {}, detail: det })), { tour: true }), cur("crokinole", ["a", "b"], [], { tour: true })]);
+    const r = BH.chances.of(BH.session("now"));
+    assert.strictEqual(r.tie, 1, "always equal on the board: every tournament is a draw"); assert.strictEqual(r.sides[0].p, 0);
+  });
+  t("chances: whole percents that add up to 100; «<1%» and «>99%» at the edges", () => {
+    const sum = a => a.reduce((x, v) => x + (parseInt(v.replace(/[<>]/, ""), 10) || 0), 0);
+    assert.strictEqual(BH.chances.pcts([0.505, 0.495]).join(), "51%,49%");
+    assert.strictEqual(sum(BH.chances.pcts([0.333, 0.333, 0.334])), 100);
+    assert.strictEqual(BH.chances.pcts([0.996, 0.004]).join(), ">99%,<1%");
+    assert.strictEqual(BH.chances.pcts([1, 0]).join(), "100%,0%");
+    assert.strictEqual(BH.chances.pcts([0.414, 0.4, 0.186]).join(), "41%,40%,19%");
+  });
+  console.log(`chances: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

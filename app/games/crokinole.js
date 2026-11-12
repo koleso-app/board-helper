@@ -102,6 +102,9 @@
     },
 
     // a round: discs counted by zones for each side, then the round is settled between the sides
+    // the chances to win: rounds of the same number of discs, singles apart from pairs
+    chances: { key: c => (c.players === 4 ? "pairs" : "solo") + discs(c),
+      note: "Приложение 2000 раз доигрывает партию с подсчётами на доске, какие обычно бывают у каждой стороны. Это прикидка: как лягут диски, оно не знает." },
     scoring: { type: "rounds", target, roundsCount: c => (tour(c) ? 4 : null),
       tieNote: c => (race(c) ? "В правилах этого случая нет — можно сыграть ещё раунд." : "По правилам NCA это ничья, по правилам Crokinole Canada и на чемпионате мира играют ещё раунд.") },
     sideScore: {

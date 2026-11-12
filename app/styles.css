@@ -548,6 +548,24 @@ a.profile{text-decoration:none;color:inherit;border-radius:16px}
 .sess-hero-n{font-family:var(--f-display);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere;letter-spacing:0}
 /* a running game: the round, and who deals (with the wheel before the first round) */
 .status-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px}
+/* the chances to win: one slim row under the board, a window with everyone */
+.chance-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:12px;align-items:center;width:100%;padding:10px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.chance-row:hover{border-color:var(--accent)}
+.chance-row>svg{width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.chance-ic{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.chance-ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round}
+.chance-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.chance-t .label{color:var(--accent)}
+.chance-t b{font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
+.chance-p{font-weight:700;font-size:20px;color:var(--accent)}
+.odds{display:flex;flex-direction:column;gap:12px;margin-bottom:12px}
+.odds-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
+.odds-t{min-width:0}
+.odds-t b{display:block;font-weight:600;overflow-wrap:anywhere}
+.odds .bar{height:6px;border-radius:99px;background:var(--sunk);overflow:hidden;margin-top:6px}
+.odds .bar i{display:block;height:100%;border-radius:99px;min-width:2px}
+.odds-p{font-weight:700;font-size:17px;min-width:3.2em;text-align:right}
+.odds-tie{width:36px;height:36px;border-radius:50%;background:var(--sunk);color:var(--muted);display:grid;place-items:center;font-weight:700;font-size:18px}
 .stat-tile{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);min-width:0}
 .stat-tile:not(.leader){flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-width:84px}
 .round-no{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1}

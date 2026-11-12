@@ -1001,6 +1001,33 @@
       ${k.when ? `<p class="mc-when">${esc(cap(k.when))}</p>` : ""}<div class="mc-does">${textHTML(cap(k.does), g.id)}</div>${k.note ? `<p class="small muted">${esc(k.note)}</p>` : ""}`,
       buttons: [{ label: "Понятно", primary: true, run: closeDialog }] });
   }
+  /* the chances to win (app/js/chances.js): the favourite in one slim row under the board; a tap shows everyone */
+  const sideNames = ids => ids.map(id => (BH.player(id) || { name: "?" }).name).join(" и ");
+  const sideFaces = ids => (ids.length > 1 ? `<span class="faces pair-faces">${ids.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span>` : BH.avatar(BH.player(ids[0]) || { name: "?", color: "#888" }));
+  // one favourite — the name and the chance; several close to the best — their names; everyone close — «about even»
+  function chanceRow(s, g) {
+    const ch = BH.chances.of(s, g); if (!ch) return "";
+    const fav = BH.chances.favourites(ch), all = fav.length === ch.sides.length, one = fav.length === 1;
+    const label = all ? "Шансы" : one ? "Фаворит" : "Фавориты", what = all ? "примерно равны" : fav.map(sd => sideNames(sd.ids)).join(", ");
+    const pct = one ? BH.chances.pcts(ch.sides.map(sd => sd.p).concat(ch.tie))[0] : "";
+    return `<button type="button" class="chance-row" data-act="chances-open" aria-label="Шансы на победу: подробнее">
+      <span class="chance-ic">${IC.chart}</span>
+      <span class="chance-t"><span class="label">${label}</span><b>${esc(what)}</b></span>
+      ${pct ? `<span class="chance-p num">${pct}</span>` : ""}${IC.chev}</button>`;
+  }
+  function openChances(s, g) {
+    const ch = BH.chances.of(s, g); if (!ch) return;
+    const tie = ch.tie >= 0.005, pc = BH.chances.pcts(ch.sides.map(sd => sd.p).concat(ch.tie));
+    const row = (faces, name, p, col, i) => `<div class="odds-row">${faces}<div class="odds-t"><b>${esc(name)}</b><div class="bar"><i style="width:${Math.round(p * 100)}%;background:${col}"></i></div></div><span class="odds-p num">${pc[i]}</span></div>`;
+    const rows = ch.sides.map((sd, i) => row(sideFaces(sd.ids), sideNames(sd.ids), sd.p, (BH.player(sd.ids[0]) || { color: "#888" }).color, i)).join("") +
+      (tie ? row(`<span class="odds-tie" aria-hidden="true">=</span>`, "Ничья", ch.tie, "var(--muted)", ch.sides.length) : "");
+    const basis = `По ${ch.rounds} ${BH.plural(ch.rounds, "раунду", "раундам", "раундам")} из ${ch.games} ${BH.plural(ch.games, "партии", "партий", "партий")}.`;
+    const how = (g.chances && g.chances.note) || `Приложение ${BH.chances.SIMS} раз доигрывает партию с очками, какие каждый обычно набирает за раунд. Это прикидка: карт на руках оно не видит.`;
+    openDialog({ title: "Шансы на победу",
+      html: `<div class="odds">${rows}</div><p class="small muted">${basis} ${esc(how)}</p>`,
+      buttons: [{ label: "Понятно", primary: true, run: closeDialog }] });
+  }
+
   // a race without rounds (Coconuts): the turn in short lines, the magic cards at hand, the end in one tap
   function viewPlayRace(s, g) {
     const sc = g.scoring, ctx = BH.ctxOf(s), goal = BH.raceGoal(g, s), cards = BH.raceCards(g, s);
@@ -1095,6 +1122,7 @@
       <div class="play">
         <div class="stack">
           <div class="board">${board}</div>
+          ${chanceRow(s, g)}
           ${g.rounds.reminder ? `<details class="panel" ${r === 0 ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Как идёт раунд</summary><div class="reminder">${stepsHTML(g.rounds.reminder, g.id)}${afterHTML(afterOf(g, BH.ctxOf(s), r + 1, 0), g.id)}</div></details>` : ""}
           ${hist}
         </div>
@@ -2236,6 +2264,7 @@
       case "draft-race-winner": draft.winners = draft.winners.includes(el.dataset.id) ? [] : [el.dataset.id]; render(); break;
       case "draft-race-how": draft.raceHow = draft.raceHow === el.dataset.v ? null : el.dataset.v; draft.winners = []; render(); break;
       case "race-last": sheet.last = el.dataset.id; renderOverlay(); break;
+      case "chances-open": { const g = s && BH.game(s.gameId); if (g) openChances(s, g); break; }
       case "mc-open": { const g = s && BH.game(s.gameId), k = g && BH.raceCards(g, s)[+el.dataset.i]; if (k) openMagicCard(g, k); break; }
       case "race-save": { if (!sheet || sheet.kind !== "race") break; const rs = BH.session(sheet.sid), st = raceSheetState(rs); if (!st.winner) break;
         const counts = Object.fromEntries(rs.players.map(id => [id, Math.max(0, Math.round(Number(sheet.counts[id])) || 0)]));
@@ -2744,7 +2773,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.20.0";
+  BH.version = "0.21.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

@@ -108,6 +108,8 @@
       after: ["Очки: числа → *÷2* → вычеты → *+15* за «Подкидной 7». Приложение посчитает само.", "Запишите раунд — кнопка внизу.", "Колода уходит налево — к новому дилеру."],
     },
 
+    // the chances to win: the brutal mode's rounds (below zero) apart from the ordinary ones
+    chances: { key: c => (c.opt("brutal") ? "brutal" : "normal") },
     scoring: { type: "rounds", target: 200, tieNote: "Что делать при ничьей, в правилах не сказано. Можно сыграть ещё один раунд или записать ничью." },
 
     options: [

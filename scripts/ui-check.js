@@ -61,7 +61,7 @@
   const ctx = document.createElement("canvas").getContext("2d");
   async function visit(hash) { location.hash = hash; await wait(450); window.scrollTo(0, 0); }
   async function withTabs(where) {
-    const keys = [...document.querySelectorAll('[data-act="pc-tab"],[data-act="gc-tab"],[data-act="pl-tab"],[data-act="play-tab"],[data-act="done-tab"]')].map(b => [b.dataset.act, b.dataset.tab]);
+    const keys = [...document.querySelectorAll('[data-act="pc-tab"],[data-act="gc-tab"],[data-act="pl-tab"],[data-act="play-tab"],[data-act="done-tab"],[data-act="stats-tab"]')].map(b => [b.dataset.act, b.dataset.tab]);
     if (!keys.length) return scan(where);
     const out = [];
     for (const [act, tab] of keys) { const b = document.querySelector(`[data-act="${act}"][data-tab="${tab}"]`); if (b) { b.click(); await wait(300); } out.push(...scan(`${where} [${tab}]`)); }

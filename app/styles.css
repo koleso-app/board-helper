@@ -578,6 +578,27 @@ details.hint>summary{cursor:pointer;font-weight:600}
 .phead-act{color:var(--ink)}
 .more-btn{margin-top:6px}
 .about-row{gap:12px}
+.phead-ic{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.phead-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.wheel-hint{font-size:14px;line-height:1.4;color:var(--muted)}
+/* the calendar: the name of the month opens the whole month (and closes it to one week) */
+.cal-title{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;font:inherit;font-weight:700;color:var(--ink);cursor:pointer;padding:6px 8px;border-radius:10px}
+.cal-title svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transform:rotate(90deg);transition:transform .15s}
+.cal-title[aria-expanded="true"] svg{transform:rotate(-90deg)}
+.cal-d.other{opacity:.5}
+/* the games: tiles two in a row; the search stays on top while scrolling */
+.search-pin{position:sticky;top:0;z-index:5;padding:6px 0;background:var(--bg)}
+.gtiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:700px){.gtiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.gtile{display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--surface);text-decoration:none;color:inherit;min-width:0}
+.gtile[hidden]{display:none}
+.gtile .cover{width:44px;height:44px;border-radius:10px;overflow:hidden;flex:none;display:grid;place-items:center;background:var(--sunk)}
+.gtile .t{min-width:0;display:flex;flex-direction:column;gap:2px}
+.gtile b{font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.gtile small{font-size:12.5px;color:var(--muted);line-height:1.3}
+.gt-n{display:inline-flex;align-items:center;gap:4px;color:var(--accent)!important;font-weight:600}
+.gt-n.zero{color:var(--muted)!important;font-weight:500}
+.gt-n svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .sel-sm{width:auto;max-width:180px;min-height:36px;padding:4px 30px 4px 10px;font-size:14px}
 /* the victory of a result: gold (an alarm — red) */
 .win-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;background:var(--win-soft)}

@@ -179,7 +179,7 @@
     renderedHash = location.hash;
     if (kept) restoreState(kept);
     document.body.classList.toggle("in-game", inGame);
-    document.body.classList.toggle("has-phead", !!main.querySelector(".tab-screen"));
+    document.body.classList.toggle("has-phead", !!main.querySelector(".phead"));
     BH.$$("[data-nav]").forEach(a => { if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     if (after) { try { after(); } catch (e) { console.error(e); } }
     renderOverlay();
@@ -372,40 +372,60 @@
     </div>`;
   }
 
-  /* ---------- the sessions tab: a month calendar and the games of the month or of a chosen day ---------- */
-  let cal = null;   // { y, m, day } — kept while moving around the app
+  /* ---------- the sessions tab: a calendar — one week, or the month on a tap of its name — and the games of that week,
+     month or of a chosen day ---------- */
+  let cal = null;   // { y, m, day, month: the whole month shown, wk: the Monday of the week shown } — kept while moving around
+  const mondayOf = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
+  const dayKey = d => d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
   function viewSessions() {
     const now = new Date();
-    if (!cal) cal = { y: now.getFullYear(), m: now.getMonth(), day: null };
-    const first = new Date(cal.y, cal.m, 1), days = new Date(cal.y, cal.m + 1, 0).getDate();
-    const lead = (first.getDay() + 6) % 7;   // weeks start on Monday
-    const dayOf = s => { const d = new Date(s.created); return d.getFullYear() === cal.y && d.getMonth() === cal.m ? d.getDate() : 0; };
-    const inMonth = S().sessions.filter(dayOf).sort((a, b) => (b.created || 0) - (a.created || 0));
-    const per = {}; for (const s of inMonth) if (s.status === "finished") per[dayOf(s)] = (per[dayOf(s)] || 0) + 1;
-    const thisMonth = cal.y === now.getFullYear() && cal.m === now.getMonth();
+    if (!cal) cal = { y: now.getFullYear(), m: now.getMonth(), day: null, month: false, wk: mondayOf(now).getTime() };
+    if (!cal.wk) cal.wk = mondayOf(now).getTime();
+    const fin = S().sessions.filter(s => s.status === "finished");
+    const per = {}; for (const s of fin) { const k = dayKey(new Date(s.created)); per[k] = (per[k] || 0) + 1; }
+    const cell = (d, other) => {
+      const n = per[dayKey(d)] || 0, mine = d.getFullYear() === cal.y && d.getMonth() === cal.m && cal.day === d.getDate();
+      return `<button class="cal-d${dayKey(d) === dayKey(now) ? " today" : ""}${other ? " other" : ""}" data-act="cal-day" data-d="${d.getDate()}" data-ym="${d.getFullYear()}-${d.getMonth()}" aria-pressed="${mine}" aria-label="${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}${n ? ", " + n + " " + BH.plural(n, "партия", "партии", "партий") : ""}"><span>${d.getDate()}</span><i class="dots">${"<b></b>".repeat(Math.min(n, 4))}</i></button>`;
+    };
     const cells = [];
-    for (let i = 0; i < lead; i++) cells.push('<span class="cal-d off" aria-hidden="true"></span>');
-    for (let d = 1; d <= days; d++) {
-      const n = per[d] || 0;
-      cells.push(`<button class="cal-d${thisMonth && d === now.getDate() ? " today" : ""}" data-act="cal-day" data-d="${d}" aria-pressed="${cal.day === d}" aria-label="${d} ${MONTHS_SHORT[cal.m]}${n ? ", " + n + " " + BH.plural(n, "партия", "партии", "партий") : ""}"><span>${d}</span><i class="dots">${"<b></b>".repeat(Math.min(n, 4))}</i></button>`);
+    let title, list, heading, back = "";
+    if (cal.month) {
+      const first = new Date(cal.y, cal.m, 1), days = new Date(cal.y, cal.m + 1, 0).getDate(), lead = (first.getDay() + 6) % 7;
+      for (let i = 0; i < lead; i++) cells.push('<span class="cal-d off" aria-hidden="true"></span>');
+      for (let d = 1; d <= days; d++) cells.push(cell(new Date(cal.y, cal.m, d), false));
+      title = `${MONTHS_NOM[cal.m]} ${cal.y}`;
+      const inMonth = fin.filter(s => { const d = new Date(s.created); return d.getFullYear() === cal.y && d.getMonth() === cal.m; });
+      list = cal.day ? inMonth.filter(s => new Date(s.created).getDate() === cal.day) : inMonth;
+      heading = cal.day ? `Сыграно ${cal.day} ${MONTHS_GEN[cal.m]}` : `Сыграно в ${MONTHS_IN[cal.m]}`;
+      if (!(cal.y === now.getFullYear() && cal.m === now.getMonth())) back = "К сегодняшнему дню";
+    } else {
+      const wk = new Date(cal.wk), mid = new Date(wk); mid.setDate(mid.getDate() + 3);
+      for (let i = 0; i < 7; i++) { const d = new Date(wk); d.setDate(d.getDate() + i); cells.push(cell(d, d.getMonth() !== mid.getMonth())); }
+      const end = new Date(wk); end.setDate(end.getDate() + 7);
+      title = `${MONTHS_NOM[mid.getMonth()]} ${mid.getFullYear()}`;
+      const inWeek = fin.filter(s => s.created >= wk.getTime() && s.created < end.getTime());
+      const sel = cal.day ? new Date(cal.y, cal.m, cal.day) : null, inSel = sel && sel >= wk && sel < end;
+      list = inSel ? inWeek.filter(s => dayKey(new Date(s.created)) === dayKey(sel)) : inWeek;
+      heading = inSel ? `Сыграно ${cal.day} ${MONTHS_GEN[cal.m]}` : "Сыграно на этой неделе";
+      if (wk.getTime() !== mondayOf(now).getTime()) { back = "К этой неделе"; heading = inSel ? heading : "Сыграно на неделе"; }
     }
+    list.sort((a, b) => (b.created || 0) - (a.created || 0));
     // games still going are listed once, under «Идут сейчас»; the list below is what was played
-    const shown = (cal.day ? inMonth.filter(s => dayOf(s) === cal.day) : inMonth).filter(s => s.status === "finished");
     const live = S().sessions.filter(s => s.status !== "finished");
     return `<div class="stack">
-      <div class="page-head"><div><h1>Партии</h1><p class="sub">Сыграно: ${finishedSessions().length} ${BH.plural(finishedSessions().length, "партия", "партии", "партий")}</p></div><a class="btn primary" href="#/new">${I.plus}Новая партия</a></div>
+      <div class="page-head"><div><h1>Партии</h1><p class="sub">Сыграно: ${fin.length} ${BH.plural(fin.length, "партия", "партии", "партий")}</p></div><a class="btn primary" href="#/new">${I.plus}Новая партия</a></div>
       ${live.length ? `<section class="panel"><div class="sec-h"><h2>Идут сейчас</h2><span class="badge accent">${live.length}</span></div><div class="list">${live.map(sessionLine).join("")}</div></section>` : ""}
       <section class="panel cal">
-        <div class="cal-head"><button class="icon-btn" data-act="cal-move" data-step="-1" aria-label="Предыдущий месяц">${I.back}</button>
-          <b>${MONTHS_NOM[cal.m]} ${cal.y}</b>
-          <button class="icon-btn cal-next" data-act="cal-move" data-step="1" aria-label="Следующий месяц">${I.back}</button></div>
+        <div class="cal-head"><button class="icon-btn" data-act="cal-move" data-step="-1" aria-label="${cal.month ? "Предыдущий месяц" : "Предыдущая неделя"}">${I.back}</button>
+          <button type="button" class="cal-title" data-act="cal-mode" aria-expanded="${!!cal.month}" title="${cal.month ? "Показать неделю" : "Показать весь месяц"}">${title}${IC.chev}</button>
+          <button class="icon-btn cal-next" data-act="cal-move" data-step="1" aria-label="${cal.month ? "Следующий месяц" : "Следующая неделя"}">${I.back}</button></div>
         <div class="cal-grid cal-wd">${["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map(x => `<span>${x}</span>`).join("")}</div>
         <div class="cal-grid">${cells.join("")}</div>
-        ${thisMonth ? "" : `<div style="text-align:center;margin-top:6px"><button class="btn ghost sm" data-act="cal-today">К сегодняшнему дню</button></div>`}
+        ${back ? `<div style="text-align:center;margin-top:6px"><button class="btn ghost sm" data-act="cal-today">${back}</button></div>` : ""}
       </section>
       <section class="panel">
-        <div class="spread" style="margin-bottom:4px"><h2>${cal.day ? `Сыграно ${cal.day} ${MONTHS_GEN[cal.m]}` : `Сыграно в ${MONTHS_IN[cal.m]}`}</h2>${cal.day ? `<button class="btn ghost sm" data-act="cal-day" data-d="${cal.day}">Весь месяц</button>` : ""}</div>
-        ${shown.length ? `<div class="list">${shown.map(sessionLine).join("")}</div>` : `<p class="muted small" style="padding:8px 0">${cal.day ? "В этот день сыгранных партий нет." : "В этом месяце сыгранных партий нет."}</p>`}
+        <div class="spread" style="margin-bottom:4px"><h2>${heading}</h2>${cal.day ? `<button class="btn ghost sm" data-act="cal-day" data-d="${cal.day}" data-ym="${cal.y}-${cal.m}">${cal.month ? "Весь месяц" : "Вся неделя"}</button>` : ""}</div>
+        ${list.length ? `<div class="list">${list.map(sessionLine).join("")}</div>` : `<p class="muted small" style="padding:8px 0">${cal.day ? "В этот день сыгранных партий нет." : cal.month ? "В этом месяце сыгранных партий нет." : "На этой неделе сыгранных партий нет."}</p>`}
       </section>
     </div>`;
   }
@@ -749,14 +769,9 @@
     const done = steps.filter(x => s.setupDone[x.id]).length, isDone = !!s.setupDone[st.id];
     const nextLabel = g.first ? g.first.label.toLowerCase() : "к игре";
     return `<div class="stack setup-screen">
-      <div class="shead">
-        ${topline(backToOrigin(), `<a class="btn ghost sm" href="#/s/${esc(s.id)}/edit">${I.edit}Изменить</a>${deleteBtn}`)}
-        ${sessionHero(s, g)}
-      </div>
-      <div class="setup-head">
-        <div><h1>Подготовка</h1><p class="sub">Шаг ${i + 1} из ${steps.length}${done ? `, готово ${done}` : ""}</p></div>
-        <button class="sec-link" data-act="setup-next">К игре${IC.chev}</button>
-      </div>
+      <div class="phead">${backIcon(originOf())}${coverOf(g, "mini")}<div class="phead-t"><h1>${esc(g.name)}</h1><span class="phead-s">Подготовка · шаг ${i + 1} из ${steps.length}${done ? `, готово ${done}` : ""}</span></div>
+        <a class="icon-btn phead-act" href="#/s/${esc(s.id)}/edit" aria-label="Изменить партию" title="Изменить партию">${I.edit}</a>${deleteBtn}</div>
+      <div class="setup-head"><span class="small muted">Шаги</span><button class="sec-link" data-act="setup-next">К игре${IC.chev}</button></div>
       <div class="setup-dots" role="group" aria-label="Шаги подготовки">${steps.map((x, k) => `<button type="button" class="${s.setupDone[x.id] ? "done" : ""}" data-act="setup-go" data-i="${k}" aria-current="${k === i ? "step" : "false"}" aria-label="Шаг ${k + 1}: ${esc(x.title)}${s.setupDone[x.id] ? ", готово" : ""}"></button>`).join("")}</div>
       <section class="setup-card${isDone ? " done" : ""}">
         <div class="art" data-act="art-zoom" title="Нажмите, чтобы увеличить"${BH.assets.attr(g.id, ((g.images || {}).steps || {})[st.id])}>${st.art || ""}</div>
@@ -863,11 +878,8 @@
     const chosen = s.first ? BH.player(s.first) : null;
     const label = (g.first && g.first.label) || "Первый игрок";
     return `<div class="stack wheel-screen">
-      <div class="shead">
-        ${topline(s.status === "playing" ? backLink("#/s/" + s.id + "/play", "К игре") : backLink("#/s/" + s.id + "/setup", "Подготовка"))}
-        ${sessionHero(s, g)}
-      </div>
-      <div class="page-head"><div><h1>${esc(label)}</h1>${g.first && g.first.hint ? `<p class="sub">${esc(g.first.hint)}</p>` : ""}</div></div>
+      <div class="phead">${backIcon(s.status === "playing" ? { href: "#/s/" + s.id + "/play", label: "К игре" } : { href: "#/s/" + s.id + "/setup", label: "Подготовка" })}${coverOf(g, "mini")}<div class="phead-t"><h1>${esc(label)}</h1><span class="phead-s">${esc(g.name)}</span></div></div>
+      ${g.first && g.first.hint ? `<p class="sub wheel-hint">${esc(g.first.hint)}</p>` : ""}
       <section class="panel wheel-box" id="wheel-box" aria-live="polite">${chosen ? firstResultHTML(chosen) : BH.wheel.html(pl)}</section>
       <div class="wheel-bar">${wheelButtons(s, !!chosen)}</div>
       <details class="panel wheel-manual"><summary class="small" style="cursor:pointer;font-weight:600">Выбрать вручную</summary>
@@ -1231,11 +1243,11 @@
     const list = gamesByPlays(), n = BH.games.length;
     return `<div class="stack">
       <div class="page-head"><div><h1>Игры</h1><p class="sub">${n} ${BH.plural(n, "игра", "игры", "игр")} в коллекции, сначала самые играемые</p></div></div>
-      ${n > 6 ? `<div class="search">${I.search}<input class="input" type="search" data-act="games-q" placeholder="По названию" aria-label="Поиск игры" autocomplete="off"></div>` : ""}
-      <div class="glist">${list.map(({ g, n: k }) => `<a class="grow" href="#/games/${esc(g.id)}" data-name="${esc(g.name.toLowerCase())}">
+      ${n > 6 ? `<div class="search search-pin">${I.search}<input class="input" type="search" data-act="games-q" placeholder="По названию" aria-label="Поиск игры" autocomplete="off"></div>` : ""}
+      <div class="gtiles">${list.map(({ g, n: k }) => `<a class="gtile" href="#/games/${esc(g.id)}" data-name="${esc(g.name.toLowerCase())}">
           ${coverOf(g)}
-          <span class="t"><b>${esc(g.name)}</b>${meta([[IC.people, playersRange(g), "Игроков"], g.time && [IC.clock, esc(g.time), "Время партии"]], "plain")}</span>
-          <span class="grow-n${k ? "" : " zero"}" title="Сыграно партий">${IC.cards}${k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "не играли"}</span>
+          <span class="t"><b>${esc(g.name)}</b><small>${esc(playersRange(g))}${g.time ? " · " + esc(g.time) : ""}</small>
+            <small class="gt-n${k ? "" : " zero"}">${IC.cards}${k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "не играли"}</small></span>
         </a>`).join("")}</div>
       <p class="muted small" id="games-none" hidden>Ничего не нашлось.</p>
     </div>`;
@@ -1537,6 +1549,8 @@
 
   /* ---------- stats ---------- */
   let statsGame = "";
+  // the statistics: the screen of tabs — the game filter and the totals on top, then the players, the games, the places
+  let statsTab = "players";
   function viewStats() {
     const fin = S().sessions.filter(s => s.status === "finished" && (!statsGame || s.gameId === statsGame));
     const hours = fin.reduce((a, s) => a + (s.finishedAt && s.startedAt ? s.finishedAt - s.startedAt : 0), 0);
@@ -1550,26 +1564,26 @@
     const byGame = BH.games.map(g => ({ g, n: fin.filter(s => s.gameId === g.id).length, last: fin.filter(s => s.gameId === g.id).reduce((m, s) => Math.max(m, s.finishedAt || 0), 0) })).filter(x => x.n);
     const byPlace = [...S().places, { id: null, name: "Не указано" }].map(p => ({ p, n: fin.filter(s => (s.placeId || null) === p.id).length })).filter(x => x.n);
     const opts = `<option value="">Все игры</option>${BH.games.map(g => `<option value="${g.id}" ${g.id === statsGame ? "selected" : ""}>${esc(g.name)}</option>`).join("")}`;
-    return `<div class="stack">
-      <div>${backSmart("#/menu", "Меню")}<div class="page-head"><div><h1>Статистика</h1><p class="sub">По завершённым партиям.</p></div></div></div>
-      <label class="small muted pc-sort">Игра<select class="input" data-act="stats-game" aria-label="Игра">${opts}</select></label>
+    const top = `<label class="small muted pc-sort">Игра<select class="input" data-act="stats-game" aria-label="Игра">${opts}</select></label>
       <div class="kpis">
         <div class="kpi"><b>${fin.length}</b><span>${BH.plural(fin.length, "партия", "партии", "партий")}</span></div>
         <div class="kpi"><b>${games.size}</b><span>${BH.plural(games.size, "игра", "игры", "игр")}</span></div>
         <div class="kpi"><b>${(hours / 3600000).toFixed(1).replace(".", ",")}</b><span>часов за столом</span></div>
         <div class="kpi"><b>${fin.reduce((a, s) => a + s.rounds.length, 0)}</b><span>раундов</span></div>
-      </div>
-      ${fin.length ? `
-      <section class="panel"><h2 style="margin-bottom:6px">Игроки</h2><div class="scroll-x"><table class="tbl">
+      </div>`;
+    const tabs = fin.length ? [
+      { id: "players", label: "Игроки", n: ppl.length, html: `<section class="panel"><div class="scroll-x"><table class="tbl">
         <thead><tr><th>Игрок</th><th>Партий</th><th>Побед</th><th>% побед</th>${statsGame ? "<th>Лучший счёт</th>" : ""}</tr></thead>
-        <tbody>${ppl.map(x => `<tr><td><span class="row">${BH.avatar(x.p, "sm")}${esc(x.p.name)}</span></td><td>${x.played}</td><td>${x.wins}</td><td>${Math.round(100 * x.rate)}%<span class="meter"><i style="width:${Math.round(100 * x.rate)}%"></i></span></td>${statsGame ? `<td>${x.best}</td>` : ""}</tr>`).join("")}</tbody></table></div></section>
-      <div class="cols">
-        <section class="panel"><h2 style="margin-bottom:6px">Игры</h2><table class="tbl"><thead><tr><th>Игра</th><th>Партий</th><th>Последняя</th></tr></thead>
-          <tbody>${byGame.map(x => `<tr><td>${esc(x.g.name)}</td><td>${x.n}</td><td>${x.last ? BH.fmtDate(x.last) : ""}</td></tr>`).join("")}</tbody></table></section>
-        <section class="panel"><h2 style="margin-bottom:6px">Места</h2><table class="tbl"><thead><tr><th>Место</th><th>Партий</th></tr></thead>
-          <tbody>${byPlace.map(x => `<tr><td>${esc(x.p.name)}</td><td>${x.n}</td></tr>`).join("")}</tbody></table></section>
-      </div>` : `<div class="empty">Здесь появятся победы, любимые игры и места, когда вы доиграете первую партию.</div>`}
-    </div>`;
+        <tbody>${ppl.map(x => `<tr><td><span class="row">${BH.avatar(x.p, "sm")}${esc(x.p.name)}</span></td><td>${x.played}</td><td>${x.wins}</td><td>${Math.round(100 * x.rate)}%<span class="meter"><i style="width:${Math.round(100 * x.rate)}%"></i></span></td>${statsGame ? `<td>${x.best}</td>` : ""}</tr>`).join("")}</tbody></table></div></section>` },
+      { id: "games", label: "Игры", n: byGame.length, html: `<section class="panel"><table class="tbl"><thead><tr><th>Игра</th><th>Партий</th><th>Последняя</th></tr></thead>
+        <tbody>${byGame.map(x => `<tr><td>${esc(x.g.name)}</td><td>${x.n}</td><td>${x.last ? BH.fmtDate(x.last) : ""}</td></tr>`).join("")}</tbody></table></section>` },
+      { id: "places", label: "Места", n: byPlace.length, html: `<section class="panel"><table class="tbl"><thead><tr><th>Место</th><th>Партий</th></tr></thead>
+        <tbody>${byPlace.map(x => `<tr><td>${esc(x.p.name)}</td><td>${x.n}</td></tr>`).join("")}</tbody></table></section>` },
+    ] : [];
+    const cur = tabs.length ? pickTab(tabs, statsTab) : null;
+    return tabScreen({ back: backSmartTo("#/menu", "Меню"), pic: `<span class="phead-ic">${IC.chart}</span>`, title: "Статистика", sub: "По завершённым партиям",
+      tabs: cur ? tabBar("stats-tab", cur.id, tabs, "Разделы статистики") : "",
+      body: top + (cur ? cur.html : `<div class="empty">Здесь появятся победы, любимые игры и места, когда вы доиграете первую партию.</div>`) });
   }
 
   /* ---------- settings ---------- */
@@ -2254,6 +2268,7 @@
       case "race-last": sheet.last = el.dataset.id; renderOverlay(); break;
       case "done-tab": { if (s) { doneTab[s.id] = el.dataset.tab; render(); window.scrollTo(0, 0); } break; }
       case "gc-all": gcard.allPl = !gcard.allPl; render(); break;
+      case "stats-tab": statsTab = el.dataset.tab; render(); window.scrollTo(0, 0); break;
       case "gc-rec": gcard.allRec = !gcard.allRec; render(); break;
       case "pc-facts": pcard.allFacts = !pcard.allFacts; render(); break;
       case "pc-all": pcard.allRivals = !pcard.allRivals; render(); break;
@@ -2467,9 +2482,24 @@
       }
 
       /* sessions calendar */
-      case "cal-move": { cal.day = null; const d = new Date(cal.y, cal.m + Number(el.dataset.step), 1); cal.y = d.getFullYear(); cal.m = d.getMonth(); render(); break; }
-      case "cal-today": { const d = new Date(); cal = { y: d.getFullYear(), m: d.getMonth(), day: null }; render(); break; }
-      case "cal-day": { const d = Number(el.dataset.d); cal.day = cal.day === d ? null : d; render(); break; }
+      case "cal-move": {
+        cal.day = null; const k = Number(el.dataset.step);
+        if (cal.month) { const d = new Date(cal.y, cal.m + k, 1); cal.y = d.getFullYear(); cal.m = d.getMonth(); }
+        else { const w = new Date(cal.wk); w.setDate(w.getDate() + 7 * k); cal.wk = w.getTime(); const mid = new Date(w); mid.setDate(mid.getDate() + 3); cal.y = mid.getFullYear(); cal.m = mid.getMonth(); }
+        render(); break;
+      }
+      case "cal-today": { const d = new Date(); cal = { y: d.getFullYear(), m: d.getMonth(), day: null, month: cal.month, wk: mondayOf(d).getTime() }; render(); break; }
+      case "cal-day": {
+        const d = Number(el.dataset.d), [y, m] = String(el.dataset.ym || cal.y + "-" + cal.m).split("-").map(Number);
+        if (cal.day === d && cal.y === y && cal.m === m) cal.day = null; else { cal.y = y; cal.m = m; cal.day = d; }
+        render(); break;
+      }
+      // the name of the month: the whole month, or back to one week (the one of the chosen day, or this one, or the first)
+      case "cal-mode": {
+        cal.month = !cal.month;
+        if (!cal.month) { const now = new Date(), at = cal.day ? new Date(cal.y, cal.m, cal.day) : cal.y === now.getFullYear() && cal.m === now.getMonth() ? now : new Date(cal.y, cal.m, 1); cal.wk = mondayOf(at).getTime(); }
+        render(); break;
+      }
 
       /* rules */
       case "say-rule": { const g = BH.game(s ? s.gameId : r.b); if (g) BH.rulesUI.say(g, el.dataset.id); break; }
@@ -2613,7 +2643,7 @@
     }
     if (el.dataset.act === "games-q") {   // games list: filter in place, no redraw while typing
       const q = el.value.trim().toLowerCase(); let any = false;
-      BH.$$(".glist .grow").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
+      BH.$$(".gtiles .gtile").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
       const none = BH.$("#games-none"); if (none) none.hidden = any;
       return;
     }
@@ -2771,7 +2801,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.24.0";
+  BH.version = "0.25.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

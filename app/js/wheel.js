@@ -1,4 +1,5 @@
-/* The "who starts" wheel: one sector per player in their colour; the pointer sits at the top.
+/* The "who starts" wheel: one sector per player in their colour; the pointer sits at the top,
+   the button in the middle spins it (as the «Крутить» button under it does).
    The winner is drawn first (crypto random), then the disc turns so that sector stops under the pointer. */
 (function () {
   "use strict";
@@ -31,7 +32,7 @@
     return `<div class="wheel">
       <svg class="disc" viewBox="0 0 320 320" role="img" aria-label="Колесо с игроками" style="transform:rotate(${turned}deg)">${s}<circle cx="${C}" cy="${C}" r="${R}" style="fill:none;stroke:var(--ink);stroke-width:4"/></svg>
       <svg class="pointer" viewBox="0 0 34 40" aria-hidden="true"><path d="M17 38 L3 6 Q17 -2 31 6 Z" style="fill:var(--accent);stroke:var(--surface);stroke-width:2.5"/></svg>
-      <div class="hub" aria-hidden="true"></div>
+      <button type="button" class="hub" data-act="spin" aria-label="Крутить колесо">${BH.ICON.spin}</button>
     </div>`;
   };
 

@@ -2281,7 +2281,8 @@
 
       /* first player */
       case "spin": {
-        const box = BH.$("#wheel-box"); if (!box) break;
+        // the button in the middle of the wheel and the one under it both spin; a second tap mid-spin does nothing
+        const box = BH.$("#wheel-box"); if (!box || spinning) break;
         const ps = s.players.map(BH.player).filter(Boolean);
         const my = ++spinToken;
         spinning = true;
@@ -2743,7 +2744,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.19.1";
+  BH.version = "0.19.2";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

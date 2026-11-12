@@ -838,6 +838,8 @@ body:has(.setup-screen.tight) .topbar{display:none}
 .mc-does{font-size:17px;margin:0 0 8px}
 .mc-does b{display:inline}
 .mc-foot{margin-top:10px}
+.mc-group{margin:14px 0 0;font-size:15px}
+.mc-group:first-of-type{margin-top:4px}
 /* a race: a row per player — the cups and the coconuts; the result table */
 .race-row{display:grid;grid-template-columns:auto minmax(0,1fr) 92px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .race-head{border-top:0;padding:6px 0 0}

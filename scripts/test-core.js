@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/chances.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/chances.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js", "games/toybattle.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -981,4 +981,59 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.strictEqual(a.played, 6); assert.strictEqual(a.won, 3, "the record: all 6 finished games, as on the player's card");
   });
   console.log(`chances: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // «Битва игрушек» (Toy Battle): the Russian rules of Choo Choo Games, the English rules, the player aid as on Board Game Arena
+  const G = BH.game("toybattle"), before = passed;
+  const cx = (...opts) => ({ players: 2, exp: new Set(), has: () => false, opt: id => opts.includes(id) });
+  const sess = opts => ({ gameId: "toybattle", players: ["a", "b"], exp: [], opts: opts || {}, rounds: [] });
+  t("toybattle: two players; a race won at once by the H.Q. or the medals objective, else the medals counted", () => {
+    assert.strictEqual(G.players.min, 2); assert.strictEqual(G.players.max, 2);
+    assert.ok(BH.isRace(G));
+    assert.strictEqual(BH.raceGoals(G, sess()).map(x => x.how).join(), "hq,medals");
+    const end = G.scoring.end().join(" ");
+    assert.ok(/вражеском штабе/.test(end) && /своей цели/.test(end) && /больше наград/.test(end) && /проиграл тот, кто закончил партию/.test(end));
+    assert.ok(/проигрывает/.test(G.scoring.count.tieAsk) && /поровну/.test(G.scoring.count.tieDone));
+    assert.strictEqual(G.scoring.count.how, "out"); assert.strictEqual(G.scoring.count.tie, "ender");
+  });
+  t("toybattle: a tie of the medals — the one who ended the game loses; Coconuts — the one who played last wins", () => {
+    assert.strictEqual(BH.raceTieWinner(G.scoring.count, ["a", "b"], "a"), "b");
+    assert.strictEqual(BH.raceTieWinner(G.scoring.count, ["a", "b"], null), null);
+    assert.strictEqual(BH.raceTieWinner(BH.game("coconuts").scoring.count, ["a", "b"], "a"), "a");
+    // how it ended is kept, for every way
+    BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true,
+      sessions: ["hq", "medals", "out"].map((how, i) => ({ id: "t" + i, gameId: "toybattle", players: ["a", "b"], status: "finished", rounds: [], winners: ["a"], race: how === "out" ? { how, counts: { a: 3, b: 3 } } : { how } })) });
+    assert.strictEqual(BH.state.sessions.map(s => s.race.how).join(), "hq,medals,out");
+    assert.strictEqual(JSON.stringify(BH.state.sessions[2].race.counts), JSON.stringify({ a: 3, b: 3 }));
+  });
+  t("toybattle: setup — the board, a medal on each spot, 24 tiles face down with 4 out unseen, the first player 3 and the second 4", () => {
+    const steps = BH.setupSteps(sess()), text = id => { const st = steps.find(x => x.id === id); return typeof st.text === "function" ? st.text(cx()) : st.text; };
+    assert.strictEqual(steps.map(x => x.id).join(), "terrain,medals,troops,first");
+    assert.ok(/«Двор замка»/.test(text("terrain")) && /\*1\* фишку награды/.test(text("medals")));
+    assert.ok(/\*24\* жетона/.test(text("troops")) && /Каждый убирает из своего запаса \*4\* случайных жетона в коробку, не глядя/.test(text("troops")), "each player puts 4 away");
+    assert.ok(/\*3\* воинов, второй — \*4\*/.test(text("first")) && /сброса/.test(text("first")));
+  });
+  t("toybattle: the turn — one action; 8 on the rack; strictly weaker; connected to your H.Q.; the troop's effect, then the base's", () => {
+    const rem = G.rounds.reminder(cx()).join(" ");
+    assert.ok(/\*одно\* из двух/.test(rem) && /\*8\*/.test(rem) && /\*слабее\*/.test(rem) && /\*твоего\* штаба/.test(rem) && /затем — особой базы/.test(rem));
+    assert.ok(/обычные/.test(G.rounds.reminder(cx("plain")).join(" ")), "the first games: the special bases are plain");
+  });
+  t("toybattle: 8 troops (Кряква the joker, 1–7) and the special bases of 8 boards; without special bases — the troops only", () => {
+    const troops = G.cards.filter(k => k.group === "Воины"), bases = G.cards.filter(k => k.group !== "Воины");
+    assert.strictEqual(troops.length, 8); assert.strictEqual(bases.length, 8);
+    assert.ok(/^Кряква/.test(troops[0].name) && troops.slice(1).every((k, i) => k.name.startsWith(i + 1 + " ·")));
+    assert.strictEqual(BH.raceCards(G, sess({ plain: true })).length, 9, "the troops and the Caribbean Sea (its shape is no effect)");
+    assert.strictEqual(BH.raceCards(G, sess()).length, 16);
+    assert.ok(/строго|любого/.test(troops[0].does) && /связи/.test(G.cards.find(k => k.id === "hook").does));
+  });
+  t("toybattle: rules, groups, questions refer to real sections; pages of the rules 1–6 or the player aid", () => {
+    const ids = new Set(G.rules.map(r => r.id));
+    for (const gr of G.ruleGroups) for (const id of gr.ids) assert.ok(ids.has(id), "group " + id);
+    for (const gr of G.faqGroups) for (const id of gr.refs) assert.ok(ids.has(id), "faq group " + id);
+    for (const f of G.faq) { assert.ok(ids.has(f.ref), "faq ref " + f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], "faq src " + f.src); }
+    assert.ok(G.rules.every(r => (Number.isInteger(r.page) && r.page >= 1 && r.page <= 6) || r.page === "памятка"));
+    const grouped = G.ruleGroups.flatMap(gr => gr.ids); for (const id of ids) assert.strictEqual(grouped.filter(x => x === id).length, 1, "rule in one group: " + id);
+    for (const k of Object.keys(G.images.rules)) assert.ok(ids.has(k), "image for " + k);
+  });
+  console.log(`toybattle: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

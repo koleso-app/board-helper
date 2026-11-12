@@ -78,6 +78,20 @@
   BH.isRace = g => !!(g && g.scoring && g.scoring.type === "race");
   // a race's target may depend on its options (Gold Fever: 5 nuggets, the quick game 4)
   BH.raceGoal = (g, s) => { const n = g && g.scoring && g.scoring.goal; return typeof n === "function" ? n(BH.ctxOf(s)) : n; };
+  // the ways a race is won at once: the game's list (Toy Battle: the H.Q., the medals), or its one goal (a pyramid, nuggets…);
+  // each { how, chip, ask, text, done } with the texts for this game's target
+  BH.raceGoals = (g, s) => {
+    const sc = (g && g.scoring) || {}, n = BH.raceGoal(g, s), val = v => (typeof v === "function" ? v(n) : v);
+    const list = sc.goals || [{ how: sc.goalHow || "goal", chip: sc.goalChip, ask: sc.goalAsk, text: sc.goalText, done: sc.goalDone }];
+    return list.map(x => ({ how: x.how, chip: val(x.chip) || "", ask: val(x.ask) || "Победитель", text: val(x.text) || "", done: val(x.done) || "" }));
+  };
+  // equal counts: the game's rule — «last»: the one of them who played last wins (Coconuts); «ender»: the one who ended
+  // the game loses (Toy Battle, two players) — the winner is the other one; picked: the player chosen for the question
+  BH.raceTieWinner = (count, top, picked) => {
+    if (!picked || !top.includes(picked)) return null;
+    if ((count && count.tie) === "ender") return top.length === 2 ? top.find(id => id !== picked) : null;
+    return picked;
+  };
   // the stones or cards of a race shown for this game (some are left out by an option)
   BH.raceCards = (g, s) => (g && g.cards ? g.cards.filter(k => !k.show || k.show(BH.ctxOf(s))) : []);
   // a race written down with each player's cups and coconuts: a full pyramid wins; otherwise the most coconuts

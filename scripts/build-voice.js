@@ -37,6 +37,8 @@ const games = [
     bookNote: "русские правила Choo Choo Games (стр. 1–4 — страницы PDF, номера совпадают с напечатанными), после них английские правила Mayday Games (страницы помечены «EN»). В русских правилах ход передают и «по часовой стрелке», и «тому, кто справа» — в английских только по часовой; так и говори" },
   { js: "games/goldfever.js", book: path.join(root, "sources", "gold-book.txt"), title: "Жадюги (Gold Fever)", pages: "pdf",
     bookNote: "русские правила «Стиль Жизни», переписанные с картинок PDF; номера страниц — как напечатаны (1–4)" },
+  { js: "games/toybattle.js", book: path.join(root, "sources", "toy-book.txt"), title: "Битва игрушек (Toy Battle)", pages: "pdf",
+    bookNote: "русские правила Choo Choo Games — два разворота по три страницы (номера страниц как в английской книге, она следом со страницами [стр. N]); в конце — памятка с эффектами воинов и особых баз по справке Board Game Arena, её нет в книгах — так и говори. Называй воинов как в шпаргалке (Кряква, Скалли, Кэп, Джамбо, Хук, XB-42, Стар, Рокси), поля — по-русски" },
   { js: "games/zoo.js", book: path.join(root, "sources", "zoo-book.txt"), title: "Зоопарк (Team Zoo)", pages: "pdf",
     bookNote: "русские правила Hobby World, версия 1.0; страницы PDF совпадают с напечатанными (стр. 1 без номера, стр. 2–4 — рассказ о киперах, правила — на стр. 5–7). В конце — тексты карт какаду с фото издателя, их нет в книге: так и говори" },
   { js: "games/thegang.js", book: path.join(root, "sources", "thegang-rules-en.txt"), title: "The Gang", pages: "plus1",

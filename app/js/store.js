@@ -23,7 +23,8 @@
   function cleanRace(r, allowed) {
     if (!r || typeof r !== "object" || Array.isArray(r)) return null;
     const out = {}, nums = (o, max) => { const c = {}; if (o && typeof o === "object" && !Array.isArray(o)) for (const [k, v] of Object.entries(o)) if (allowed.has(k)) c[k] = Math.max(0, Math.min(max, Math.round(Number(v)) || 0)); return c; };
-    if (r.how === "pyramid" || r.how === "coconuts" || r.how === "goal") out.how = r.how;
+    // how it ended: a pyramid or the coconuts (Coconuts), a goal (Gold Fever, Zoo), the H.Q., the medals or no more moves (Toy Battle)
+    if (["pyramid", "coconuts", "goal", "hq", "medals", "out"].includes(r.how)) out.how = r.how;
     const counts = nums(r.counts, 99), cups = nums(r.cups, 14);
     if (Object.keys(counts).length) out.counts = counts;
     if (Object.keys(cups).length) out.cups = cups;

@@ -313,7 +313,7 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const w = v.calc.roundWarnings([{}, {}], [sel({ num: [7], special: ["u7"] }), sel({ num: [1] })], ctxOf(2));
     assert.ok(w.some(x => x.includes("Несчастливая 7")));
     const two = v.calc.roundWarnings([{}, {}], [sel({ num: [1] }), sel({ num: [1] })], ctxOf(2));
-    assert.ok(two.some(x => x.includes("обычных «1» 1 шт.")));
+    assert.ok(two.some(x => x.includes("обычных «1» в колоде 1, а отмечено")));
   });
   t("vengeance: every faq points at a rule, every rule is in one topic, pages from the book", () => {
     for (const f of v.faq) { assert.ok(v.rules.some(r => r.id === f.ref), f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], f.src); }
@@ -382,11 +382,11 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     // the steps of the round and «После раунда», as one line without the bold marks
     const ph = r => plain([...F.rounds.phases(ctxN(4), r, 8).flatMap(p => p.steps), ...F.rounds.after(ctxN(4), r, 8)].join(" "));
     assert.ok(ph(1).includes("В 1-м раунде пропустите"));
-    assert.ok(ph(3).includes("больше прошлой") && ph(3).includes("1 + ещё по 1 за каждую подсказку на своих картах — Регионах и Святилищах"));
+    assert.ok(ph(3).includes("больше прошлой") && ph(3).includes("1 карту Святилища и ещё по одной за каждую подсказку на своих Регионах и Святилищах"));
     assert.ok(!plain(F.rounds.phases(ctxN(4), 1, 8)[2].steps.join(" ")).includes("Святилищ"), "round 1 finds no sanctuaries, so phase 3 says nothing of them");
     assert.ok(F.rounds.phases(ctxN(4), 3, 8)[1].steps.join(" ").includes("{clue|"), "the clue is shown as its icon");
     assert.ok(ph(3).includes("Уберите карту, оставшуюся на рынке") && ph(3).includes("новый рынок — 5 карт"), "4 players reveal 5");
-    assert.ok(ph(3).includes("от меньшего номера"), "phase 3 goes from the lowest card up");
+    assert.ok(ph(3).includes("номер новой карты меньше всех"), "phase 3 goes from the lowest card up");
     assert.ok(ph(8).includes("Карту с рынка не берут") && !ph(8).includes("новый рынок") && ph(8).includes("подсчёт славы"), "round 8: no card, then the fame");
     assert.ok(ph(8).includes("оставьте 1") && ph(8).includes("под колоду"), "in round 8 a sanctuary may still be added");
     assert.ok(ph(3).includes("Возьмите 1 карту с рынка") && ph(3).includes("оставьте 1") && ph(3).includes("под колоду"), "one card from the market, one sanctuary kept, the rest under the deck");
@@ -496,7 +496,7 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     x = BH.coopTally(s(["fail", "fail"], { master: true })); assert.ok(x.over && x.lost, "master thief: two alarms");
     assert.strictEqual(BH.coopTally(s(["fail", "fail"])).over, false, "otherwise three");
     const vaults = BH.setupSteps({ gameId: "thegang", players: ["a", "b", "c"], exp: [], opts: { master: true } }).find(x => x.id === "vaults").text.replace(/\*/g, "");
-    assert.ok(vaults.includes("2 карты сигнализации"), "master thief: one alarm card goes back to the box");
+    assert.ok(vaults.includes("2 карты тревоги"), "master thief: one alarm card goes back to the box");
   });
   t("the gang p.5–8: four rounds — white, yellow, orange, red; flop 3, turn 1, river 1; the showdown by the red chips", () => {
     const c = ctxM(4), all = G.heist.steps(c, []);
@@ -770,7 +770,7 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const steps = BH.setupSteps(sess(4)), text = id => { const st = steps.find(x => x.id === id); return st && (typeof st.text === "function" ? st.text(cx(4)) : st.text); };
     assert.ok(text("tiles").includes("*7* жетонов корма *одного цвета*") && /лицом вниз/.test(text("tiles")));
     for (const f of ["трава", "фрукты", "зёрна", "ветки", "мясо", "орехи", "овощи"]) assert.ok(text("tiles").includes(f), f);
-    assert.ok(text("table").includes("*14*") && /какаду — в коробку/.test(text("table")), "the first game without the cockatoo");
+    assert.ok(text("table").includes("*14*") && /какаду уберите в коробку/.test(text("table")), "the first game without the cockatoo");
     assert.ok(!steps.some(x => x.id === "cockatoo"));
     const withC = BH.setupSteps(sess(4, { cockatoo: true }));
     const tb = withC.find(x => x.id === "table").text;
@@ -784,11 +784,11 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   });
   t("zoo: the round — two tiles at once, both must match, «Кормлю!», the winner takes a fake tile and opens the next card", () => {
     const rem = G.rounds.reminder(cx(3)).join(" ");
-    assert.ok(/обеими руками \*2\* своих жетона/.test(rem) && /закрой оба/.test(rem) && /«Кормлю!»/.test(rem) && /Ничья — раунд заново/.test(rem));
-    assert.ok(/\*1\* пустышку и перемешивает свои жетоны, остальные — \*нет\*/.test(rem));
-    assert.strictEqual(rem.split("Победитель прошлого раунда").length, 2, "who opens the next card is said once, in the first line");
-    assert.ok(/^Победитель прошлого раунда/.test(G.rounds.reminder(cx(3))[0]), "the first player changes every round");
-    assert.ok(/Карту \*какаду\* — победителю/.test(G.rounds.reminder(cx(3, "cockatoo")).join(" ")));
+    assert.ok(/обеими руками \*2\* своих жетона/.test(rem) && /закрой оба/.test(rem) && /«Кормлю!»/.test(rem) && /При ничьей раунд начинают заново/.test(rem));
+    assert.ok(/\*1\* пустышку, перемешивает все свои жетоны и становится первым игроком\. Остальные \*не\* перемешивают/.test(rem));
+    assert.strictEqual(rem.split("становится первым игроком").length, 2, "who becomes the first player is said once");
+    assert.ok(/^Первый игрок открывает/.test(G.rounds.reminder(cx(3))[0]), "the first player opens the card");
+    assert.ok(/Победитель раунда кладёт карту \*какаду\*/.test(G.rounds.reminder(cx(3, "cockatoo")).join(" ")));
     assert.ok(!/какаду/.test(rem) && /какаду/.test(G.rounds.reminder(cx(3, "cockatoo")).join(" ")), "the cockatoo line only with the cockatoo cards");
   });
   t("zoo: the end is kept as «the goal reached»", () => {
@@ -992,7 +992,7 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     assert.ok(BH.isRace(G));
     assert.strictEqual(BH.raceGoals(G, sess()).map(x => x.how).join(), "hq,medals");
     const end = G.scoring.end().join(" ");
-    assert.ok(/вражеском штабе/.test(end) && /своей цели/.test(end) && /больше наград/.test(end) && /проиграл тот, кто закончил партию/.test(end));
+    assert.ok(/вражеском штабе/.test(end) && /Цель по наградам/.test(end) && /больше наград/.test(end) && /проиграл тот, кто закончил партию/.test(end));
     assert.ok(/проигрывает/.test(G.scoring.count.tieAsk) && /поровну/.test(G.scoring.count.tieDone));
     assert.strictEqual(G.scoring.count.how, "out"); assert.strictEqual(G.scoring.count.tie, "ender");
   });
@@ -1015,7 +1015,7 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   });
   t("toybattle: the turn — one action; 8 on the rack; strictly weaker; connected to your H.Q.; the troop's effect, then the base's", () => {
     const rem = G.rounds.reminder(cx()).join(" ");
-    assert.ok(/\*одно\* из двух/.test(rem) && /\*8\*/.test(rem) && /\*слабее\*/.test(rem) && /\*твоего\* штаба/.test(rem) && /затем — особой базы/.test(rem));
+    assert.ok(/\*одно\* из двух/.test(rem) && /\*8\*/.test(rem) && /\*слабее\*/.test(rem) && /\*твоего\* штаба/.test(rem) && /затем — эффект особой базы/.test(rem));
     assert.ok(/обычные/.test(G.rounds.reminder(cx("plain")).join(" ")), "the first games: the special bases are plain");
   });
   t("toybattle: 8 troops (Кряква the joker, 1–7) and the special bases of 8 boards; without special bases — the troops only", () => {

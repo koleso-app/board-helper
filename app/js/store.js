@@ -229,7 +229,7 @@
     r.onload = () => {
       try {
         let j;
-        try { j = JSON.parse(r.result); } catch (e) { throw new Error("файл повреждён или это не JSON"); }
+        try { j = JSON.parse(r.result); } catch (e) { throw new Error("файл повреждён или это не копия данных"); }
         if (!j || j.format !== FORMAT || !j.data) throw new Error("это не копия «Помощника настолок»");
         resolve(normalize(j.data));
       } catch (e) { reject(e); }

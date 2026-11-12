@@ -279,11 +279,11 @@
   BH.endProblems = (g, d, o) => {
     const e = g.endScore, out = []; if (!e || !d) return out;
     const bad = v => { const n = intOrNull(v); return n !== null && (!Number.isInteger(n) || n < 0 || n > e.max); };
-    (d.cards || []).slice(0, e.rows).forEach((v, i) => { if (bad(v)) out.push(`${e.rowLabel(i + 1)}: слава — целое число от 0 до ${e.max}`); });
-    for (const x of e.extra || []) if (bad(d[x.id])) out.push(`${x.label}: слава — целое число от 0 до ${e.max}`);
+    (d.cards || []).slice(0, e.rows).forEach((v, i) => { if (bad(v)) out.push(`${e.rowLabel(i + 1)} — слава целым числом от 0 до ${e.max}`); });
+    for (const x of e.extra || []) if (bad(d[x.id])) out.push(`${x.label} — слава целым числом от 0 до ${e.max}`);
     const t = intOrNull(d.tie);
     const tmin = o && o.partial ? 1 : e.tie && e.tie.min, tmax = e.tie && (o && o.partial && e.tie.partialMax ? e.tie.partialMax : e.tie.max);
-    if (e.tie && t !== null && (!Number.isInteger(t) || t < tmin || t > tmax)) out.push(`${e.tie.label}: от ${tmin} до ${tmax}`);
+    if (e.tie && t !== null && (!Number.isInteger(t) || t < tmin || t > tmax)) out.push(`«${e.tie.label}» — число от ${tmin} до ${tmax}`);
     return out;
   };
   BH.endFilled = (g, d) => { const e = g.endScore; if (!e || !d) return 0; return (d.cards || []).slice(0, e.rows).concat((e.extra || []).map(x => d[x.id])).filter(v => intOrNull(v) !== null).length; };

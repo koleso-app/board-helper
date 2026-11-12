@@ -309,7 +309,7 @@
     const g = BH.game(s.gameId), place = BH.place(s.placeId);
     let right = "";
     if (s.status === "setup") right = '<span class="badge warn">подготовка</span>';
-    else if (s.status === "first") right = '<span class="badge warn">выбор первого</span>';
+    else if (s.status === "first") right = '<span class="badge warn">кто начинает</span>';
     else if (s.status === "playing") { const eg = BH.game(s.gameId), last = BH.isEndScored(eg) && eg.rounds.count; right = `<span class="badge accent">${BH.isRace(eg) ? "идёт игра" : last && s.rounds.length >= last ? "подсчёт славы" : (BH.isCoop(eg) ? "ограбление " : "раунд ") + (s.rounds.length + 1)}</span>`; }
     return `<a class="item sline" href="#/s/${s.id}">
       ${coverOf(g, "mini")}
@@ -346,7 +346,7 @@
         <div class="profile-t">
           <h1>${me ? esc(me.name) : "Мои настолки"}</h1>
           <div class="profile-stats"><span>${IC.dice}${nGames} ${BH.plural(nGames, "игра", "игры", "игр")}</span><span>${IC.cards}${mine.length} ${BH.plural(mine.length, "партия", "партии", "партий")}</span></div>
-          ${me ? "" : `<span class="small profile-hint">Отметьте себя в игроках — галочка «Это я»</span>`}
+          ${me ? "" : `<span class="small profile-hint">Отметьте себя в игроках галочкой «Это я»</span>`}
         </div>
       </a>
       ${live.length ? `<section class="panel"><div class="sec-h"><h2>Идут сейчас</h2><span class="badge accent">${live.length}</span></div><div class="list">${live.map(sessionLine).join("")}</div></section>` : ""}
@@ -487,7 +487,7 @@
     const n = draft.players.length;
     if (n < g.players.min) return `Нужно минимум ${g.players.min} ${BH.plural(g.players.min, "игрок", "игрока", "игроков")}`;
     if (n > g.players.max) return `«${g.name}»: не больше ${g.players.max} игроков`;
-    if (g.players.only && !g.players.only.includes(n)) return `«${g.name}»: ${g.teams ? g.players.only.map(k => (k === 4 ? "4 — две пары" : `${k} игрока`)).join(" или ") : `${g.players.only.join(" или ")} игрока`}`;
+    if (g.players.only && !g.players.only.includes(n)) return `«${g.name}»: играют ${g.teams ? g.players.only.map(k => (k === 4 ? "4 — двумя парами" : `${k} игрока`)).join(" или ") : `${g.players.only.join(" или ")} игрока`}`;
     return "";
   }
   function pickDraftGame(id) {
@@ -529,7 +529,7 @@
       </section>`;
     };
 
-    const dateSec = step2("date", "Дата игры", esc(whenText(draft.date)) + (past ? ' · <span class="warn-t">сыгранная: сразу итог</span>' : ""),
+    const dateSec = step2("date", "Дата игры", esc(whenText(draft.date)) + (past ? ' · <span class="warn-t">уже сыграна — запишем итог</span>' : ""),
       `<div class="row"><input class="input" type="datetime-local" data-act="draft-date" value="${localInput(draft.date)}" max="${localInput(Date.now() + 86400000)}" aria-label="Дата и время игры">
         <button type="button" class="btn sm" data-act="draft-now">Сейчас</button></div>
        ${draft.editId ? "" : `<p class="small muted">Поставьте прошлую дату, чтобы записать уже сыгранную партию: без подготовки и раундов, сразу очки и победитель.</p>`}`, true);
@@ -564,9 +564,9 @@
         ${lastAdd.length ? `<button type="button" class="btn sm last-btn" data-act="draft-last-players">${I.plus}Как в прошлой партии: ${esc(lastAdd.map(id => BH.player(id).name).join(", "))}</button>` : ""}
         ${pool.length > 9 ? `<div class="search">${I.search}<input class="input" type="search" data-act="pick-q" data-list="players" placeholder="Найти игрока" aria-label="Найти игрока" autocomplete="off"></div>` : ""}
         <div class="pick-list" data-list="players">${pool.map(({ p, k }) => { const on = draft.players.includes(p.id); return `<button type="button" class="pick-row" data-act="toggle-player" data-id="${p.id}" data-name="${esc(p.name.toLowerCase())}" aria-pressed="${on}">
-          <span class="pick-box" aria-hidden="true">${on ? I.check : ""}</span>${BH.avatar(p)}<span class="t"><b>${esc(p.name)}${p.id === meId ? ' <span class="badge accent">это вы</span>' : ""}</b>${meta([[IC.cards, k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "ещё не играл(а)", "Сыграно партий"]], "plain")}</span></button>`; }).join("")}</div>
+          <span class="pick-box" aria-hidden="true">${on ? I.check : ""}</span>${BH.avatar(p)}<span class="t"><b>${esc(p.name)}${p.id === meId ? ' <span class="badge accent">это вы</span>' : ""}</b>${meta([[IC.cards, k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "партий пока нет", "Сыграно партий"]], "plain")}</span></button>`; }).join("")}</div>
         <form class="row" data-form="add-player" style="margin-top:4px"><input class="input" name="name" placeholder="Новый игрок" maxlength="40" aria-label="Имя нового игрока"><button class="btn" type="submit">Добавить</button></form>
-        ${g && cnt >= g.players.min && g.players.recommendedMin && cnt < g.players.recommendedMin ? `<div class="note info">${esc(g.playersNote || `По правилам ${g.name} рассчитан на ${g.players.recommendedMin} и больше игроков.`)}</div>` : ""}`;
+        ${g && cnt >= g.players.min && g.players.recommendedMin && cnt < g.players.recommendedMin ? `<div class="note info">${esc(g.playersNote || `По правилам в «${g.name}» играют от ${g.players.recommendedMin} ${BH.plural(g.players.recommendedMin, "игрока", "игроков", "игроков")}.`)}</div>` : ""}`;
     }
     const playersOk = !!g && !draftProblem();
     const playersSum = cnt ? `<span class="faces">${draft.players.slice(0, 5).map(id => BH.avatar(BH.player(id), "sm")).join("")}</span>${cnt} ${BH.plural(cnt, "игрок", "игрока", "игроков")}${g && !playersOk ? ` · <span class="warn-t">${esc(draftProblem())}</span>` : ""}`
@@ -592,7 +592,7 @@
       const t = draft.tally || {}, wins = (g.scoring && g.scoring.wins) || 3, sc = t.ok !== undefined || t.fail !== undefined ? ` · ${t.ok ?? "?"}:${t.fail ?? "?"}` : "";
       const row = (k, label) => `<div class="tally-row"><span class="label">${label}</span><div class="chips">${Array.from({ length: wins + 1 }, (_, n) => `<button class="chip" data-act="draft-tally" data-k="${k}" data-v="${n}" aria-pressed="${t[k] === n}">${n}</button>`).join("")}</div></div>`;
       resultSec = step2("result", "Итог", (draft.coop === "win" ? "Банда победила" : draft.coop === "lose" ? "Банда попалась" : "Итог — по желанию") + sc,
-        `<p class="small muted">Счёт можно не вписывать. 3 хранилища — победа, 3 тревоги — поражение.</p>
+        `<p class="small muted">Счёт можно не вписывать. 3 хранилища — победа банды, 3 тревоги — поражение (в режиме «Мастер-вор» хватит 2 тревог).</p>
         ${row("ok", "Хранилища вскрыли")}${row("fail", "Тревоги")}
         <div class="chips" style="margin-top:12px"><button class="chip" data-act="draft-coop" data-v="win" aria-pressed="${draft.coop === "win"}"><span class="won">${IC.trophy}</span>Победа банды</button><button class="chip" data-act="draft-coop" data-v="lose" aria-pressed="${draft.coop === "lose"}">Поражение</button></div>`, !!draft.coop || !!sc);
     } else if (past && g && cnt && BH.isRace(g)) {
@@ -610,7 +610,7 @@
       const nm = sd => sd.map(id => (BH.player(id) || { name: "?" }).name).join(" и ");
       const wonPair = pairs.find(sd => sd.every(id => draft.winners.includes(id)));
       resultSec = step2("result", "Итог", wonPair ? "Победа: " + esc(nm(wonPair)) : "Очки и победитель — по желанию",
-        `<p class="small muted">Пары — 1-й и 3-й, 2-й и 4-й игрок по порядку. Счёт пары — один на двоих.</p>
+        `<p class="small muted">Пары по порядку за столом: 1-й игрок с 3-м, 2-й — с 4-м. У пары один счёт на двоих.</p>
         ${pairs.map(sd => `<div class="seat" style="grid-template-columns:auto minmax(0,1fr) auto"><span class="faces pair-faces">${sd.map(id => BH.avatar(BH.player(id) || { name: "?", color: "#888" }, "sm")).join("")}</span><span>${esc(nm(sd))}</span>
           <input class="input score-in ph-word" type="number" inputmode="numeric" data-act="draft-final-pair" data-p="${sd.join(",")}" value="${draft.final[sd[0]] ?? ""}" placeholder="очки" aria-label="Очки: ${esc(nm(sd))}"></div>`).join("")}
         <div class="label" style="margin:12px 0 6px">Победители</div>
@@ -618,7 +618,7 @@
     } else if (past && g && cnt) {
       const scored = draft.players.filter(id => draft.final[id] !== undefined && draft.final[id] !== "").length;
       resultSec = step2("result", "Итог", draft.winners.length ? "Победа: " + esc(draft.winners.map(id => (BH.player(id) || { name: "?" }).name).join(", ")) : scored ? "Очки вписаны" : "Очки и победитель — по желанию",
-        `<p class="small muted">Очки можно не вписывать. Победитель выберется по очкам, или отметьте его сами.</p>${g.scoring && g.scoring.tieHint ? `<p class="note info small">${esc(g.scoring.tieHint)}</p>` : ""}
+        `<p class="small muted">Очки можно не вписывать. Победителя приложение определит по очкам — или отметьте его сами.</p>${g.scoring && g.scoring.tieHint ? `<p class="note info small">${esc(g.scoring.tieHint)}</p>` : ""}
         ${draft.players.map(id => { const p = BH.player(id) || { name: "?", color: "#888" }; return `<div class="seat" style="grid-template-columns:auto minmax(0,1fr) auto">${BH.avatar(p, "sm")}<span>${esc(p.name)}</span>
           <input class="input score-in ph-word" type="number" inputmode="numeric" data-act="draft-final" data-p="${id}" value="${draft.final[id] ?? ""}" placeholder="очки" aria-label="Очки: ${esc(p.name)}"></div>`; }).join("")}
         <div class="label" style="margin:12px 0 6px">Победитель</div>
@@ -703,7 +703,7 @@
     const canon = "#/s/" + s.id + "/" + sub;
     if (SCREENS.includes(sub) && location.hash !== canon) history.replaceState(history.state, "", urlOf(canon));
     if (sub === "edit") {
-      if (s.status === "finished" || s.status === "playing" || s.rounds.length) return { html: notFound("Партия уже идёт — её состав больше не меняется.") };
+      if (s.status === "finished" || s.status === "playing" || s.rounds.length) return { html: notFound("Партия уже началась — игру и игроков в ней больше не поменять.") };
       if (!draft || draft.editId !== s.id) startDraft(null, s);
       return { html: viewNew() };
     }
@@ -763,7 +763,7 @@
       </section>
       <div class="game-bar setup-bar">
         <button class="btn big" data-act="setup-prev" ${i ? "" : "disabled"} aria-label="Предыдущий шаг">${I.back}</button>
-        <button class="btn primary big" data-act="setup-done"><span class="ell">${isDone ? (last ? (g.first ? "Дальше: " + esc(nextLabel) : "К игре") : "Дальше") : last ? "Готово — " + esc(nextLabel) : "Готово, дальше"}</span></button>
+        <button class="btn primary big" data-act="setup-done"><span class="ell">${isDone ? (last ? (g.first ? "Дальше: " + esc(nextLabel) : "К игре") : "Дальше") : last ? (g.first ? "Готово, дальше: " + esc(nextLabel) : "Готово, к игре") : "Готово, дальше"}</span></button>
       </div>
     </div>`;
   }
@@ -906,7 +906,7 @@
   const textHTML = (t, gid) => String(t).includes("\n") ? stepsHTML(String(t).split("\n"), gid) : `<p>${fmtStep(t, gid)}</p>`;
   // what to do once the round is over: a list from the game (a function of the round, or the same every round)
   const afterOf = (g, ctx, r, last) => (typeof g.rounds.after === "function" ? g.rounds.after(ctx, r, last) : g.rounds.after) || [];
-  const afterHTML = (list, gid) => list.length ? `<div class="ph-after"><span class="ph-after-h">После раунда</span>${stepsHTML(list, gid)}</div>` : "";
+  const afterHTML = (list, gid) => list.length ? `<div class="ph-after"><span class="ph-after-h">${BH.game(gid) && BH.game(gid).heist ? "После ограбления" : "После раунда"}</span>${stepsHTML(list, gid)}</div>` : "";
   /* a screen of tabs (docs/ui.md «Экран с вкладками»): a compact header pinned on top — back as an icon, a picture, the
      title and one line under it, an action on the right — the tabs under it, each tab a screen of its own;
      the main action at the bottom, where the thumb is. The play screen, a game's page, a result and a player's card */
@@ -970,7 +970,7 @@
           <span class="hc-kind">${a.kind === "sp" ? "Специалист" : a.perm ? "Испытание на всю игру" : "Испытание"}</span>
           <span class="hc-name"><b>№${a.n} ${esc(d ? d.ru : "")}</b><small>${esc(d ? d.en : "")}</small></span>${I.edit}</button>
         ${d ? stepsHTML(d.steps, g.id) : ""}</div>`; }).join("")}
-      ${asks.map(q => `<button type="button" class="btn block hc-ask" data-act="coop-pick" data-kind="${q.kind}" data-slot="${q.perm ? "perm" : "new"}">${I.plus}${esc(q.label)}: какую открыли?</button>`).join("")}</section>` : "";
+      ${asks.map(q => `<button type="button" class="btn block hc-ask" data-act="coop-pick" data-kind="${q.kind}" data-slot="${q.perm ? "perm" : "new"}">${I.plus}${esc(q.label)}: какую карту открыли?</button>`).join("")}</section>` : "";
     const hist = s.rounds.length ? `<section class="panel"><div class="sec-h"><h2>Ограбления</h2></div><ol class="heist-hist">${s.rounds.map((rd, i) => {
       const used = rd.coop ? H.active(rd.coop).map(a => (H.cards[a.kind][a.n] || {}).ru).filter(Boolean) : [];
       return `<li class="${rd.heist === "ok" ? "ok" : "fail"}"><span class="hh-n">${i + 1}</span><b>${rd.heist === "ok" ? esc(g.scoring.okLabel) : esc(g.scoring.failLabel)}</b>${used.length ? `<small>${esc(used.join(", "))}</small>` : ""}</li>`; }).join("")}</ol></section>` : "";
@@ -1028,9 +1028,9 @@
     const row = (faces, name, p, col, i, sub) => `<div class="odds-row">${faces}<div class="odds-t"><b>${esc(name)}</b>${sub || ""}<div class="bar"><i style="width:${Math.round(p * 100)}%;background:${col}"></i></div></div><span class="odds-p num">${pc[i]}</span></div>`;
     const rows = ch.sides.map((sd, i) => row(sideFaces(sd.ids), sideNames(sd.ids), sd.p, (BH.player(sd.ids[0]) || { color: "#888" }).color, i, rec(sd))).join("") +
       (tie ? row(`<span class="odds-tie" aria-hidden="true">=</span>`, "Ничья", ch.tie, "var(--muted)", ch.sides.length) : "");
-    const basis = wins ? `По ${ch.games} ${BH.plural(ch.games, "прошлой партии", "прошлым партиям", "прошлым партиям")}: кто у кого выигрывал.`
-      : `По ${ch.rounds} ${BH.plural(ch.rounds, "раунду", "раундам", "раундам")} из ${ch.games} ${BH.plural(ch.games, "партии", "партий", "партий")}.`;
-    const later = wins && g.scoring.type === "rounds" ? " После первого раунда здесь будут шансы по очкам — когда в приложении наберётся 8 раундов." : "";
+    const basis = wins ? `Посчитано по ${ch.games} ${BH.plural(ch.games, "прошлой партии", "прошлым партиям", "прошлым партиям")} — по тому, кто у кого выигрывал.`
+      : `Посчитано по ${ch.rounds} ${BH.plural(ch.rounds, "раунду", "раундам", "раундам")} из ${ch.games} ${BH.plural(ch.games, "партии", "партий", "партий")}.`;
+    const later = wins && g.scoring.type === "rounds" ? " Когда в приложении наберётся 8 записанных раундов этой игры, шансы будут считаться по очкам — с первого раунда партии." : "";
     const how = wins ? "Чем чаще побеждали — особенно сильных соперников, — тем выше шанс; у новичка средний. Это прикидка: удачу приложение не учитывает." + later
       : (g.chances && g.chances.note) || `Приложение ${BH.chances.SIMS} раз доигрывает партию с очками, какие каждый обычно набирает за раунд. Это прикидка: карт на руках оно не видит.`;
     openDialog({ title: "Шансы на победу",
@@ -1160,7 +1160,7 @@
     return `<section class="panel"><h2 style="margin-bottom:6px">Блокнот</h2><div class="scroll-x"><table class="hist pad">
         <thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody>
         <tfoot><tr><th>Итого</th>${s.players.map(id => `<th>${tot[id]}</th>`).join("")}</tr>${anyTie && e.tie ? `<tr><td class="small muted">${esc(e.tie.label)}</td>${s.players.map(id => `<td class="small">${cell(fd[id] && fd[id].tie)}</td>`).join("")}</tr>` : ""}</tfoot>
-      </table></div><p class="tiny muted" style="margin-top:6px">Регионы — в порядке подсчёта: с последней сыгранной карты к первой.${winTie && e.tie ? ` Слава равная — победа по строке «${esc(e.tie.label)}»: меньше — выше.` : ""}</p></section>`;
+      </table></div><p class="tiny muted" style="margin-top:6px">Регионы — в порядке подсчёта: с последней сыгранной карты к первой.${winTie && e.tie ? ` При равной славе побеждает тот, у кого меньше число в строке «${esc(e.tie.label)}».` : ""}</p></section>`;
   }
 
   function viewDoneCoop(s, g) {
@@ -1207,7 +1207,7 @@
         top && (top.v || low) && !(g.sideScore && top.v <= 2) ? `<div class="kpi"><b>${top.v}</b><span>лучший раунд${topP ? ": " + esc(team ? sideName(BH.sidesOf(s).find(sd => sd.includes(top.id)) || [top.id]) : topP.name) + ", " + (top.i + 1) + "-й" : ""}</span></div>` : "",
         hasBust ? `<div class="kpi"><b>${busts}</b><span>${BH.plural(busts, "перебор", "перебора", "переборов")}</span></div>` : "",
         tw ? `<div class="kpi"><b>${tw}</b><span>${BH.plural(tw, "диск", "диска", "дисков")} в центре</span></div>` : "",
-        sevens ? `<div class="kpi"><b>${sevens}</b><span>${BH.plural(sevens, "раз", "раза", "раз")} 7 разных чисел</span></div>` : "",
+        sevens ? `<div class="kpi"><b>${sevens}</b><span>${BH.plural(sevens, "раз", "раза", "раз")} собрали 7 разных чисел</span></div>` : "",
       ].filter(Boolean);
       kpis = cells.length ? `<div class="kpis k3">${cells.join("")}</div>` : "";
       byPlayers = team || !hasBust ? "" : `<section class="panel"><h2 style="margin-bottom:6px">По игрокам</h2><div class="scroll-x"><table class="tbl">
@@ -1373,7 +1373,7 @@
       ${list.length > 9 ? `<div class="search">${I.search}<input class="input" type="search" data-act="players-q" placeholder="Поиск по имени" aria-label="Поиск игрока" autocomplete="off"></div>` : ""}
       ${list.length ? `<div class="pgrid">${list.map(({ p, n }) => `<a class="pcell${p.hidden ? " off" : ""}" href="#/players/${esc(p.id)}" data-name="${esc(p.name.toLowerCase())}">
           <span class="pcell-av">${BH.avatar(p, "xl")}${p.id === meId ? STAR : ""}</span>
-          <b>${esc(p.name)}</b><span class="pc-n">${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "ещё не играл(а)"}</span>${p.hidden ? '<span class="badge">скрыт</span>' : ""}
+          <b>${esc(p.name)}</b><span class="pc-n">${n ? n + " " + BH.plural(n, "партия", "партии", "партий") : "партий пока нет"}</span>${p.hidden ? '<span class="badge">скрыт</span>' : ""}
         </a>`).join("")}</div><p class="muted small" id="players-none" hidden>Никого не нашлось.</p>`
         : `<p class="muted small">Пока никого. Игроков можно добавить здесь или при создании партии.</p>`}
     </div>`;
@@ -1491,7 +1491,7 @@
     const live = S().sessions.filter(x => x.placeId === pl.id && x.status !== "finished");
     const used = S().sessions.some(x => x.placeId === pl.id);
     const parties = n => n + " " + BH.plural(n, "партия", "партии", "партий");
-    const tabs = [["stats", "Статистика"], ["games", "Игры"], ["sessions", "Партии"]];
+    const tabs = [["stats", "Обзор"], ["games", "Игры"], ["sessions", "Партии"]];
     const period = fin.length ? `<label class="small muted pc-sort">Период<select class="input" data-act="pl-period" aria-label="Период">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === plcard.period ? "selected" : ""}>${v}</option>`).join("")}</select></label>` : "";
     const none = `<p class="muted small">${fin.length ? "За этот период партий нет." : "Здесь ещё не играли."}</p>`;
     let body;
@@ -1558,7 +1558,7 @@
       <div class="kpis">
         <div class="kpi"><b>${fin.length}</b><span>${BH.plural(fin.length, "партия", "партии", "партий")}</span></div>
         <div class="kpi"><b>${games.size}</b><span>${BH.plural(games.size, "игра", "игры", "игр")}</span></div>
-        <div class="kpi"><b>${(hours / 3600000).toFixed(1).replace(".", ",")}</b><span>часов за столом</span></div>
+        <div class="kpi"><b>${(hours / 3600000).toFixed(1).replace(".", ",")} ч</b><span>за столом</span></div>
         <div class="kpi"><b>${fin.reduce((a, s) => a + s.rounds.length, 0)}</b><span>раундов</span></div>
       </div>`;
     const tabs = fin.length ? [
@@ -1588,7 +1588,7 @@
         <div class="spread"><span>Тема</span><div class="seg">${seg("theme", "auto", "Как в системе")}${seg("theme", "light", "Светлая")}${seg("theme", "dark", "Тёмная")}</div></div>
       </section>`;
     else if (sub === "chances") body = `<section class="panel stack"><h2>Шансы в партии</h2>
-        <p class="small muted">Во время партии на её экране — фаворит и шансы каждого: по очкам прошлых раундов или по тому, кто у кого выигрывал.</p>
+        <p class="small muted">Во время партии на её экране видно фаворита и шансы каждого на победу. Их считают по очкам прошлых раундов или по тому, кто у кого раньше выигрывал.</p>
         <div class="spread"><span>Показывать</span><div class="seg">${seg("chances", true, "Вкл")}${seg("chances", false, "Выкл")}</div></div>
         ${st.chances === false ? "" : `<div class="spread"><span class="small"><b>В детских играх</b><br><span class="muted">Для игр с 4–5 лет, как «Зоопарк»: малышу может быть обидно видеть свой маленький шанс.</span></span><div class="seg">${seg("kidsChances", true, "Вкл")}${seg("kidsChances", false, "Выкл")}</div></div>`}
       </section>`;
@@ -1694,9 +1694,9 @@
         ${r.quote ? `<details class="small"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Где это в правилах${r.page ? `: стр. ${esc(r.page)}` : ""}</summary><blockquote class="ask-quote" style="margin-top:8px">${esc(r.quote)}${r.page ? `<cite>Стр. ${esc(r.page)} в книге правил</cite>` : ""}</blockquote></details>` : ""}
         ${r.ref && (BH.game(a.gameId) || { rules: [] }).rules.some(x => x.id === r.ref) ? `<button type="button" class="btn ghost sm" data-act="ask-rule" data-id="${esc(r.ref)}">${I.book}Раздел правил: ${esc(BH.game(a.gameId).rules.find(x => x.id === r.ref).title)}</button>` : ""}
         ${r.ttsError && BH.voice.speaks() ? `<p class="tiny muted">Ответ не озвучен: ${esc(r.ttsError)}</p>` : ""}
-        ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали — ответ сохранён, бесплатно.</p>` : ""}`;
+        ${r.fromDevice ? `<p class="tiny muted">Этот вопрос уже задавали, поэтому ответ взят из сохранённых и ничего не стоил.</p>` : ""}`;
     else if (a.phase === "error") body = `${a.text ? `<p class="ask-q">«${esc(a.text)}»</p>` : ""}<div class="note">${esc(a.error)}</div>
-        ${a.local && a.local.length ? `<p class="small muted">Нашёл в шпаргалке на телефоне:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true, BH.game(a.gameId))).join("")}` : ""}`;
+        ${a.local && a.local.length ? `<p class="small muted">Вот что нашлось в правилах приложения:</p>${a.local.map(h => h.kind === "faq" ? `<div class="qa"><b>${esc(h.title)}</b><p>${esc(h.item.a)}</p></div>` : BH.rulesUI.ruleHTML(h.item, a.text, true, BH.game(a.gameId))).join("")}` : ""}`;
     const typing = a.phase === "type" || a.phase === "answer" || (a.phase === "error" && BH.voice.ready());
     const foot = (a.phase === "listening" ? `<button class="btn big" data-act="ask-close">Отмена</button><button class="btn primary big" data-act="ask-stop">${I.check}Отправить</button>` : "") +
       (a.phase === "answer" && r.audio ? `<button class="btn big" data-act="ask-replay" aria-label="Прослушать ещё раз">${I.speak}</button>` : "") +
@@ -1734,7 +1734,7 @@
         <label class="field">Имя на GitHub<input class="input" name="owner" required placeholder="например, PlayWithMao" value="${esc(w ? w.owner : "")}" autocapitalize="off" spellcheck="false"></label>
         <label class="field">Репозиторий<input class="input" name="repo" required value="${esc(w ? w.repo : "koleso-data")}" autocapitalize="off" spellcheck="false"></label>
         <label class="field">Токен доступа<input class="input" name="token" type="password" required placeholder="github_pat_…" autocomplete="off"></label>
-        ${w && w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" data-target="own-pass-m" checked> Тот же пароль шифрования, что в колесе</label>` : ""}
+        ${w && w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" data-target="own-pass-m" checked> Тот же пароль шифрования, что в «Колесе недели»</label>` : ""}
         <div class="stack" id="own-pass-m" ${w && w.pass ? "hidden" : ""}>
           <label class="field">Пароль шифрования<input class="input" name="pass" type="password" minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
           <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
@@ -1746,7 +1746,7 @@
       <p class="small muted">Партии и игроки шифруются на устройстве вашим паролем и хранятся в закрытом репозитории на GitHub. Без интернета всё сохраняется на устройстве и отправляется само, когда связь появится. Так данные видны и на телефоне, и на ПК.</p>
       ${w ? `<form class="stack" data-form="sync-wheel" autocomplete="off">
           <div class="note good">На этом устройстве подключено «Колесо недели»: <b>${esc(w.owner)}/${esc(w.repo)}</b>. Можно взять это подключение — новый токен не нужен.</div>
-          ${w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" data-target="own-pass" checked> Тот же пароль шифрования, что в колесе</label>` : ""}
+          ${w.pass ? `<label class="check" style="font-weight:500"><input type="checkbox" name="same" data-act="sync-same" data-target="own-pass" checked> Тот же пароль шифрования, что в «Колесе недели»</label>` : ""}
           <div class="stack" id="own-pass" ${w.pass ? "hidden" : ""}>
             <label class="field">Пароль шифрования для настолок<input class="input" name="pass" type="password" minlength="8" placeholder="не меньше 8 символов" autocomplete="new-password"></label>
             <label class="field">Повторите пароль<input class="input" name="pass2" type="password" placeholder="нужно только на первом устройстве" autocomplete="new-password"></label>
@@ -1763,7 +1763,7 @@
     ok: ["ok", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', "сохранено"],
     busy: ["busy", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>', "отправляю"],
     pending: ["pending", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11l6-6 6 6"/></svg>', "ждёт связи"],
-    local: ["local", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>', "на телефоне"],
+    local: ["local", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>', "на устройстве"],
     error: ["error", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>', "ошибка"],
   };
   function updateSync() {
@@ -1800,7 +1800,7 @@
       const fixed = fixWheel && BH.cloud.updateWheelToken(cfg.token);
       syncMsg = ""; wheelTokenBad = false;
       render();
-      BH.toast((r.firstDevice ? "Синхронизация включена, данные отправлены" : "Синхронизация включена, данные объединены") + (fixed ? ". Токен в колесе тоже обновлён" : ""));
+      BH.toast((r.firstDevice ? "Синхронизация включена, данные отправлены" : "Синхронизация включена, данные объединены") + (fixed ? ". Токен в «Колесе недели» тоже обновлён" : ""));
     } catch (err) {
       syncMsg = "Не получилось: " + ((err && err.message) || String(err));
       if (err && err.code === "auth" && form.dataset.form === "sync-wheel") {
@@ -1883,7 +1883,7 @@
       </div>`;
     }).join("");
     return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
-      <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">${sheet.index !== null ? "Исправить раунд " + (idx + 1) : "Раунд " + (idx + 1)}</h2>${leader ? `<span class="mi accent">${BH.avatar(leader, "xs")}<span>${esc((g.rounds.leaderLabel || "Начинал") + ": " + leader.name)}</span></span>` : ""}</div>
+      <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">${sheet.index !== null ? "Исправить раунд " + (idx + 1) : "Раунд " + (idx + 1)}</h2>${leader ? `<span class="mi accent">${BH.avatar(leader, "xs")}<span>${esc((g.rounds.leaderLabel || "Начинает") + ": " + leader.name)}</span></span>` : ""}</div>
         <div class="row" style="gap:4px">${sheet.index !== null ? `<button class="icon-btn danger-ic" data-act="delete-round" aria-label="Удалить раунд" title="Удалить раунд">${I.trash}</button>` : ""}<button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div></div>
       <div class="sheet-body">
         <p class="small muted">Посчитайте диски каждой стороны в центре и кольцах. Или впишите очки справа.</p>
@@ -1968,8 +1968,8 @@
       const any = s.players.some(id => BH.endFilled(g, sheet.entries[id]));
       tn.hidden = !any || !(res.tieOpen.length || res.byTie);
       tn.className = "note " + (res.byTie ? "good" : "");
-      tn.textContent = res.tieOpen.length ? `Слава равная у: ${res.winners.map(pname).join(", ")}. Впишите им «${e.tie.label}» — побеждает меньшее число.`
-        : res.byTie ? `Слава равная — побеждает ${res.winners.map(pname).join(", ")}: «${e.tie.label}» меньше.` : "";
+      tn.textContent = res.tieOpen.length ? `Славы поровну у игроков: ${res.winners.map(pname).join(", ")}. Впишите им «${e.tie.label}» — побеждает меньшее число.`
+        : res.byTie ? `Славы поровну — побеждает ${res.winners.map(pname).join(", ")}: в строке «${e.tie.label}» число меньше.` : "";
     }
   }
   function endSheetHTML() {
@@ -2027,7 +2027,7 @@
     const empty = s.players.filter(id => BH.endFilled(g, sheet.entries[id]) < cells);
     if (empty.length) {
       const none = s.players.filter(id => !BH.endFilled(g, sheet.entries[id]));
-      openDialog({ title: "Не всё вписано", text: `Пустые клетки у: ${empty.map(pname).join(", ")}. Пустая клетка считается нулём.${none.length ? ` У ${none.map(pname).join(", ")} не вписано ничего — без очков в статистике.` : ""}`, buttons: [
+      openDialog({ title: "Не всё вписано", text: `Пустые клетки остались у игроков: ${empty.map(pname).join(", ")}. Пустая клетка считается нулём.${none.length ? ` Ничего не вписано: ${none.map(pname).join(", ")} — в статистике ${none.length > 1 ? "эти игроки останутся" : "этот игрок останется"} без очков.` : ""}`, buttons: [
         { label: "Записать как есть", primary: true, run: () => { dialog = null; tieStep(); } },
         { label: "Дописать", run: () => { dialog = null; sheet.open = empty[0]; renderOverlay(); } }] });
       return;
@@ -2068,7 +2068,7 @@
     const names = ids => (ids.length > 1 ? ids.slice(0, -1).map(pname).join(", ") + " и " + pname(ids[ids.length - 1]) : ids.map(pname).join(""));
     const ender = C.tie === "ender";
     const text = !filled ? (C.fill || "Впишите кокосы каждого игрока") : top.length === 1 ? `Больше всех: ${names(top)} — ${best}`
-      : tw ? (ender ? `Поровну по ${best}. Закончил партию ${pname(picked)} — победа: ${pname(tw)}` : `Поровну по ${best}. Победа по последнему ходу: ${pname(tw)}`)
+      : tw ? (ender ? `Поровну по ${best}. Тот, кто закончил партию (${pname(picked)}), проигрывает. Победа: ${pname(tw)}` : `Поровну по ${best}. Победа по последнему ходу: ${pname(tw)}`)
       : `Поровну по ${best} у: ${names(top)}. ${C.tieAsk || "Чей ход был последним?"}`;
     return { filled, top, winner: filled ? (top.length === 1 ? top[0] : tw) : null, text };
   }
@@ -2150,7 +2150,7 @@
       </div>`;
     }).join("");
     return `<div class="overlay" data-act="overlay-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
-      <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">${sheet.index !== null ? "Исправить раунд " + (idx + 1) : "Раунд " + (idx + 1)}</h2>${leader ? `<span class="mi accent">${BH.avatar(leader, "xs")}<span>${esc((g.rounds.leaderLabel || "Начинал") + ": " + leader.name)}</span></span>` : ""}</div>
+      <div class="sheet-head"><div class="sheet-t"><h2 id="sheet-h">${sheet.index !== null ? "Исправить раунд " + (idx + 1) : "Раунд " + (idx + 1)}</h2>${leader ? `<span class="mi accent">${BH.avatar(leader, "xs")}<span>${esc((g.rounds.leaderLabel || "Начинает") + ": " + leader.name)}</span></span>` : ""}</div>
         <div class="row" style="gap:4px">${sheet.index !== null ? `<button class="icon-btn danger-ic" data-act="delete-round" aria-label="Удалить раунд" title="Удалить раунд">${I.trash}</button>` : ""}<button class="icon-btn" data-act="close-sheet" aria-label="Закрыть">${I.x}</button></div></div>
       <div class="sheet-body">
         ${g.calc ? `<p class="small muted">Отметьте карты — очки посчитаются. Или впишите число справа.</p>` : `<p class="small muted">Впишите очки каждого игрока за раунд.</p>`}
@@ -2194,7 +2194,7 @@
     if (end.over && end.tie && !(s.continueTie && s.rounds.length <= s.continueTie)) {
       render();
       openDialog({
-        title: "Ничья", text: ((g.scoring && (typeof g.scoring.tieNote === "function" ? g.scoring.tieNote(BH.ctxOf(s)) : g.scoring.tieNote)) || "Сразу несколько игроков с лучшим счётом.") + " Сейчас поровну у: " + BH.sidesOf(s).filter(sd => sd.some(id => end.winners.includes(id))).map(sd => sd.map(id => (BH.player(id) || {}).name).join(" и ")).join(", ") + ".",
+        title: "Ничья", text: ((g.scoring && (typeof g.scoring.tieNote === "function" ? g.scoring.tieNote(BH.ctxOf(s)) : g.scoring.tieNote)) || "Лучший счёт сразу у нескольких игроков.") + " Сейчас поровну: " + BH.sidesOf(s).filter(sd => sd.some(id => end.winners.includes(id))).map(sd => sd.map(id => (BH.player(id) || {}).name).join(" и ")).join(", ") + ".",
         buttons: [
           { label: "Сыграть ещё раунд", primary: true, run: () => { const c = fresh(s); c.continueTie = c.rounds.length; BH.saveNow(); closeDialog(); render(); } },
           { label: "Записать ничью", run: () => { closeDialog(); finish(fresh(s), end.winners); } },
@@ -2424,7 +2424,7 @@
         if (BH.isRace(BH.game(s.gameId))) { openRaceEnd(s); break; }
         if (BH.isCoop(BH.game(s.gameId))) {
           const t = BH.coopTally(s);
-          openDialog({ title: "Завершить партию?", text: `Хранилищ ${t.ok} из ${t.wins}, тревог ${t.fail} из ${t.losses}. Партию, прерванную раньше, можно записать как победу или поражение.`, buttons: [
+          openDialog({ title: "Завершить партию?", text: `Хранилищ ${t.ok} из ${t.wins}, тревог ${t.fail} из ${t.losses}. Если партию прервали досрочно, её можно записать как победу банды или как поражение.`, buttons: [
             { label: "Записать победу банды", run: () => { closeDialog(); finish(s, s.players.slice()); } },
             { label: "Записать поражение", run: () => { closeDialog(); finish(s, []); } },
             { label: "Удалить партию", danger: true, run: () => confirmDelete(s) },
@@ -2476,7 +2476,7 @@
         e.counts[z] = Math.max(0, (e.counts[z] || 0) + d); e.manual = null;
         renderOverlay(); break;
       }
-      case "delete-round": { const i = sheet.index; openDialog({ title: "Удалить раунд " + (i + 1) + "?", text: "Остальные раунды сохранятся, сдающие сдвинутся.", buttons: [
+      case "delete-round": { const i = sheet.index; openDialog({ title: "Удалить раунд " + (i + 1) + "?", text: "Остальные раунды сохранятся. Кто сдаёт или начинает следующие раунды, приложение пересчитает.", buttons: [
         { label: "Удалить", danger: true, run: () => { const c = fresh(s); c.rounds.splice(i, 1); c.rounds.forEach((rd, j) => { rd.leader = BH.leaderAt(c, j); }); sheet = null; dialog = null; BH.saveNow(); afterRoundChange(c, false); } }, { label: "Отмена", run: () => { dialog = null; renderOverlay(); } }] }); break; }
       case "dlg-choice": { const c = dialog && dialog.choices && dialog.choices[+el.dataset.i]; if (c) c.run(); break; }
       case "dlg": { const b = dialog && dialog.buttons[+el.dataset.i]; if (b) b.run(); break; }
@@ -2797,7 +2797,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.26.0";
+  BH.version = "0.27.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

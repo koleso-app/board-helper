@@ -372,60 +372,40 @@
     </div>`;
   }
 
-  /* ---------- the sessions tab: a calendar — one week, or the month on a tap of its name — and the games of that week,
-     month or of a chosen day ---------- */
-  let cal = null;   // { y, m, day, month: the whole month shown, wk: the Monday of the week shown } — kept while moving around
-  const mondayOf = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
-  const dayKey = d => d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+  /* ---------- the sessions tab: a month calendar and the games of the month or of a chosen day ---------- */
+  let cal = null;   // { y, m, day } — kept while moving around the app
   function viewSessions() {
     const now = new Date();
-    if (!cal) cal = { y: now.getFullYear(), m: now.getMonth(), day: null, month: false, wk: mondayOf(now).getTime() };
-    if (!cal.wk) cal.wk = mondayOf(now).getTime();
-    const fin = S().sessions.filter(s => s.status === "finished");
-    const per = {}; for (const s of fin) { const k = dayKey(new Date(s.created)); per[k] = (per[k] || 0) + 1; }
-    const cell = (d, other) => {
-      const n = per[dayKey(d)] || 0, mine = d.getFullYear() === cal.y && d.getMonth() === cal.m && cal.day === d.getDate();
-      return `<button class="cal-d${dayKey(d) === dayKey(now) ? " today" : ""}${other ? " other" : ""}" data-act="cal-day" data-d="${d.getDate()}" data-ym="${d.getFullYear()}-${d.getMonth()}" aria-pressed="${mine}" aria-label="${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}${n ? ", " + n + " " + BH.plural(n, "партия", "партии", "партий") : ""}"><span>${d.getDate()}</span><i class="dots">${"<b></b>".repeat(Math.min(n, 4))}</i></button>`;
-    };
+    if (!cal) cal = { y: now.getFullYear(), m: now.getMonth(), day: null };
+    const first = new Date(cal.y, cal.m, 1), days = new Date(cal.y, cal.m + 1, 0).getDate();
+    const lead = (first.getDay() + 6) % 7;   // weeks start on Monday
+    const dayOf = s => { const d = new Date(s.created); return d.getFullYear() === cal.y && d.getMonth() === cal.m ? d.getDate() : 0; };
+    const inMonth = S().sessions.filter(dayOf).sort((a, b) => (b.created || 0) - (a.created || 0));
+    const per = {}; for (const s of inMonth) if (s.status === "finished") per[dayOf(s)] = (per[dayOf(s)] || 0) + 1;
+    const thisMonth = cal.y === now.getFullYear() && cal.m === now.getMonth();
     const cells = [];
-    let title, list, heading, back = "";
-    if (cal.month) {
-      const first = new Date(cal.y, cal.m, 1), days = new Date(cal.y, cal.m + 1, 0).getDate(), lead = (first.getDay() + 6) % 7;
-      for (let i = 0; i < lead; i++) cells.push('<span class="cal-d off" aria-hidden="true"></span>');
-      for (let d = 1; d <= days; d++) cells.push(cell(new Date(cal.y, cal.m, d), false));
-      title = `${MONTHS_NOM[cal.m]} ${cal.y}`;
-      const inMonth = fin.filter(s => { const d = new Date(s.created); return d.getFullYear() === cal.y && d.getMonth() === cal.m; });
-      list = cal.day ? inMonth.filter(s => new Date(s.created).getDate() === cal.day) : inMonth;
-      heading = cal.day ? `Сыграно ${cal.day} ${MONTHS_GEN[cal.m]}` : `Сыграно в ${MONTHS_IN[cal.m]}`;
-      if (!(cal.y === now.getFullYear() && cal.m === now.getMonth())) back = "К сегодняшнему дню";
-    } else {
-      const wk = new Date(cal.wk), mid = new Date(wk); mid.setDate(mid.getDate() + 3);
-      for (let i = 0; i < 7; i++) { const d = new Date(wk); d.setDate(d.getDate() + i); cells.push(cell(d, d.getMonth() !== mid.getMonth())); }
-      const end = new Date(wk); end.setDate(end.getDate() + 7);
-      title = `${MONTHS_NOM[mid.getMonth()]} ${mid.getFullYear()}`;
-      const inWeek = fin.filter(s => s.created >= wk.getTime() && s.created < end.getTime());
-      const sel = cal.day ? new Date(cal.y, cal.m, cal.day) : null, inSel = sel && sel >= wk && sel < end;
-      list = inSel ? inWeek.filter(s => dayKey(new Date(s.created)) === dayKey(sel)) : inWeek;
-      heading = inSel ? `Сыграно ${cal.day} ${MONTHS_GEN[cal.m]}` : "Сыграно на этой неделе";
-      if (wk.getTime() !== mondayOf(now).getTime()) { back = "К этой неделе"; heading = inSel ? heading : "Сыграно на неделе"; }
+    for (let i = 0; i < lead; i++) cells.push('<span class="cal-d off" aria-hidden="true"></span>');
+    for (let d = 1; d <= days; d++) {
+      const n = per[d] || 0;
+      cells.push(`<button class="cal-d${thisMonth && d === now.getDate() ? " today" : ""}" data-act="cal-day" data-d="${d}" aria-pressed="${cal.day === d}" aria-label="${d} ${MONTHS_SHORT[cal.m]}${n ? ", " + n + " " + BH.plural(n, "партия", "партии", "партий") : ""}"><span>${d}</span><i class="dots">${"<b></b>".repeat(Math.min(n, 4))}</i></button>`);
     }
-    list.sort((a, b) => (b.created || 0) - (a.created || 0));
     // games still going are listed once, under «Идут сейчас»; the list below is what was played
+    const shown = (cal.day ? inMonth.filter(s => dayOf(s) === cal.day) : inMonth).filter(s => s.status === "finished");
     const live = S().sessions.filter(s => s.status !== "finished");
     return `<div class="stack">
-      <div class="page-head"><div><h1>Партии</h1><p class="sub">Сыграно: ${fin.length} ${BH.plural(fin.length, "партия", "партии", "партий")}</p></div><a class="btn primary" href="#/new">${I.plus}Новая партия</a></div>
+      <div class="page-head"><div><h1>Партии</h1><p class="sub">Сыграно: ${finishedSessions().length} ${BH.plural(finishedSessions().length, "партия", "партии", "партий")}</p></div><a class="btn primary" href="#/new">${I.plus}Новая партия</a></div>
       ${live.length ? `<section class="panel"><div class="sec-h"><h2>Идут сейчас</h2><span class="badge accent">${live.length}</span></div><div class="list">${live.map(sessionLine).join("")}</div></section>` : ""}
       <section class="panel cal">
-        <div class="cal-head"><button class="icon-btn" data-act="cal-move" data-step="-1" aria-label="${cal.month ? "Предыдущий месяц" : "Предыдущая неделя"}">${I.back}</button>
-          <button type="button" class="cal-title" data-act="cal-mode" aria-expanded="${!!cal.month}" title="${cal.month ? "Показать неделю" : "Показать весь месяц"}">${title}${IC.chev}</button>
-          <button class="icon-btn cal-next" data-act="cal-move" data-step="1" aria-label="${cal.month ? "Следующий месяц" : "Следующая неделя"}">${I.back}</button></div>
+        <div class="cal-head"><button class="icon-btn" data-act="cal-move" data-step="-1" aria-label="Предыдущий месяц">${I.back}</button>
+          <b>${MONTHS_NOM[cal.m]} ${cal.y}</b>
+          <button class="icon-btn cal-next" data-act="cal-move" data-step="1" aria-label="Следующий месяц">${I.back}</button></div>
         <div class="cal-grid cal-wd">${["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map(x => `<span>${x}</span>`).join("")}</div>
         <div class="cal-grid">${cells.join("")}</div>
-        ${back ? `<div style="text-align:center;margin-top:6px"><button class="btn ghost sm" data-act="cal-today">${back}</button></div>` : ""}
+        ${thisMonth ? "" : `<div style="text-align:center;margin-top:6px"><button class="btn ghost sm" data-act="cal-today">К сегодняшнему дню</button></div>`}
       </section>
       <section class="panel">
-        <div class="spread" style="margin-bottom:4px"><h2>${heading}</h2>${cal.day ? `<button class="btn ghost sm" data-act="cal-day" data-d="${cal.day}" data-ym="${cal.y}-${cal.m}">${cal.month ? "Весь месяц" : "Вся неделя"}</button>` : ""}</div>
-        ${list.length ? `<div class="list">${list.map(sessionLine).join("")}</div>` : `<p class="muted small" style="padding:8px 0">${cal.day ? "В этот день сыгранных партий нет." : cal.month ? "В этом месяце сыгранных партий нет." : "На этой неделе сыгранных партий нет."}</p>`}
+        <div class="spread" style="margin-bottom:4px"><h2>${cal.day ? `Сыграно ${cal.day} ${MONTHS_GEN[cal.m]}` : `Сыграно в ${MONTHS_IN[cal.m]}`}</h2>${cal.day ? `<button class="btn ghost sm" data-act="cal-day" data-d="${cal.day}">Весь месяц</button>` : ""}</div>
+        ${shown.length ? `<div class="list">${shown.map(sessionLine).join("")}</div>` : `<p class="muted small" style="padding:8px 0">${cal.day ? "В этот день сыгранных партий нет." : "В этом месяце сыгранных партий нет."}</p>`}
       </section>
     </div>`;
   }
@@ -1244,10 +1224,10 @@
     return `<div class="stack">
       <div class="page-head"><div><h1>Игры</h1><p class="sub">${n} ${BH.plural(n, "игра", "игры", "игр")} в коллекции, сначала самые играемые</p></div></div>
       ${n > 6 ? `<div class="search search-pin">${I.search}<input class="input" type="search" data-act="games-q" placeholder="По названию" aria-label="Поиск игры" autocomplete="off"></div>` : ""}
-      <div class="gtiles">${list.map(({ g, n: k }) => `<a class="gtile" href="#/games/${esc(g.id)}" data-name="${esc(g.name.toLowerCase())}">
+      <div class="glist">${list.map(({ g, n: k }) => `<a class="grow" href="#/games/${esc(g.id)}" data-name="${esc(g.name.toLowerCase())}">
           ${coverOf(g)}
-          <span class="t"><b>${esc(g.name)}</b><small>${esc(playersRange(g))}${g.time ? " · " + esc(g.time) : ""}</small>
-            <small class="gt-n${k ? "" : " zero"}">${IC.cards}${k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "не играли"}</small></span>
+          <span class="t"><b>${esc(g.name)}</b>${meta([[IC.people, playersRange(g), "Игроков"], g.time && [IC.clock, esc(g.time), "Время партии"]], "plain")}</span>
+          <span class="grow-n${k ? "" : " zero"}" title="Сыграно партий">${IC.cards}${k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "не играли"}</span>
         </a>`).join("")}</div>
       <p class="muted small" id="games-none" hidden>Ничего не нашлось.</p>
     </div>`;
@@ -2482,24 +2462,9 @@
       }
 
       /* sessions calendar */
-      case "cal-move": {
-        cal.day = null; const k = Number(el.dataset.step);
-        if (cal.month) { const d = new Date(cal.y, cal.m + k, 1); cal.y = d.getFullYear(); cal.m = d.getMonth(); }
-        else { const w = new Date(cal.wk); w.setDate(w.getDate() + 7 * k); cal.wk = w.getTime(); const mid = new Date(w); mid.setDate(mid.getDate() + 3); cal.y = mid.getFullYear(); cal.m = mid.getMonth(); }
-        render(); break;
-      }
-      case "cal-today": { const d = new Date(); cal = { y: d.getFullYear(), m: d.getMonth(), day: null, month: cal.month, wk: mondayOf(d).getTime() }; render(); break; }
-      case "cal-day": {
-        const d = Number(el.dataset.d), [y, m] = String(el.dataset.ym || cal.y + "-" + cal.m).split("-").map(Number);
-        if (cal.day === d && cal.y === y && cal.m === m) cal.day = null; else { cal.y = y; cal.m = m; cal.day = d; }
-        render(); break;
-      }
-      // the name of the month: the whole month, or back to one week (the one of the chosen day, or this one, or the first)
-      case "cal-mode": {
-        cal.month = !cal.month;
-        if (!cal.month) { const now = new Date(), at = cal.day ? new Date(cal.y, cal.m, cal.day) : cal.y === now.getFullYear() && cal.m === now.getMonth() ? now : new Date(cal.y, cal.m, 1); cal.wk = mondayOf(at).getTime(); }
-        render(); break;
-      }
+      case "cal-move": { cal.day = null; const d = new Date(cal.y, cal.m + Number(el.dataset.step), 1); cal.y = d.getFullYear(); cal.m = d.getMonth(); render(); break; }
+      case "cal-today": { const d = new Date(); cal = { y: d.getFullYear(), m: d.getMonth(), day: null }; render(); break; }
+      case "cal-day": { const d = Number(el.dataset.d); cal.day = cal.day === d ? null : d; render(); break; }
 
       /* rules */
       case "say-rule": { const g = BH.game(s ? s.gameId : r.b); if (g) BH.rulesUI.say(g, el.dataset.id); break; }
@@ -2643,7 +2608,7 @@
     }
     if (el.dataset.act === "games-q") {   // games list: filter in place, no redraw while typing
       const q = el.value.trim().toLowerCase(); let any = false;
-      BH.$$(".gtiles .gtile").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
+      BH.$$(".glist .grow").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
       const none = BH.$("#games-none"); if (none) none.hidden = any;
       return;
     }
@@ -2801,7 +2766,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.25.0";
+  BH.version = "0.25.1";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

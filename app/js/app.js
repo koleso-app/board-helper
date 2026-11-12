@@ -1013,7 +1013,7 @@
       </div>
       <div class="play">
         <div class="stack">
-          <section class="panel"><div class="sec-h"><h2>Как идёт ход</h2></div><div class="reminder">${stepsHTML(reminder, g.id)}</div></section>
+          <section class="panel"><div class="sec-h"><h2>${esc(g.rounds.title || "Как идёт ход")}</h2></div><div class="reminder">${stepsHTML(reminder, g.id)}</div></section>
           ${cards.length ? `<section class="panel"><div class="sec-h"><h2>${esc(g.cardsTitle || "Карты")}</h2></div>
             <div class="mc-grid">${cards.map((k, i) => `<button type="button" class="mc-tile" data-act="mc-open" data-i="${i}" aria-label="${esc(k.name)}: что делать"><span class="mc-pic"${k.img ? BH.assets.attr(g.id, [k.img + "@icon"]) : ""}>${k.art || MC_PIC}</span><b>${esc(k.name)}</b>${k.tag ? `<small>${esc(k.tag)}</small>` : ""}</button>`).join("")}</div>
             ${g.cardsFoot ? `<p class="small muted mc-foot">${esc(g.cardsFoot)}</p>` : ""}</section>` : ""}
@@ -2744,7 +2744,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.19.2";
+  BH.version = "0.20.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

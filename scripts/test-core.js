@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -754,4 +754,57 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     const grouped = new Set(G.ruleGroups.flatMap(gr => gr.ids)); for (const id of ids) assert.ok(grouped.has(id), "rule in a group: " + id);
   });
   console.log(`goldfever: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+{
+  // «Зоопарк» (Team Zoo, Hobby World): the Russian rules 1.0, the English rules for checking (docs/rules-check.md)
+  const G = BH.game("zoo"), before = passed;
+  const cx = (n, ...opts) => ({ players: n, exp: new Set(), has: () => false, opt: id => opts.includes(id) });
+  const sess = (n, opts) => ({ gameId: "zoo", players: ["a", "b", "c", "d"].slice(0, n), exp: [], opts: opts || {}, rounds: [] });
+  t("zoo: 2–4 players (four colour sets); a race to 4 animal cards; whoever last petted an animal starts", () => {
+    assert.strictEqual(G.players.min, 2); assert.strictEqual(G.players.max, 4);
+    assert.ok(BH.isRace(G) && !G.scoring.count, "no count: the first to four cards wins at once");
+    assert.strictEqual(BH.raceGoal(G, sess(3)), 4);
+    assert.ok(G.first && /гладил зверька/.test(G.first.hint) && G.rounds.leader === false);
+  });
+  t("zoo: setup — 7 food tiles of one colour face down, the 14 fake tiles in the middle, the deck face down; the box is enough", () => {
+    const steps = BH.setupSteps(sess(4)), text = id => { const st = steps.find(x => x.id === id); return st && (typeof st.text === "function" ? st.text(cx(4)) : st.text); };
+    assert.ok(text("tiles").includes("*7* жетонов корма *одного цвета*") && /лицом вниз/.test(text("tiles")));
+    for (const f of ["трава", "фрукты", "зёрна", "ветки", "мясо", "орехи", "овощи"]) assert.ok(text("tiles").includes(f), f);
+    assert.ok(text("table").includes("*14*") && /какаду — в коробку/.test(text("table")), "the first game without the cockatoo");
+    assert.ok(!steps.some(x => x.id === "cockatoo"));
+    const withC = BH.setupSteps(sess(4, { cockatoo: true }));
+    const tb = withC.find(x => x.id === "table").text;
+    assert.ok(withC.some(x => x.id === "cockatoo") && !/в коробку/.test(typeof tb === "function" ? tb(cx(4, "cockatoo")) : tb));
+    // 28 food tiles = 4 sets of 7; a game of 4 ends by the 13th round at the latest: 13 cards of 21, and 12 fake tiles of 14
+    // (the 13th round's winner takes the 4th card and the game ends)
+    const goal = BH.raceGoal(G, sess(4));
+    assert.strictEqual(4 * 7, 28); assert.ok(4 * (goal - 1) + 1 <= 21 && 4 * (goal - 1) <= 14);
+    assert.ok(/лицом вниз\* и перемешайте/.test(text("tiles")), "face down first, then shuffle (p. 5)");
+    assert.ok(/Прочитайте\* требование/.test(withC.find(x => x.id === "cockatoo").text), "the cockatoo requirement is read out (p. 7)");
+  });
+  t("zoo: the round — two tiles at once, both must match, «Кормлю!», the winner takes a fake tile and opens the next card", () => {
+    const rem = G.rounds.reminder(cx(3)).join(" ");
+    assert.ok(/обеими руками \*2\* своих жетона/.test(rem) && /закрой оба/.test(rem) && /«Кормлю!»/.test(rem) && /Ничья — раунд заново/.test(rem));
+    assert.ok(/\*1\* пустышку и перемешивает свои жетоны, остальные — \*нет\*/.test(rem));
+    assert.strictEqual(rem.split("Победитель прошлого раунда").length, 2, "who opens the next card is said once, in the first line");
+    assert.ok(/^Победитель прошлого раунда/.test(G.rounds.reminder(cx(3))[0]), "the first player changes every round");
+    assert.ok(/Карту \*какаду\* — победителю/.test(G.rounds.reminder(cx(3, "cockatoo")).join(" ")));
+    assert.ok(!/какаду/.test(rem) && /какаду/.test(G.rounds.reminder(cx(3, "cockatoo")).join(" ")), "the cockatoo line only with the cockatoo cards");
+  });
+  t("zoo: the end is kept as «the goal reached»", () => {
+    BH.replaceFromSync({ players: [{ id: "a", name: "А" }, { id: "b", name: "Б" }], places: [], placesTouched: true,
+      sessions: [{ id: "z1", gameId: "zoo", players: ["a", "b"], status: "finished", rounds: [], winners: ["b"], race: { how: "goal" } }] });
+    assert.strictEqual(JSON.stringify(BH.state.sessions[0].race), JSON.stringify({ how: "goal" }));
+    assert.ok(/4 карты животных/.test(G.scoring.goalDone(4)) && /4 карты животных/.test(G.scoring.goalText(4)));
+  });
+  t("zoo: rules, groups, questions refer to real sections; pages of the rules 1, 5–7", () => {
+    const ids = new Set(G.rules.map(r => r.id));
+    for (const gr of G.ruleGroups) for (const id of gr.ids) assert.ok(ids.has(id), "group " + id);
+    for (const gr of G.faqGroups) for (const id of gr.refs) assert.ok(ids.has(id), "faq group " + id);
+    for (const f of G.faq) { assert.ok(ids.has(f.ref), "faq ref " + f.ref); if (f.src) assert.ok(BH.FAQ_SRC[f.src], "faq src " + f.src); }
+    assert.ok(G.rules.every(r => [1, 5, 6, 7].includes(r.page)));
+    const grouped = G.ruleGroups.flatMap(gr => gr.ids); for (const id of ids) assert.strictEqual(grouped.filter(x => x === id).length, 1, "rule in one group: " + id);
+    for (const k of Object.keys(G.images.rules)) assert.ok(ids.has(k), "image for " + k);
+  });
+  console.log(`zoo: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }

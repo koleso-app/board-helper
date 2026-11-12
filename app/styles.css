@@ -751,7 +751,8 @@ body:has(.setup-screen.tight) .topbar{display:none}
 /* steps of a round: short lines, the key word in bold; «После раунда» on its own background */
 /* the steps of a game read in play: the main text colour (grey on a tint, in the dark theme above all, read badly) */
 .ph-steps{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:15px;line-height:1.4;color:var(--ink)}
-.ph-steps b,.phase-list .ph-steps b{display:inline;color:var(--ink);font-weight:700}
+/* the key words (*word*) of a step: the accent, a little toward the text colour — darker in the light theme, lighter in the dark — so they stand out from the text and still read */
+.ph-steps b,.phase-list .ph-steps b{display:inline;color:color-mix(in srgb,var(--accent) 80%,var(--ink));font-weight:700}
 .ph-steps li::marker{color:var(--muted)}
 .ph-after{margin-top:14px;padding:10px 14px 12px;border-radius:12px;background:var(--sunk)}
 .ph-after-h{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}

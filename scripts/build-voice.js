@@ -20,7 +20,7 @@ function cheatSheet(gameFile) {
 // printed: pdf page N carries printed page N-1 (page 1 is the cover); pdf: the page of the PDF file itself;
 // plus1: pdf page N carries printed page N+1 (the file starts at printed page 2)
 function rulebook(file, pages) {
-  if (!fs.existsSync(file)) return "";
+  if (!file || !fs.existsSync(file)) return "";
   return fs.readFileSync(file, "utf8").replace(/\u0000/g, "").replace(/===== СТРАНИЦА (\d+) =====/g, (m, n) => (pages === "pdf" ? `[стр. ${n}]` : pages === "plus1" ? `[стр. ${+n + 1}]` : n === "1" ? "[обложка]" : `[стр. ${n - 1}]`));
 }
 
@@ -41,6 +41,7 @@ const games = [
     bookNote: "русские правила Choo Choo Games — два разворота по три страницы (номера страниц как в английской книге, она следом со страницами [стр. N]); в конце — памятка с эффектами воинов и особых баз по справке Board Game Arena, её нет в книгах — так и говори. Называй воинов как в шпаргалке (Кряква, Скалли, Кэп, Джамбо, Хук, XB-42, Стар, Рокси), поля — по-русски" },
   { js: "games/dobble.js", book: path.join(root, "sources", "dobble-book.txt"), title: "Доббль (Spot it!)", pages: "pdf",
     bookNote: "русские правила — пересказ магазина ig-store, переписанный с картинок PDF; номера страниц — как напечатаны (1–3); следом точные цитаты классических английских правил Spot it! (по RulesPal, без страниц)" },
+  { js: "games/ribbit.js", title: "Черепашьи бега (Ribbit)" },
   { js: "games/zoo.js", book: path.join(root, "sources", "zoo-book.txt"), title: "Зоопарк (Team Zoo)", pages: "pdf",
     bookNote: "русские правила Hobby World, версия 1.0; страницы PDF совпадают с напечатанными (стр. 1 без номера, стр. 2–4 — рассказ о киперах, правила — на стр. 5–7). В конце — тексты карт какаду с фото издателя, их нет в книге: так и говори" },
   { js: "games/thegang.js", book: path.join(root, "sources", "thegang-rules-en.txt"), title: "The Gang", pages: "plus1",
@@ -49,7 +50,7 @@ const games = [
 const files = [["index.js", fs.readFileSync(path.join(root, "functions", "voice", "index.js"))]];
 for (const g of games) {
   const sheet = cheatSheet(g.js), bookText = rulebook(g.book, g.pages);
-  if (!bookText) console.warn(`! нет книги правил для ${g.title}: ${g.book} — в функцию попадёт только шпаргалка`);
+  if (g.book && !bookText) console.warn(`! нет книги правил для ${g.title}: ${g.book} — в функцию попадёт только шпаргалка`);
   const text = `ИГРА: ${g.title}\n\n` +
     (bookText ? `КНИГА ПРАВИЛ (${g.bookNote})\n${bookText}\n\n` : "") +
     `ШПАРГАЛКА (проверенный пересказ правил; номера страниц — по книге)\n${sheet.text}\n`;

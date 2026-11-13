@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/chances.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js", "games/toybattle.js", "games/dobble.js"])
+for (const f of ["js/util.js", "js/store.js", "js/games.js", "js/chances.js", "js/art.js", "games/flip7.js", "games/flip7v.js", "games/faraway.js", "games/thegang.js", "games/crokinole.js", "games/coconuts.js", "games/goldfever.js", "games/zoo.js", "games/toybattle.js", "games/dobble.js", "games/ribbit.js"])
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8"), ctx, { filename: f });
 const BH = ctx.BH, g = BH.game("flip7");
 let passed = 0;
@@ -1106,6 +1106,42 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
     for (const grp of G.faqGroups) for (const r of grp.refs) assert.ok(G.rules.some(x => x.id === r), r);
   });
   console.log(`dobble: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}
+
+{
+  const G = BH.game("ribbit"), before = passed;
+  const session = { id: "ribbit1", gameId: G.id, players: ["a", "b"], exp: [], opts: {}, rounds: [] };
+  t("ribbit: 2–5 players, five turtles start separately, secret colors by default", () => {
+    assert.strictEqual(G.players.min, 2);
+    assert.strictEqual(G.players.max, 5);
+    assert.strictEqual(G.options[0].default, false);
+    const setup = BH.setupSteps(session);
+    assert.match(setup[0].text, /пять.*по отдельности/);
+    assert.match(setup[1].text, /втайне/);
+    assert.match(BH.setupSteps({ ...session, opts: { openColors: true } })[1].text, /лицом вверх/);
+    assert.match(setup[2].text, /пять.*карт/);
+    assert.match(G.first.hint, /самый младший/);
+  });
+  t("ribbit: the card aid has three colored and four multicolored effects", () => {
+    const cards = BH.raceCards(G, session);
+    assert.deepStrictEqual(Array.from(cards, c => c.id), ["plus", "double", "minus", "any-plus", "any-minus", "last", "last-double"]);
+    assert.match(cards.find(c => c.id === "any-minus").does, /ушла со старта/);
+    assert.match(cards.find(c => c.id === "last-double").does, /два.*деления/);
+    assert.ok(BH.searchRules(G, "кто выигрывает в башне?").some(hit => hit.id === "finish"));
+  });
+  t("ribbit: one race winner recorded without points; unowned turtles are ignored in the ranking", () => {
+    assert.ok(BH.isRace(G));
+    assert.strictEqual(BH.raceGoals(G, session).length, 1);
+    const goal = BH.raceGoals(G, session)[0];
+    assert.match(goal.text, /черепах игроков.*ниже/);
+    assert.match(G.scoring.end().join(" "), /любая.*Ничейные/);
+    const stored = BH._normalize({ players: [{ id: "a", name: "Аня" }, { id: "b", name: "Борис" }],
+      sessions: [{ ...session, status: "finished", winners: ["b"], race: { how: goal.how } }] }).sessions[0];
+    assert.strictEqual(stored.race.how, "goal");
+    assert.deepStrictEqual(Array.from(stored.winners), ["b"]);
+    assert.ok(!BH.hasScore(stored, "b"));
+  });
+  console.log(`ribbit: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }
 {
   // the home shelf «Давно не играли»: played once, the last game more than a year ago (the app passes 365), the most forgotten first

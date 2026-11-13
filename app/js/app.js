@@ -280,6 +280,7 @@
   }
   const coverOf = (g, cls) => `<span class="cover ${cls || ""}"${g ? BH.assets.cover(g) : ""}>${(g && g.cover) || ""}</span>`;
   const playersRange = g => (g.players.min === g.players.max ? g.players.min : g.players.min + "–" + g.players.max) + " " + BH.plural(g.players.max, "игрок", "игрока", "игроков");
+  const gameSearchName = g => esc([g.name, g.altName].filter(Boolean).join(" ").toLowerCase().replace(/ё/g, "е"));
 
   // one game as a tall card (home shelves): cover, optional count, name, a line under it
   function gameCard(g, o) {
@@ -546,7 +547,7 @@
     const ranked = gamesByPlays();
     const gameBody = draft.editId ? `<p class="small muted">Игру у созданной партии не поменять: для другой игры создайте новую партию.</p>` : `
       ${BH.games.length > 6 ? `<div class="search">${I.search}<input class="input" type="search" data-act="pick-q" data-list="games" placeholder="Найти игру" aria-label="Найти игру" autocomplete="off"></div>` : ""}
-      <div class="pick-list" data-list="games">${ranked.map(({ g: x }) => `<button type="button" class="pick-row" data-act="pick-game" data-id="${esc(x.id)}" data-name="${esc(x.name.toLowerCase())}" aria-pressed="${x.id === draft.gameId}">
+      <div class="pick-list" data-list="games">${ranked.map(({ g: x }) => `<button type="button" class="pick-row" data-act="pick-game" data-id="${esc(x.id)}" data-name="${gameSearchName(x)}" aria-pressed="${x.id === draft.gameId}">
         ${coverOf(x, "mini")}<span class="t"><b>${esc(x.name)}</b>${meta([[IC.people, playersRange(x), "Игроков"], x.time && [IC.clock, esc(x.time), "Время партии"]], "plain")}</span>
         ${x.id === draft.gameId ? `<span class="pick-on">${I.check}</span>` : ""}</button>`).join("")}</div>
       ${BH.games.length > 1 ? `<button type="button" class="btn ghost sm" data-act="draft-random">${IC.dice}Случайная игра</button>` : ""}`;
@@ -1257,7 +1258,7 @@
     return `<div class="stack">
       <div class="page-head"><div><h1>Игры</h1><p class="sub">${n} ${BH.plural(n, "игра", "игры", "игр")} в коллекции, сначала самые играемые</p></div></div>
       ${n > 6 ? `<div class="search search-pin">${I.search}<input class="input" type="search" data-act="games-q" placeholder="По названию" aria-label="Поиск игры" autocomplete="off"></div>` : ""}
-      <div class="glist">${list.map(({ g, n: k }) => `<a class="grow" href="#/games/${esc(g.id)}" data-name="${esc(g.name.toLowerCase())}">
+      <div class="glist">${list.map(({ g, n: k }) => `<a class="grow" href="#/games/${esc(g.id)}" data-name="${gameSearchName(g)}">
           ${coverOf(g)}
           <span class="t"><b>${esc(g.name)}</b>${meta([[IC.people, playersRange(g), "Игроков"], g.time && [IC.clock, esc(g.time), "Время партии"]], "plain")}</span>
           <span class="grow-n${k ? "" : " zero"}" title="Сыграно партий">${IC.cards}${k ? k + " " + BH.plural(k, "партия", "партии", "партий") : "не играли"}</span>
@@ -2706,13 +2707,15 @@
       return;
     }
     if (el.dataset.act === "games-q") {   // games list: filter in place, no redraw while typing
-      const q = el.value.trim().toLowerCase(); let any = false;
+      const q = el.value.trim().toLowerCase().replace(/ё/g, "е"); let any = false;
       BH.$$(".glist .grow").forEach(a => { const on = !q || a.dataset.name.includes(q); a.hidden = !on; any = any || on; });
       const none = BH.$("#games-none"); if (none) none.hidden = any;
       return;
     }
     if (el.dataset.act === "pick-q") {   // new game form: filter the games / players list in place
-      const q = el.value.trim().toLowerCase(), list = BH.$('.pick-list[data-list="' + el.dataset.list + '"]');
+      let q = el.value.trim().toLowerCase();
+      if (el.dataset.list === "games") q = q.replace(/ё/g, "е");
+      const list = BH.$('.pick-list[data-list="' + el.dataset.list + '"]');
       if (list) list.querySelectorAll(".pick-row").forEach(r => { r.hidden = !!q && !r.dataset.name.includes(q); });
       return;
     }
@@ -2865,7 +2868,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.30.0";
+  BH.version = "0.31.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();

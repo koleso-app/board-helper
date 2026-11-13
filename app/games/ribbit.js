@@ -56,6 +56,7 @@
     age: "4+",
     players: { min: 2, max: 5 },
     cover,
+    images: { cover: "cover-front" },
     source: "Правила Hobby World (русское издание, стр. 1–2 PDF)",
     searchExample: "кто выигрывает в башне?",
     searchWords: ["башня", "старт", "ничейная"],

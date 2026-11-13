@@ -89,9 +89,8 @@
     age: "6+",
     players: { min: 2, max: 8 },
     cover,
-    // the cover: the photo of the Russian box from the shop's rules (scripts/assets/dobble-compose.mjs); the drawn card
-    // above stays while it loads or without the private repo
-    images: { cover: "cover-square" },
+    // Front of the Russian classic edition from the distributor's product photos.
+    images: { cover: "cover-front" },
     expansions: [],
     source: "Русские правила «Доббль» (пересказ магазина ig-store, страницы 1–3) и классические английские правила Spot it! (по RulesPal, без страниц), сверено со справкой Board Game Arena",
     searchExample: "что делать при ничьей в мини-игре?",

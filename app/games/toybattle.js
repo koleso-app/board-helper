@@ -88,10 +88,10 @@
     age: "8+",
     players: { min: 2, max: 2 },
     cover,
-    // the cover: the box from the publisher's photo; the setup, the placement, a region and the H.Q. of the boards from the
-    // Russian rules (scripts/assets/toybattle-compose.mjs)
+    // The cover is the front face from the publisher's box image. The other pictures come from
+    // the Russian rules (scripts/assets/toybattle-compose.mjs).
     images: {
-      cover: "cover-square",
+      cover: "cover-front",
       steps: { terrain: ["setup"], first: ["components"] },
       rules: { setup: ["setup"], placement: ["placement"], region: ["region"], hq: ["hqs"], components: ["components"] },
     },

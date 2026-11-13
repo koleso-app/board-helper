@@ -77,6 +77,26 @@
      sessions: the games to count (already narrowed to a period by the caller). */
   // the day a game was played: when it was started (as on the calendar and in the lists)
   BH.sessionDate = s => s.created || s.finishedAt || 0;
+
+  /* games not played for a long time (the home shelf «Давно не играли»): played at least once, the last game more than
+     `days` ago, the most forgotten first; a game still going counts as played now. A rolling span, not the calendar year:
+     on the 1st of January every game would turn forgotten at once */
+  BH.forgotten = (sessions, now, days) => {
+    const last = new Map();
+    for (const s of sessions || []) {
+      if (!BH.game(s.gameId)) continue;
+      const t = s.status === "finished" ? BH.sessionDate(s) : now;
+      if (t > (last.get(s.gameId) || 0)) last.set(s.gameId, t);
+    }
+    return [...last.entries()].filter(([, t]) => now - t >= days * 864e5).sort((a, b) => a[1] - b[1]).map(([id, t]) => ({ g: BH.game(id), last: t }));
+  };
+  // how long ago, in whole months, then «больше года назад», «больше 2 лет назад»
+  BH.agoText = (t, now) => {
+    const months = Math.floor((now - t) / (30.44 * 864e5));
+    if (months < 12) return months < 1 ? "меньше месяца назад" : `${months} ${BH.plural(months, "месяц", "месяца", "месяцев")} назад`;
+    const y = Math.floor(months / 12);
+    return y === 1 ? "больше года назад" : `больше ${y} ${BH.plural(y, "года", "лет", "лет")} назад`;
+  };
   // a player's score counts only where it was kept: rounds were played, or it was written in afterwards
   BH.isEndScored = g => !!(g && g.scoring && g.scoring.type === "end");
   // a cooperative game: the rounds are heists (ok or not), nobody has a score; the team wins or loses together

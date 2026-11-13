@@ -1107,3 +1107,31 @@ console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
   });
   console.log(`dobble: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
 }
+{
+  // the home shelf «Давно не играли»: played once, the last game more than a year ago (the app passes 365), the most forgotten first
+  const before = passed, day = 864e5, now = Date.UTC(2026, 10, 13);
+  t("forgotten games: a rolling span, played at least once, a game still going is not forgotten", () => {
+    const ses = [
+      { gameId: "zoo", status: "finished", created: now - 200 * day },
+      { gameId: "zoo", status: "finished", created: now - 100 * day },
+      { gameId: "flip7", status: "finished", created: now - 400 * day },
+      { gameId: "faraway", status: "finished", created: now - 30 * day },
+      { gameId: "dobble", status: "finished", created: now - 300 * day },
+      { gameId: "dobble", status: "playing", created: now - 300 * day },
+      { gameId: "nosuchgame", status: "finished", created: now - 500 * day },
+    ];
+    const f = BH.forgotten(ses, now, 90);
+    assert.deepStrictEqual([...f.map(x => x.g.id)], ["flip7", "zoo"], "the oldest first; the last game counts; a game going on now is played");
+    assert.strictEqual(f[1].last, now - 100 * day);
+    assert.strictEqual(BH.forgotten([{ gameId: "zoo", status: "finished", created: now - 89 * day }], now, 90).length, 0, "89 days is not forgotten yet");
+  });
+  t("forgotten games: «N месяцев назад», from a year on — «больше года назад», «больше N лет назад»", () => {
+    assert.strictEqual(BH.agoText(now - 100 * day, now), "3 месяца назад");
+    assert.strictEqual(BH.agoText(now - 160 * day, now), "5 месяцев назад");
+    assert.strictEqual(BH.agoText(now - 400 * day, now), "больше года назад");
+    assert.strictEqual(BH.agoText(now - 800 * day, now), "больше 2 лет назад");
+    assert.strictEqual(BH.agoText(now - 2000 * day, now), "больше 5 лет назад");
+    assert.strictEqual(BH.agoText(now - 10 * day, now), "меньше месяца назад");
+  });
+  console.log(`forgotten: ${passed - before} passed${process.exitCode ? ", some FAILED" : ""}`);
+}

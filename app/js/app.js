@@ -273,6 +273,7 @@
   const rowDate = ts => shortDate(ts) + (new Date(ts).getFullYear() !== new Date().getFullYear() ? " " + new Date(ts).getFullYear() : "");
   const finishedSessions = () => S().sessions.filter(s => s.status === "finished");
   // the whole collection, most played first (then by name)
+  const FORGOTTEN_DAYS = 365;   // the home shelf «Давно не играли»: no game for a year (a rolling one)
   function gamesByPlays() {
     const fin = finishedSessions();
     return BH.games.map(g => ({ g, n: fin.filter(s => s.gameId === g.id).length })).sort((a, b) => b.n - a.n || a.g.name.localeCompare(b.g.name, "ru"));
@@ -338,7 +339,10 @@
     const recent = byDate.filter(s => s.status === "finished").slice(0, 10);
     // "repeat": the latest finished game (a game still going is not repeated), else the latest one
     const last = byDate.find(s => s.status === "finished" && BH.game(s.gameId)) || byDate.find(s => BH.game(s.gameId));
-    const ranked = gamesByPlays(), top = ranked.filter(x => x.n).slice(0, 10), shelf = ranked.filter(x => !x.n);
+    // three shelves, each game on one of them: what we play (the most played first), what we have not played for more than
+    // a year (the most forgotten first), what we have never played
+    const now = Date.now(), forgottenAll = BH.forgotten(S().sessions, now, FORGOTTEN_DAYS), stale = new Set(forgottenAll.map(x => x.g.id));
+    const ranked = gamesByPlays(), top = ranked.filter(x => x.n && !stale.has(x.g.id)).slice(0, 10), shelf = ranked.filter(x => !x.n), forgotten = forgottenAll.slice(0, 10);
     const nGames = BH.games.length;
     return `<div class="stack home">
       <a class="profile" href="#/players${me ? "/" + esc(me.id) : ""}">
@@ -364,6 +368,10 @@
       ${top.length ? `<section>
         <div class="sec-h"><h2>Чаще всего играем</h2><a class="sec-link" href="#/games">Все игры${IC.chev}</a></div>
         <div class="hscroll">${top.map(x => gameCard(x.g, { count: x.n })).join("")}</div>
+      </section>` : ""}
+      ${forgotten.length ? `<section>
+        <div class="sec-h"><h2>Давно не играли</h2><span class="badge" title="Не играли больше года">${forgottenAll.length}</span></div>
+        <div class="hscroll">${forgotten.map(x => gameCard(x.g, { meta: esc(BH.agoText(x.last, now)) })).join("")}</div>
       </section>` : ""}
       <section>
         <div class="sec-h"><h2>Полка позора</h2>${shelf.length ? `<span class="badge" title="Игр, в которые ещё не играли">${shelf.length}</span>` : ""}</div>
@@ -2857,7 +2865,7 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
   /* ---------- start ---------- */
-  BH.version = "0.29.1";
+  BH.version = "0.30.0";
   applyTheme();
   // reloaded while a sheet was open: step off its history entry; a fresh start has nothing before it
   if (history.state && history.state.ov) history.back();
